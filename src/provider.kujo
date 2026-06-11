@@ -1,0 +1,349 @@
+# src/provider.kujo — Lens browser provider abstraction.
+#
+# Wraps the external browser automation bridge (Playwright/Node.js)
+# behind a clean interface. All orchestration, config, artifact writing,
+# reporting, redaction, and checks live in Kujo.
+#
+# The bridge is a minimal Node.js script that handles only what Kujo
+# cannot do natively: launching a browser, navigating, capturing
+# screenshots, collecting console/network/DOM data.
+#
+# Provider result shape:
+#   url, final_url, started_at, finished_at, duration_ms,
+#   viewports (array of per-viewport results),
+#   provider_errors (array of error strings),
+#   metadata (bridge info)
+
+from src.common import is_trueish, is_falseish, str_trim
+
+# Maximum number of times to invoke the bridge when it produces no output
+# at all. Transient headless-Chromium launch failures are retried; a bridge
+# that produces output (even partial) is authoritative and not retried.
+PROVIDER_MAX_ATTEMPTS := 3
+
+# Run the browser provider for a given URL and config.
+# Returns a provider result dict, or an error dict on failure.
+export func run_provider(url, config, out_dir) {
+	# Build bridge command
+	bridge_script := "bridge/browser-bridge.js"
+	timeout := to_string(config["timeout"])
+	viewports_str := build_viewports_arg(config["viewports"])
+	screenshots_dir := out_dir + "/screenshots"
+	
+	# Build the bridge argument vector. Accessibility scanning is opt-in and
+	# only requested when the run enabled it, keeping default runs lean.
+	mut bridge_args := array("node", bridge_script, "--url", url, "--viewports", viewports_str, "--timeout", timeout, "--screenshot-dir", screenshots_dir, "--format", "json")
+
+	# Phase 1.2: post-load settle window (ms). Event-driven readiness
+	# (network-idle) handles the bulk of the wait; this captures stragglers.
+	if is_trueish(has_key(config, "settle_ms")) {
+		bridge_args = append(bridge_args, "--settle-ms")
+		bridge_args = append(bridge_args, to_string(config["settle_ms"]))
+	}
+
+	# Phase 1.3: cap on concurrent viewport captures (0 = no explicit cap).
+	if is_trueish(has_key(config, "max_concurrency")) && to_int(to_string(config["max_concurrency"])) > 0 {
+		bridge_args = append(bridge_args, "--max-concurrency")
+		bridge_args = append(bridge_args, to_string(config["max_concurrency"]))
+	}
+
+	# Phase 2.3: browser engine.
+	if is_trueish(has_key(config, "browser")) && to_string(config["browser"]) != "" && to_string(config["browser"]) != "chromium" {
+		bridge_args = append(bridge_args, "--browser")
+		bridge_args = append(bridge_args, to_string(config["browser"]))
+	}
+
+	# Phase 2.2: network throttle + device emulation.
+	if is_trueish(has_key(config, "throttle")) && to_string(config["throttle"]) != "" {
+		bridge_args = append(bridge_args, "--throttle")
+		bridge_args = append(bridge_args, to_string(config["throttle"]))
+	}
+	if is_trueish(has_key(config, "device")) && to_string(config["device"]) != "" {
+		bridge_args = append(bridge_args, "--device")
+		bridge_args = append(bridge_args, to_string(config["device"]))
+	}
+
+	# Phase 2.1: performance metric capture (opt-in).
+	if is_trueish(has_key(config, "perf")) && is_trueish(config["perf"]) {
+		bridge_args = append(bridge_args, "--perf")
+	}
+
+	# Phase 2.4: auth storage-state file (opt-in). The path is forwarded to the
+	# bridge; its contents stay inside Playwright and never reach an artifact.
+	if is_trueish(has_key(config, "auth_file")) && to_string(config["auth_file"]) != "" {
+		bridge_args = append(bridge_args, "--auth-file")
+		bridge_args = append(bridge_args, to_string(config["auth_file"]))
+	}
+
+	if is_trueish(has_key(config, "accessibility")) && is_trueish(config["accessibility"]) {
+		bridge_args = append(bridge_args, "--accessibility")
+		if is_trueish(has_key(config, "a11y_tags")) {
+			tags_str := build_csv_arg(config["a11y_tags"])
+			if tags_str != "" {
+				bridge_args = append(bridge_args, "--a11y-tags")
+				bridge_args = append(bridge_args, tags_str)
+			}
+		}
+		if is_trueish(has_key(config, "a11y_include")) && to_string(config["a11y_include"]) != "" {
+			bridge_args = append(bridge_args, "--a11y-include")
+			bridge_args = append(bridge_args, to_string(config["a11y_include"]))
+		}
+		if is_trueish(has_key(config, "a11y_exclude")) && to_string(config["a11y_exclude"]) != "" {
+			bridge_args = append(bridge_args, "--a11y-exclude")
+			bridge_args = append(bridge_args, to_string(config["a11y_exclude"]))
+		}
+	}
+
+	if is_trueish(config["verbose"]) {
+		print("[lens] Running browser bridge...")
+		print("[lens] " + str_join_args(bridge_args))
+	}
+
+	# Run the bridge. Headless Chromium launches can fail transiently
+	# (resource contention, singleton-lock races) and produce no output at
+	# all. For determinism we retry a bridge that yields empty output up to
+	# PROVIDER_MAX_ATTEMPTS times. A bridge that DOES produce output (even
+	# with per-viewport errors) is authoritative and never retried.
+	mut bridge_output := ""
+	mut last_detail := "bridge produced no output"
+	mut attempt := 1
+	while attempt <= PROVIDER_MAX_ATTEMPTS {
+		# Raise spawn_process's default 30s kill ceiling: a multi-viewport capture
+		# of a heavy real site can exceed it. Per-page timeouts still apply.
+		result := spawn_process(bridge_args, { "timeout_ms": 180000 })
+		bridge_output = str_trim(to_string(result.stdout))
+		if bridge_output != "" {
+			attempt = PROVIDER_MAX_ATTEMPTS + 1
+		} else {
+			last_detail = to_string(result.stderr)
+			if is_trueish(str_trim(last_detail) == "") {
+				last_detail = "bridge produced no output"
+			}
+			if is_trueish(config["verbose"]) && attempt < PROVIDER_MAX_ATTEMPTS {
+				print("[lens] Bridge produced no output (attempt " + to_string(attempt) + "); retrying...")
+			}
+			attempt = attempt + 1
+		}
+	}
+
+	# A bridge that produced nothing across all attempts is a hard failure.
+	if bridge_output == "" {
+		return {
+			"error": true,
+			"exit_code": 3,
+			"message": "Browser provider failed: " + last_detail,
+			"provider_errors": array("Bridge execution failed after " + to_string(PROVIDER_MAX_ATTEMPTS) + " attempt(s): " + last_detail),
+			"viewports": array()
+		}
+	}
+
+	# Parse the JSON result using Kujo's built-in parse_json.
+	# parse_json returns the parsed value directly, or throws on error.
+	parsed := parse_json(bridge_output)
+
+	return parsed
+}
+
+# Build a comma-separated string from an array (for --a11y-tags).
+func build_csv_arg(items) {
+	mut result := ""
+	mut idx := 0
+	while idx < len(items) {
+		if idx > 0 {
+			result = result + ","
+		}
+		result = result + to_string(items[idx])
+		idx = idx + 1
+	}
+	return result
+}
+
+# Join an argument vector for verbose display only.
+func str_join_args(args) {
+	mut result := ""
+	mut idx := 0
+	while idx < len(args) {
+		if idx > 0 {
+			result = result + " "
+		}
+		result = result + to_string(args[idx])
+		idx = idx + 1
+	}
+	return result
+}
+
+# Build a comma-separated viewports string from config array.
+func build_viewports_arg(viewports) {
+	mut result := ""
+	mut idx := 0
+	while idx < len(viewports) {
+		if idx > 0 {
+			result = result + ","
+		}
+		result = result + to_string(viewports[idx])
+		idx = idx + 1
+	}
+	if result == "" {
+		result = "desktop,mobile"
+	}
+	return result
+}
+
+# Extract an array of all console messages across all viewports.
+export func extract_console_messages(provider_result) {
+	mut all := array()
+	viewports := provider_result["viewports"]
+	mut idx := 0
+	while idx < len(viewports) {
+		vp := viewports[idx]
+		messages := vp["console_messages"]
+		mut j := 0
+		while j < len(messages) {
+			all = append(all, messages[j])
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	return all
+}
+
+# Extract an array of all network events across all viewports.
+export func extract_network_events(provider_result) {
+	mut all := array()
+	viewports := provider_result["viewports"]
+	mut idx := 0
+	while idx < len(viewports) {
+		vp := viewports[idx]
+		events := vp["network_events"]
+		mut j := 0
+		while j < len(events) {
+			all = append(all, events[j])
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	return all
+}
+
+# Extract performance metrics per viewport (Phase 2.1).
+# Returns an array of { viewport, ttfb_ms, lcp_ms, cls, ... } for viewports
+# that captured metrics. Viewports without metrics are skipped.
+export func extract_metrics(provider_result) {
+	mut all := array()
+	viewports := provider_result["viewports"]
+	mut idx := 0
+	while idx < len(viewports) {
+		vp := viewports[idx]
+		if is_trueish(has_key(vp, "metrics")) && vp["metrics"] != null {
+			mut m := vp["metrics"]
+			vp_name := ""
+			if is_trueish(has_key(vp, "name")) {
+				m["viewport"] = to_string(vp["name"])
+			}
+			all = append(all, m)
+		}
+		idx = idx + 1
+	}
+	return all
+}
+
+# Extract DOM summaries per viewport.
+export func extract_dom_summaries(provider_result) {
+	mut summaries := array()
+	viewports := provider_result["viewports"]
+	mut idx := 0
+	while idx < len(viewports) {
+		vp := viewports[idx]
+		summary := vp["dom_summary"]
+		if summary != null {
+			summaries = append(summaries, summary)
+		}
+		idx = idx + 1
+	}
+	return summaries
+}
+
+# Extract all links from all viewports.
+# Each link is tagged with its source viewport.
+export func extract_all_links(provider_result) {
+	mut all := array()
+	viewports := provider_result["viewports"]
+	mut idx := 0
+	while idx < len(viewports) {
+		vp := viewports[idx]
+		vp_name := ""
+		if is_trueish(has_key(vp, "name")) {
+			vp_name = to_string(vp["name"])
+		}
+		if is_trueish(has_key(vp, "links")) {
+			links := vp["links"]
+			mut j := 0
+			while j < len(links) {
+				link := links[j]
+				# Tag with viewport
+				mut tagged := {}
+				tagged["href"] = link["href"]
+				tagged["text"] = link["text"]
+				tagged["title"] = link["title"]
+				tagged["aria_label"] = link["aria_label"]
+				tagged["viewport"] = vp_name
+				all = append(all, tagged)
+				j = j + 1
+			}
+		}
+		idx = idx + 1
+	}
+	return all
+}
+
+# Check if the provider result indicates a TOTAL failure (no usable data).
+#
+# A non-empty provider_errors array is NOT, by itself, a total failure:
+# a single transient per-viewport navigation error still leaves usable
+# evidence from the other viewports, which the page-load check classifies
+# into findings. We only report total failure when an explicit error flag
+# is set or when no viewport produced any usable data at all.
+export func provider_failed(provider_result) {
+	# Explicit hard-error flag (e.g. browser launch failed, empty output).
+	if is_trueish(has_key(provider_result, "error")) {
+		if is_trueish(provider_result["error"]) {
+			return true
+		}
+	}
+	# No viewport results at all → nothing to report on.
+	if is_falseish(has_key(provider_result, "viewports")) {
+		return true
+	}
+	viewports := provider_result["viewports"]
+	if len(viewports) == 0 {
+		return true
+	}
+	# At least one viewport must carry usable data (a DOM summary, a
+	# screenshot, or a clean navigation). If every viewport failed to
+	# navigate AND produced nothing, treat it as a total failure.
+	mut usable := 0
+	mut idx := 0
+	while idx < len(viewports) {
+		vp := viewports[idx]
+		mut nav_err := ""
+		if is_trueish(has_key(vp, "navigation_error")) && vp["navigation_error"] != null {
+			nav_err = to_string(vp["navigation_error"])
+		}
+		mut has_dom := false
+		if is_trueish(has_key(vp, "dom_summary")) && vp["dom_summary"] != null {
+			has_dom = true
+		}
+		mut has_shot := false
+		if is_trueish(has_key(vp, "screenshot")) && to_string(vp["screenshot"]) != "" {
+			has_shot = true
+		}
+		if has_dom || has_shot || nav_err == "" {
+			usable = usable + 1
+		}
+		idx = idx + 1
+	}
+	if usable == 0 {
+		return true
+	}
+	return false
+}

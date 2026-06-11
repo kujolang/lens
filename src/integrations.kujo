@@ -1,0 +1,74 @@
+# src/integrations.kujo — Lens ecosystem integrations (Phase 3.3 / 3.4).
+#
+# Optional, side-effect-free by default. Each integration writes a compact,
+# redacted record to a caller-provided path; absence of the flag is a no-op.
+# These never include unredacted data — they consume already-redacted summary
+# values (status, counts, redacted URL).
+
+from src.common import is_trueish, is_falseish
+
+# Append a RunLedger-compatible record (Phase 3.3).
+#
+# RunLedger records runs for trend analysis. We append one JSON object per line
+# (JSONL) so successive runs accumulate without rewriting prior history. The
+# record is intentionally small and contains no captured page data.
+export func write_ledger_record(path, tool_version, redacted_url, status, exit_code, started_at, finished_at, duration_ms, counts) {
+	record := {
+		"schema_version": 1,
+		"tool": "lens",
+		"tool_version": tool_version,
+		"url": redacted_url,
+		"status": status,
+		"exit_code": exit_code,
+		"started_at": started_at,
+		"finished_at": finished_at,
+		"duration_ms": duration_ms,
+		"findings": counts
+	}
+	line := to_json(record)
+
+	# Append: preserve any existing JSONL history.
+	mut existing := ""
+	if is_trueish(file_exists(path)) {
+		existing = read_file(path)
+	}
+	mut out := existing
+	if existing != "" && is_falseish(ends_with_newline(existing)) {
+		out = out + "\n"
+	}
+	out = out + line + "\n"
+	write_file(path, out, true)
+	return true
+}
+
+# Write a Howl pass/fail summary (Phase 3.4).
+#
+# Howl surfaces a concise run outcome. We write a single, current-run summary
+# (overwriting any prior) with just the verdict, counts, and report pointer.
+export func write_howl_summary(path, tool_version, redacted_url, status, exit_code, duration_ms, counts, report_path) {
+	emoji := "✅"
+	if status != "PASS" {
+		emoji = "❌"
+	}
+	summary := {
+		"tool": "lens",
+		"tool_version": tool_version,
+		"emoji": emoji,
+		"headline": emoji + " Lens " + status + " — " + redacted_url,
+		"status": status,
+		"exit_code": exit_code,
+		"duration_ms": duration_ms,
+		"findings": counts,
+		"report": report_path
+	}
+	write_file(path, to_json(summary), true)
+	return true
+}
+
+# Whether a string ends with a newline character.
+func ends_with_newline(s) {
+	if len(s) == 0 {
+		return false
+	}
+	return s[len(s) - 1] == "\n"
+}

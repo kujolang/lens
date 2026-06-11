@@ -1,0 +1,26 @@
+{
+  "name": "Account settings — open modal, toggle setting, verify next screen",
+  "description": "The classic 'open a page, click a button that opens a modal, change a setting inside it, and verify it advances' workflow. Selectors here are placeholders — run `lens inspect <url>` against your app and replace them with the real ones. Run with `lens flow examples/flows/account-modal.json --execute --record --walkthrough` (point url at your localhost first).",
+  "url": "http://localhost:3000/account",
+  "viewports": ["desktop"],
+  "timeout_seconds": 20,
+  "steps": [
+    { "visit": "http://localhost:3000/account" },
+    { "assert_text": "Account" },
+    { "screenshot": { "name": "1-account" } },
+
+    { "click": { "selector": "#open-preferences", "safe": true } },
+    { "wait_for_selector": "[role=dialog]" },
+    { "screenshot": { "name": "2-modal-open" } },
+    { "assert_selector": "[role=dialog]" },
+
+    { "click": { "selector": "[role=dialog] [data-testid=enable-notifications]", "safe": true } },
+    { "click": { "selector": "[role=dialog] button:has-text(\"Save\")", "safe": true } },
+
+    { "wait_for_selector": "text=Preferences saved" },
+    { "assert_text": "Preferences saved" },
+    { "assert_not_selector": "[role=dialog]" },
+    { "screenshot": { "name": "3-confirmed" } },
+    { "assert_no_console_errors": true }
+  ]
+}

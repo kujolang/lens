@@ -1,0 +1,2195 @@
+# src/runner.kujo — Lens run orchestrator.
+#
+# Ties together config, validation, checks, reports, and artifact
+# writing into a single run pipeline.
+
+from src.common import format_timestamp_dir, is_trueish, is_falseish, str_starts_with, str_join
+from src.config import severity_meets_threshold, build_config, print_help, print_version, merge_file_config, lens_version
+from src.config_file import resolve_config_path, load_config_file
+from src.validate import validate_url
+from src.checks import run_all_checks, worst_severity, get_link_results
+from src.report import generate_markdown_report, generate_json_report, generate_metadata_json
+from src.provider import run_provider, provider_failed, extract_console_messages, extract_network_events, extract_dom_summaries, extract_all_links, extract_metrics
+from src.redact import redact_url, redact_text, redact_console_entry, redact_console_message, redact_network_event, redact_dom_summary, redact_check_results, redact_finding
+from src.spec import load_spec_file
+from src.eval import generate_eval_output
+from src.flow import load_flow_file, get_step_type, check_click_safety, check_type_safety, is_destructive, get_step_value, get_step_dict, redact_flow_for_output
+from src.visual import save_baselines, compare_baselines, visual_results_to_findings, baseline_dir_for_check, baseline_dir_for_flow
+from src.accessibility import check_accessibility, is_a11y_enabled
+from src.crawl import run_crawl
+from src.report_html import generate_html_report, generate_walkthrough_html
+from src.integrations import write_ledger_record, write_howl_summary
+from src.flow_exec import build_program_step, run_flow_bridge
+
+LENS_VERSION := lens_version()
+
+# Exit code constants.
+EXIT_OK := 0
+EXIT_CHECK_FAIL := 1
+EXIT_INVALID_INPUT := 2
+EXIT_BROWSER_FAIL := 3
+EXIT_ARTIFACT_FAIL := 4
+
+# Run the Lens pipeline.
+# argv: CLI arguments as passed from the shell wrapper.
+# Returns an exit code integer.
+export func run(argv) {
+	# Handle help and version before anything else.
+	if is_trueish(has_flag_raw(argv, "--help")) || is_trueish(has_flag_raw(argv, "-h")) {
+		print_help()
+		return EXIT_OK
+	}
+	
+	if is_trueish(has_flag_raw(argv, "--version")) || is_trueish(has_flag_raw(argv, "-v")) {
+		print_version()
+		return EXIT_OK
+	}
+	
+	# Build config from CLI args.
+	mut config := build_config(argv)
+
+	# ── Phase 1.1: layer in project config file (.lens.toml) ───────────
+	# Precedence: built-in defaults < config file < CLI flags. An explicit
+	# --config that is missing or malformed is a hard input error; an absent
+	# implicit .lens.toml is simply ignored.
+	cfg_loc := resolve_config_path(argv)
+	cfg_file := load_config_file(to_string(cfg_loc["path"]), cfg_loc["explicit"])
+	if is_falseish(cfg_file["valid"]) {
+		print("Lens failed: " + to_string(cfg_file["error"]))
+		return EXIT_INVALID_INPUT
+	}
+	if is_trueish(cfg_file["present"]) {
+		config = merge_file_config(config, argv, cfg_file["data"])
+		if is_trueish(config["verbose"]) {
+			print("[lens] Loaded config file: " + to_string(cfg_loc["path"]))
+		}
+	}
+
+	# Validate subcommand.
+	subcommand := to_string(config["subcommand"])
+	if subcommand != "check" && subcommand != "flow" && subcommand != "inspect" {
+		if subcommand == "" {
+			print("Lens: no command provided.")
+		} else {
+			print("Lens: unknown command '" + subcommand + "'.")
+		}
+		print("Usage: lens check <url> [flags]")
+		print("Usage: lens flow <flow-file> [flags]")
+		print("Usage: lens inspect <url> [flags]")
+		print("Run 'lens --help' for more information.")
+		return EXIT_INVALID_INPUT
+	}
+
+	# Route to the selector-discovery command (shallow top-level entry).
+	if subcommand == "inspect" {
+		return run_inspect(config)
+	}
+	
+	# Route to flow runner if subcommand is "flow". Interactive execution uses a
+	# top-level entry (run_flow_exec) rather than nesting inside run_flow: the
+	# Kujo VM has a shallow native call stack, and the interactive path nests one
+	# level deeper than the read-only path, so it must not also pay for the
+	# run_flow frame.
+	if subcommand == "flow" {
+		# Dry-run validation runs at a shallow call depth (run → run_flow_validate),
+		# not nested inside the large run_flow frame, to stay within the Kujo VM's
+		# native stack budget.
+		if is_trueish(config["validate"]) {
+			return run_flow_validate(config)
+		}
+		if is_trueish(config["execute"]) {
+			return run_flow_exec(config)
+		}
+		return run_flow(config)
+	}
+
+	# ── Phase 3.2: watch mode ──────────────────────────────────────────
+	# Re-run the check on an interval until interrupted (Ctrl-C). Each
+	# iteration is a fresh full run with --watch stripped, so there is no
+	# special-cased pipeline to maintain.
+	if is_trueish(config["watch"]) {
+		return run_watch(argv, to_int(to_string(config["watch_interval"])))
+	}
+
+	# Validate URL.
+	url := to_string(config["url"])
+	if url == "" {
+		print("Lens: URL is required.")
+		print("Usage: lens check <url> [flags]")
+		return EXIT_INVALID_INPUT
+	}
+	
+	validation := validate_url(url, config["allow_external"])
+	if is_falseish(validation["valid"]) {
+		print("Lens failed: " + to_string(validation["error"]))
+		return EXIT_INVALID_INPUT
+	}
+
+	# ── Phase 2.4: validate auth file (opt-in) ─────────────────────────
+	# Auth injection is opt-in. We confirm the storage-state file exists but
+	# never read or echo its contents — it is handed to Playwright by path.
+	auth_file := to_string(config["auth_file"])
+	if auth_file != "" {
+		if is_falseish(file_exists(auth_file)) {
+			print("Lens failed: auth file not found: " + auth_file)
+			return EXIT_INVALID_INPUT
+		}
+		if is_trueish(config["verbose"]) {
+			print("[lens] Auth storage-state will be injected (contents never logged).")
+		}
+	}
+	
+	# ── Phase 7: Load Spec file (if provided) ──────────────────────
+	
+	mut spec_data := {}
+	mut spec_warnings := array()
+	spec_path := to_string(config["spec_path"])
+	if spec_path != "" {
+		spec_data = load_spec_file(spec_path)
+		if is_falseish(spec_data["valid"]) {
+			print("Lens failed: " + to_string(spec_data["error"]))
+			return EXIT_INVALID_INPUT
+		}
+		spec_warnings = spec_data["warnings"]
+		# Attach spec data to config for checks
+		config["spec_data"] = spec_data
+		
+		if is_trueish(config["verbose"]) {
+			print("[lens] Spec loaded: " + spec_path)
+			print("[lens] Supported assertions: " + to_string(spec_data["supported_count"]))
+			if spec_data["unsupported_count"] > 0 {
+				print("[lens] Unsupported assertions (skipped): " + to_string(spec_data["unsupported_count"]))
+			}
+		}
+	}
+	
+	# Setup run metadata.
+	started_at := now_utc()
+	started_ms := current_timestamp()
+	
+	# Determine output directory.
+	mut out_dir := to_string(config["out_dir"])
+	if out_dir == "" {
+		timestamp_dir := format_timestamp_dir(0)
+		out_dir = ".lens/runs/" + timestamp_dir
+	}
+	config["out_dir"] = out_dir
+	
+	# Create output directory if it doesn't exist.
+	if is_falseish(path_exists(out_dir)) {
+		create_dir(out_dir)
+	}
+	if is_falseish(path_exists(out_dir)) {
+		print("Lens error: failed to create output directory: " + out_dir)
+		return EXIT_ARTIFACT_FAIL
+	}
+	
+	# Create screenshots subdirectory.
+	screenshots_dir := out_dir + "/screenshots"
+	if is_falseish(path_exists(screenshots_dir)) {
+		create_dir(screenshots_dir)
+	}
+	
+	# ── Phase 2: Run browser provider ──────────────────────────────
+	
+	if is_trueish(config["verbose"]) {
+		print("[lens] Launching browser provider...")
+	}
+	
+	# Pre-check: verify Node.js is available.
+	# spawn_process throws an uncatchable VM error if the binary is
+	# missing, so we check first for a better error message.
+	node_check := spawn_process(array("node", "--version"))
+	if is_falseish(node_check.success) {
+		print("Lens error: Node.js is required for browser automation.")
+		print("Install Node.js from https://nodejs.org")
+		meta := {
+			"status": "FAIL",
+			"started_at": now_utc(),
+			"finished_at": now_utc(),
+			"duration_ms": 0,
+			"out_dir": out_dir,
+			"exit_code": EXIT_BROWSER_FAIL,
+			"artifacts": array()
+		}
+		config["version"] = LENS_VERSION
+		write_metadata_file(config, meta, array(), out_dir, {})
+		return EXIT_BROWSER_FAIL
+	}
+	
+	provider_result := run_provider(url, config, out_dir)
+	
+	# Check for provider failure.
+	if is_trueish(provider_failed(provider_result)) {
+		provider_errors := provider_result["provider_errors"]
+		mut err_msg := "Browser provider failed."
+		if len(provider_errors) > 0 {
+			# Redact sensitive values from error message before printing.
+			err_msg = redact_console_entry(to_string(provider_errors[0]))
+		}
+		print("Lens error: " + err_msg)
+		
+		# Write what we can before exiting.
+		meta := {
+			"status": "FAIL",
+			"started_at": now_utc(),
+			"finished_at": now_utc(),
+			"duration_ms": 0,
+			"out_dir": out_dir,
+			"exit_code": EXIT_BROWSER_FAIL,
+			"artifacts": array()
+		}
+		config["version"] = LENS_VERSION
+		write_metadata_file(config, meta, array(), out_dir, {})
+		return EXIT_BROWSER_FAIL
+	}
+	
+	# ── Write runtime artifacts ────────────────────────────────────
+	
+	# Console log.
+	console_messages := extract_console_messages(provider_result)
+	# Redact sensitive values from console messages before writing.
+	mut redacted_console := array()
+	mut ci := 0
+	while ci < len(console_messages) {
+		redacted_console = append(redacted_console, redact_console_message(console_messages[ci]))
+		ci = ci + 1
+	}
+	console_json := to_json(redacted_console)
+	console_path := out_dir + "/console.json"
+	if is_trueish(file_exists(console_path)) {
+		delete_file(console_path)
+	}
+	write_file(console_path, console_json)
+	if is_falseish(file_exists(console_path)) {
+		print("Lens error: failed to write console.json")
+		return EXIT_ARTIFACT_FAIL
+	}
+	
+	# Network log.
+	network_events := extract_network_events(provider_result)
+	# Redact sensitive values from network events before writing.
+	mut redacted_network := array()
+	mut ni := 0
+	while ni < len(network_events) {
+		redacted_network = append(redacted_network, redact_network_event(network_events[ni]))
+		ni = ni + 1
+	}
+	network_json := to_json(redacted_network)
+	network_path := out_dir + "/network.json"
+	if is_trueish(file_exists(network_path)) {
+		delete_file(network_path)
+	}
+	write_file(network_path, network_json)
+	if is_falseish(file_exists(network_path)) {
+		print("Lens error: failed to write network.json")
+		return EXIT_ARTIFACT_FAIL
+	}
+	
+	# DOM summaries.
+	dom_summaries := extract_dom_summaries(provider_result)
+	# Redact URLs and visible text samples before writing.
+	mut redacted_dom := array()
+	mut di_dom := 0
+	while di_dom < len(dom_summaries) {
+		redacted_dom = append(redacted_dom, redact_dom_summary(dom_summaries[di_dom]))
+		di_dom = di_dom + 1
+	}
+	dom_json := to_json(redacted_dom)
+	dom_path := out_dir + "/dom-summary.json"
+	if is_trueish(file_exists(dom_path)) {
+		delete_file(dom_path)
+	}
+	write_file(dom_path, dom_json)
+	if is_falseish(file_exists(dom_path)) {
+		print("Lens error: failed to write dom-summary.json")
+		return EXIT_ARTIFACT_FAIL
+	}
+	
+	# ── Run checks (pass provider data) ────────────────────────────
+	
+	raw_links := extract_all_links(provider_result)
+	metrics := extract_metrics(provider_result)
+
+	bridge_data := {
+		"provider_result": provider_result,
+		"console_messages": console_messages,
+		"network_events": network_events,
+		"dom_summaries": dom_summaries,
+		"raw_links": raw_links,
+		"metrics": metrics
+	}
+
+	# Phase 2.1: write metrics.json when performance capture is enabled.
+	# Metric values are non-secret timing numbers; no redaction needed.
+	if is_trueish(config["perf"]) && len(metrics) > 0 {
+		write_file(out_dir + "/metrics.json", to_json(metrics), true)
+	}
+
+	check_results := run_all_checks(config, bridge_data)
+	
+	# Determine overall status.
+	overall_severity := worst_severity(check_results)
+	fail_on := to_string(config["fail_on"])
+	has_failures := severity_meets_threshold(overall_severity, fail_on)
+	
+	finished_at := now_utc()
+	finished_ms := current_timestamp()
+	duration_ms := finished_ms - started_ms
+	
+	mut status := "PASS"
+	if is_trueish(has_failures) {
+		status = "FAIL"
+	}
+	
+	# Build metadata with artifact paths.
+	meta := {
+		"status": status,
+		"started_at": started_at,
+		"finished_at": finished_at,
+		"duration_ms": duration_ms,
+		"out_dir": out_dir,
+		"exit_code": 0,
+		"artifacts": array(
+			"lens-report.md",
+			"lens-report.json",
+			"metadata.json",
+			"console.json",
+			"network.json",
+			"dom-summary.json"
+		)
+	}
+	
+	# Phase 2.1: add metrics.json to artifacts when it was written.
+	if is_trueish(config["perf"]) && len(metrics) > 0 {
+		meta["artifacts"] = append(meta["artifacts"], "metrics.json")
+	}
+
+	# Add viewport screenshots to artifact list.
+	provider_viewports := provider_result["viewports"]
+	mut vi := 0
+	while vi < len(provider_viewports) {
+		vp := provider_viewports[vi]
+		screenshot := vp["screenshot"]
+		if screenshot != "" {
+			meta["artifacts"] = append(meta["artifacts"], "screenshots/" + to_string(vp["name"]) + ".png")
+		}
+		vi = vi + 1
+	}
+	
+	# ── Write links.json if link checking was enabled ──────────────
+	
+	if is_trueish(config["check_links"]) {
+		link_results := get_link_results()
+		# Redact the raw href and source text of each link before writing.
+		mut redacted_links := array()
+		mut lri := 0
+		while lri < len(link_results) {
+			mut lr := link_results[lri]
+			if is_trueish(has_key(lr, "href")) {
+				lr["href"] = redact_url(to_string(lr["href"]))
+			}
+			if is_trueish(has_key(lr, "source_text")) {
+				lr["source_text"] = redact_text(to_string(lr["source_text"]))
+			}
+			redacted_links = append(redacted_links, lr)
+			lri = lri + 1
+		}
+		links_json := to_json(redacted_links)
+		links_path := out_dir + "/links.json"
+		if is_trueish(file_exists(links_path)) {
+			delete_file(links_path)
+		}
+		write_file(links_path, links_json)
+		if is_falseish(file_exists(links_path)) {
+			print("Lens error: failed to write links.json")
+			return EXIT_ARTIFACT_FAIL
+		}
+		meta["artifacts"] = append(meta["artifacts"], "links.json")
+	}
+	
+	# Add version to config for report generation.
+	config["version"] = LENS_VERSION
+	
+	# ── Phase 9: Visual baseline / compare ──────────────────────────
+	
+	mut visual_results := array()
+	mut visual_findings := array()
+	
+	if is_trueish(config["baseline"]) {
+		baseline_dir := baseline_dir_for_check(config)
+		saved := save_baselines(config, out_dir, provider_viewports, baseline_dir)
+		if is_trueish(config["verbose"]) {
+			print("[lens] Baselines saved: " + to_string(len(saved)))
+		}
+	}
+	
+	if is_trueish(config["compare_baseline"]) {
+		baseline_dir := baseline_dir_for_check(config)
+		visual_results = compare_baselines(config, out_dir, provider_viewports, baseline_dir)
+		visual_findings = visual_results_to_findings(visual_results)
+		
+		# Add visual findings to check results as a visual check
+		mut vis_check := {}
+		vis_check["name"] = "Visual Diff"
+		vis_check["id"] = "visual_diff"
+		vis_check["status"] = "pass"
+		vis_check["severity"] = "info"
+		vis_check["finding_count"] = len(visual_findings)
+		vis_check["findings"] = visual_findings
+		vis_check["duration_ms"] = 0
+		
+		# Update status based on visual findings
+		mut vi := 0
+		while vi < len(visual_findings) {
+			vf := visual_findings[vi]
+			fsev := to_string(vf["severity"])
+			if fsev == "error" || fsev == "critical" {
+				vis_check["status"] = "fail"
+				vis_check["severity"] = fsev
+			} else if fsev == "warning" && vis_check["status"] != "fail" {
+				vis_check["status"] = "fail"
+				if vis_check["severity"] == "info" {
+					vis_check["severity"] = "warning"
+				}
+			}
+			vi = vi + 1
+		}
+		
+		check_results = append(check_results, vis_check)
+		
+		# Re-evaluate overall status with visual findings
+		overall_severity = worst_severity(check_results)
+		has_failures = severity_meets_threshold(overall_severity, fail_on)
+		if is_trueish(has_failures) {
+			status = "FAIL"
+		}
+		
+		# Write visual-diffs.json
+		vis_json := to_json(visual_results)
+		write_file(out_dir + "/visual-diffs.json", vis_json)
+		meta["artifacts"] = append(meta["artifacts"], "visual-diffs.json")
+		
+		# Add diff paths to artifacts
+		mut di := 0
+		while di < len(visual_results) {
+			vr := visual_results[di]
+			if is_trueish(has_key(vr, "diff_path")) {
+				dp := to_string(vr["diff_path"])
+				if dp != "" && is_trueish(file_exists(dp)) {
+					meta["artifacts"] = append(meta["artifacts"], dp)
+				}
+			}
+			di = di + 1
+		}
+		
+		if is_trueish(config["verbose"]) {
+			print("[lens] Visual comparisons: " + to_string(len(visual_results)))
+			print("[lens] Visual findings: " + to_string(len(visual_findings)))
+		}
+	}
+	
+	# ── Phase 10: Accessibility checks ────────────────────────────
+	
+	if is_trueish(is_a11y_enabled(config)) {
+		a11y_check := check_accessibility(config, bridge_data)
+		check_results = append(check_results, a11y_check)
+		
+		# Re-evaluate status with a11y findings
+		overall_severity = worst_severity(check_results)
+		has_failures = severity_meets_threshold(overall_severity, fail_on)
+		if is_trueish(has_failures) {
+			status = "FAIL"
+		}
+		
+		# Write accessibility.json (redact URLs in scans before writing).
+		if is_trueish(has_key(a11y_check, "scans")) {
+			mut redacted_scans := array()
+			mut si := 0
+			scans := a11y_check["scans"]
+			while si < len(scans) {
+				mut s := scans[si]
+				# Redact sensitive query params from the scan URL.
+				if is_trueish(has_key(s, "url")) {
+					s["url"] = redact_url(to_string(s["url"]))
+				}
+				redacted_scans = append(redacted_scans, s)
+				si = si + 1
+			}
+			a11y_json := to_json(redacted_scans)
+			write_file(out_dir + "/accessibility.json", a11y_json)
+			meta["artifacts"] = append(meta["artifacts"], "accessibility.json")
+		}
+		
+		if is_trueish(config["verbose"]) {
+			print("[lens] Accessibility check complete")
+		}
+	}
+
+	# ── Phase 2.5: bounded same-origin crawl (opt-in) ──────────────────
+	if is_trueish(config["crawl"]) {
+		if is_trueish(config["verbose"]) {
+			print("[lens] Crawling (max-depth " + to_string(config["max_depth"]) + ", max-pages " + to_string(config["max_pages"]) + ")...")
+		}
+		crawl_result := run_crawl(url, provider_result, config, out_dir)
+		crawl_pages := crawl_result["pages"]
+
+		# Build a crawl check result with one finding per problem page.
+		mut crawl_check := {
+			"name": "Crawl",
+			"id": "crawl",
+			"status": "pass",
+			"severity": "info",
+			"finding_count": 0,
+			"findings": array(),
+			"duration_ms": 0
+		}
+		mut cfindings := array()
+		mut cpi := 0
+		while cpi < len(crawl_pages) {
+			pg := crawl_pages[cpi]
+			pstatus := to_string(pg["status"])
+			pcrit := to_int(to_string(pg["critical"]))
+			perr := to_int(to_string(pg["error"]))
+			mut fsev := ""
+			if pstatus == "error" || pcrit > 0 {
+				fsev = "error"
+			} else if pstatus == "blocked" {
+				fsev = "warning"
+			} else if perr > 0 {
+				fsev = "error"
+			}
+			if fsev != "" {
+				mut ff := {
+					"id": "LENS-CRAWL-" + pad3_str(len(cfindings) + 1),
+					"check_name": "CRAWL",
+					"severity": fsev,
+					"title": "Crawled page has issues: " + redact_url(to_string(pg["url"])),
+					"description": "Page at depth " + to_string(pg["depth"]) + " (status " + pstatus + ") had " + to_string(pcrit) + " critical / " + to_string(perr) + " error finding(s).",
+					"evidence": "crawl.json",
+					"suggested_repair_task": "Open the page's run directory under pages/ and review its lens-report for specifics."
+				}
+				cfindings = append(cfindings, redact_finding(ff))
+			}
+			cpi = cpi + 1
+		}
+		crawl_check["findings"] = cfindings
+		crawl_check["finding_count"] = len(cfindings)
+		crawl_worst := to_string(crawl_result["worst_severity"])
+		if len(cfindings) > 0 {
+			crawl_check["status"] = "fail"
+			crawl_check["severity"] = crawl_worst
+		}
+		check_results = append(check_results, crawl_check)
+
+		# Re-evaluate overall status with crawl findings.
+		overall_severity = worst_severity(check_results)
+		has_failures = severity_meets_threshold(overall_severity, fail_on)
+		if is_trueish(has_failures) {
+			status = "FAIL"
+		}
+
+		# Write crawl.json (URLs redacted).
+		mut redacted_pages := array()
+		mut rpi := 0
+		while rpi < len(crawl_pages) {
+			mut rp := crawl_pages[rpi]
+			rp["url"] = redact_url(to_string(rp["url"]))
+			redacted_pages = append(redacted_pages, rp)
+			rpi = rpi + 1
+		}
+		write_file(out_dir + "/crawl.json", to_json({
+			"start_url": redact_url(url),
+			"visited_count": crawl_result["visited_count"],
+			"max_depth": config["max_depth"],
+			"max_pages": config["max_pages"],
+			"pages": redacted_pages
+		}), true)
+		meta["artifacts"] = append(meta["artifacts"], "crawl.json")
+
+		if is_trueish(config["verbose"]) {
+			print("[lens] Crawled " + to_string(crawl_result["visited_count"]) + " page(s)")
+		}
+	}
+
+	# Update exit code BEFORE report generation so reports include the correct value.
+	mut exit_code := EXIT_OK
+	if is_trueish(has_failures) {
+		exit_code = EXIT_CHECK_FAIL
+	}
+	meta["exit_code"] = exit_code
+
+	# Store visual results for report access
+	if len(visual_results) > 0 {
+		meta["visual_results"] = visual_results
+	}
+
+	# ── Final redaction sweep (defense in depth) ───────────────────
+	# Every finding that reaches a report, the Eval file, or the JSON
+	# output is scrubbed of secrets here, regardless of which check
+	# produced it. The display URL is likewise scrubbed for all reports.
+	check_results = redact_check_results(check_results)
+	config["url"] = redact_url(to_string(config["url"]))
+
+	# Generate Markdown report.
+	md_report := generate_markdown_report(config, meta, check_results)
+	md_path := out_dir + "/lens-report.md"
+	if is_trueish(file_exists(md_path)) {
+		delete_file(md_path)
+	}
+	write_file(md_path, md_report)
+	if is_falseish(file_exists(md_path)) {
+		print("Lens error: failed to write Markdown report to " + md_path)
+		return EXIT_ARTIFACT_FAIL
+	}
+	
+	# Generate JSON report.
+	json_report := generate_json_report(config, meta, check_results, provider_result)
+	json_path := out_dir + "/lens-report.json"
+	if is_trueish(file_exists(json_path)) {
+		delete_file(json_path)
+	}
+	write_file(json_path, json_report)
+	if is_falseish(file_exists(json_path)) {
+		print("Lens error: failed to write JSON report to " + json_path)
+		return EXIT_ARTIFACT_FAIL
+	}
+
+	# ── Phase 3.1: Self-contained HTML report (opt-in via --html) ──────
+	if is_trueish(config["html"]) {
+		html_report := generate_html_report(config, meta, check_results)
+		html_path := out_dir + "/lens-report.html"
+		if is_trueish(file_exists(html_path)) {
+			delete_file(html_path)
+		}
+		write_file(html_path, html_report)
+		if is_falseish(file_exists(html_path)) {
+			print("Lens error: failed to write HTML report to " + html_path)
+			return EXIT_ARTIFACT_FAIL
+		}
+		meta["artifacts"] = append(meta["artifacts"], "lens-report.html")
+	}
+
+	# Generate metadata with provider info.
+	mut provider_meta := {}
+	if is_trueish(has_key(provider_result, "metadata")) {
+		provider_meta = provider_result["metadata"]
+	}
+	metadata_json := generate_metadata_json(config, meta, check_results, provider_meta)
+	meta_path := out_dir + "/metadata.json"
+	if is_trueish(file_exists(meta_path)) {
+		delete_file(meta_path)
+	}
+	write_file(meta_path, metadata_json)
+	if is_falseish(file_exists(meta_path)) {
+		print("Lens error: failed to write metadata to " + meta_path)
+		return EXIT_ARTIFACT_FAIL
+	}
+	
+	# ── Phase 7: Write Eval output (if --eval-out provided) ────────
+	
+	eval_out_path := to_string(config["eval_out"])
+	if eval_out_path != "" {
+		# Build spec_results for eval output
+		mut spec_results := array()
+		if is_trueish(has_key(config, "spec_data")) {
+			spec_data = config["spec_data"]
+			if is_trueish(is_trueish(has_key(spec_data, "valid"))) {
+				if is_trueish(spec_data["valid"]) {
+					# Collect spec-backed check results from all check_results
+					mut si := 0
+					while si < len(check_results) {
+						cr := check_results[si]
+						cid := to_string(cr["id"])
+						if is_trueish(str_starts_with(cid, "spec_")) {
+							spec_results = append(spec_results, cr)
+						}
+						si = si + 1
+					}
+				}
+			}
+		}
+		
+		eval_json := generate_eval_output(config, meta, check_results, spec_results)
+		if is_trueish(file_exists(eval_out_path)) {
+			delete_file(eval_out_path)
+		}
+		write_file(eval_out_path, eval_json)
+		if is_falseish(file_exists(eval_out_path)) {
+			print("Lens error: failed to write Eval output to " + eval_out_path)
+			return EXIT_ARTIFACT_FAIL
+		}
+	}
+
+	# ── Phase 3.3 / 3.4: ecosystem integrations (opt-in) ───────────
+	# config["url"] was already redacted in the final sweep above.
+	counts := {
+		"critical": count_severity(check_results, "critical"),
+		"error": count_severity(check_results, "error"),
+		"warning": count_severity(check_results, "warning"),
+		"info": count_severity(check_results, "info")
+	}
+	ledger_path := to_string(config["ledger"])
+	if ledger_path != "" {
+		write_ledger_record(ledger_path, LENS_VERSION, to_string(config["url"]), status, exit_code, started_at, finished_at, duration_ms, counts)
+		if is_trueish(config["verbose"]) {
+			print("[lens] RunLedger record appended: " + ledger_path)
+		}
+	}
+	howl_path := to_string(config["howl"])
+	if howl_path != "" {
+		write_howl_summary(howl_path, LENS_VERSION, to_string(config["url"]), status, exit_code, duration_ms, counts, md_path)
+		if is_trueish(config["verbose"]) {
+			print("[lens] Howl summary written: " + howl_path)
+		}
+	}
+
+	# Terminal output.
+	if is_trueish(config["json_output"]) {
+		# Print concise JSON summary to stdout.
+		summary := {
+			"status": status,
+			"url": url,
+			"exit_code": exit_code,
+			"duration_ms": duration_ms,
+			"findings": {
+				"critical": count_severity(check_results, "critical"),
+				"error": count_severity(check_results, "error"),
+				"warning": count_severity(check_results, "warning"),
+				"info": count_severity(check_results, "info")
+			},
+			"report": md_path
+		}
+		print(to_json(summary))
+	} else if is_trueish(config["verbose"]) {
+		# Verbose terminal output.
+		print("Lens v" + LENS_VERSION)
+		print("URL: " + url)
+		print("Output: " + out_dir)
+		print("Status: " + status)
+		print("Duration: " + to_string(duration_ms) + "ms")
+		print("Report: " + md_path)
+	} else {
+		# Default quiet output.
+		if status == "PASS" {
+			print("Lens completed: " + status)
+		} else {
+			print("Lens completed: " + status)
+			crit_count := count_severity(check_results, "critical")
+			err_count := count_severity(check_results, "error")
+			warn_count := count_severity(check_results, "warning")
+			if crit_count > 0 {
+				print("Critical: " + to_string(crit_count))
+			}
+			if err_count > 0 {
+				print("Errors: " + to_string(err_count))
+			}
+			if warn_count > 0 {
+				print("Warnings: " + to_string(warn_count))
+			}
+		}
+		print("Report: " + md_path)
+	}
+	
+	return exit_code
+}
+
+# ── Phase 8: Flow runner ─────────────────────────────────────────────
+
+# Run a Lens flow from a flow file.
+export func run_flow(config) {
+	# Get flow file path from URL field (reused for flow file path in flow mode)
+	flow_path := to_string(config["url"])
+	if flow_path == "" {
+		print("Lens: flow file path is required.")
+		print("Usage: lens flow <flow-file> [flags]")
+		return EXIT_INVALID_INPUT
+	}
+	
+	# Load and validate flow file
+	flow_result := load_flow_file(flow_path)
+	if is_falseish(flow_result["valid"]) {
+		print("Lens failed: " + to_string(flow_result["error"]))
+		return EXIT_INVALID_INPUT
+	}
+	
+	flow := flow_result["flow"]
+	flow_name := to_string(flow["name"])
+	flow_url := to_string(flow["url"])
+	flow_steps := flow["steps"]
+	
+	if is_trueish(config["verbose"]) {
+		print("[lens] Flow loaded: " + flow_name)
+		print("[lens] Steps: " + to_string(len(flow_steps)))
+	}
+	
+	# Override flow defaults with CLI flags
+	if is_trueish(has_key(config, "allow_external")) && is_trueish(config["allow_external"]) {
+		flow["allow_external"] = true
+	}
+
+	# Validate URL safety
+	if flow_url != "" {
+		validation := validate_url(flow_url, flow["allow_external"])
+		if is_falseish(validation["valid"]) {
+			print("Lens failed: " + to_string(validation["error"]))
+			return EXIT_INVALID_INPUT
+		}
+	}
+	
+	# Setup output directory
+	started_at := now_utc()
+	started_ms := current_timestamp()
+	
+	mut out_dir := to_string(config["out_dir"])
+	if out_dir == "" {
+		timestamp_dir := format_timestamp_dir(0)
+		out_dir = ".lens/runs/" + timestamp_dir
+	}
+	config["out_dir"] = out_dir
+	
+	if is_falseish(path_exists(out_dir)) {
+		create_dir(out_dir)
+	}
+	if is_falseish(path_exists(out_dir)) {
+		print("Lens error: failed to create output directory: " + out_dir)
+		return EXIT_ARTIFACT_FAIL
+	}
+	
+	screenshots_dir := out_dir + "/screenshots"
+	if is_falseish(path_exists(screenshots_dir)) {
+		create_dir(screenshots_dir)
+	}
+	
+	# ── Capture real evidence for the navigation target ────────────────
+	# The flow runner performs the read-only navigation (the explicit
+	# `visit` action) using the same provider as `lens check`, then
+	# evaluates the no-console-errors / no-failed-requests assertions
+	# against the captured evidence. Interactive steps (click, type,
+	# wait_for_*, assert_text/selector) are NOT executed — they are
+	# reported honestly as skipped rather than fabricated as passing.
+
+	# Determine the navigation target: explicit flow url, else first visit.
+	mut nav_url := flow_url
+	if nav_url == "" {
+		mut fvi := 0
+		while fvi < len(flow_steps) {
+			if get_step_type(flow_steps[fvi]) == "visit" {
+				nav_url = get_step_value(flow_steps[fvi], "visit")
+				fvi = len(flow_steps) + 1
+			} else {
+				fvi = fvi + 1
+			}
+		}
+	}
+
+	mut bridge_data := {}
+	mut provider_ok := false
+	mut provider_meta := {}
+	mut provider_viewports := array()
+	mut step_results := array()
+
+	# Read-only capture (the default flow path; --execute is routed to
+	# run_flow_exec at top level to keep the call stack shallow).
+	if nav_url != "" {
+		nav_validation := validate_url(nav_url, flow["allow_external"])
+		if is_trueish(nav_validation["valid"]) && is_trueish(node_available()) {
+			prov_config := {
+				"viewports": flow["viewports"],
+				"timeout": flow["timeout_seconds"],
+				"verbose": config["verbose"],
+				"accessibility": false,
+				"settle_ms": config["settle_ms"],
+				"max_concurrency": config["max_concurrency"]
+			}
+			provider_result := run_provider(nav_url, prov_config, out_dir)
+			if is_falseish(provider_failed(provider_result)) {
+				provider_ok = true
+				bridge_data = write_runtime_artifacts(provider_result, out_dir)
+				provider_viewports = provider_result["viewports"]
+				if is_trueish(has_key(provider_result, "metadata")) {
+					provider_meta = provider_result["metadata"]
+				}
+			} else if is_trueish(config["verbose"]) {
+				print("[lens] Flow navigation provider did not produce usable data; assertions will be skipped.")
+			}
+		}
+	}
+
+	# Run flow steps (read-only semantics).
+	mut si := 0
+	while si < len(flow_steps) {
+		step := flow_steps[si]
+		step_type := get_step_type(step)
+
+		mut sr := {}
+		sr["index"] = si + 1
+		sr["type"] = step_type
+		sr["status"] = "skipped"
+		sr["started_at"] = now_utc()
+		sr["viewport"] = "desktop"
+
+		if step_type == "visit" {
+			sr = execute_visit_step(step, flow, nav_url, provider_ok, sr)
+		} else if step_type == "screenshot" {
+			sr = execute_screenshot_step(step, flow, provider_ok, sr)
+		} else if step_type == "wait" {
+			sr = execute_wait_step(step, sr)
+		} else if step_type == "click" {
+			sr = execute_click_step(step, flow, sr)
+		} else if step_type == "type" {
+			sr = execute_type_step(step, sr)
+		} else if step_type == "assert_no_console_errors" {
+			sr = execute_assert_no_console_errors(bridge_data, provider_ok, sr)
+		} else if step_type == "assert_no_failed_requests" {
+			sr = execute_assert_no_failed_requests(bridge_data, provider_ok, sr)
+		} else if step_type == "assert_text" || step_type == "assert_selector" || step_type == "assert_not_selector" || step_type == "wait_for_text" || step_type == "wait_for_selector" {
+			# These require interactive execution which is not performed here.
+			sr["status"] = "skipped"
+			sr["error"] = "Step type '" + step_type + "' requires interactive execution. Re-run with --execute to perform it."
+		} else {
+			sr["status"] = "skipped"
+			sr["error"] = "Unknown step type: " + step_type
+		}
+
+		sr["finished_at"] = now_utc()
+		step_results = append(step_results, sr)
+		si = si + 1
+	}
+
+	return finalize_flow_run(config, flow, step_results, provider_ok, provider_viewports, provider_meta, "", false, nav_url, started_at, started_ms, out_dir)
+}
+
+# Finalize a flow run: redact step errors, write artifacts, build findings,
+# and generate every report. Extracted from run_flow so run_flow's stack
+# frame stays small — the Kujo VM has a shallow native stack and the
+# interactive path nests deeper, which would otherwise overflow.
+func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_viewports, provider_meta, flow_video, executed, nav_url, started_at, started_ms, out_dir) {
+	flow_name := to_string(flow["name"])
+	mut step_results := step_results_in
+	# Redact any free-text step errors before they reach artifacts/reports.
+	mut redacted_steps := array()
+	mut sei := 0
+	while sei < len(step_results) {
+		mut s := step_results[sei]
+		if is_trueish(has_key(s, "error")) {
+			s["error"] = redact_text(to_string(s["error"]))
+		}
+		redacted_steps = append(redacted_steps, s)
+		sei = sei + 1
+	}
+	step_results = redacted_steps
+
+	# Write flow artifacts
+	flow_json := to_json(redact_flow_for_output(flow))
+	write_file(out_dir + "/flow.json", flow_json)
+
+	steps_json := to_json(step_results)
+	write_file(out_dir + "/flow-steps.json", steps_json)
+	
+	# Build metadata
+	finished_at := now_utc()
+	finished_ms := current_timestamp()
+	duration_ms := finished_ms - started_ms
+	
+	mut status := "PASS"
+	mut exit_code := EXIT_OK
+	mut fail_on := "error"
+	if is_trueish(has_key(config, "fail_on")) {
+		fail_on = to_string(config["fail_on"])
+	}
+	
+	mut passed := 0
+	mut failed := 0
+	mut blocked := 0
+	mut skipped := 0
+	mut errored := 0
+	mut ri := 0
+	while ri < len(step_results) {
+		sr := step_results[ri]
+		st := to_string(sr["status"])
+		if st == "pass" { passed = passed + 1 }
+		if st == "fail" { failed = failed + 1; status = "FAIL"; exit_code = EXIT_CHECK_FAIL }
+		if st == "blocked" {
+			blocked = blocked + 1
+			# Blocked steps are warnings — fail if threshold is warning or info
+			if fail_on == "warning" || fail_on == "info" {
+				status = "FAIL"
+				exit_code = EXIT_CHECK_FAIL
+			}
+		}
+		if st == "skipped" { skipped = skipped + 1 }
+		if st == "error" { errored = errored + 1; status = "FAIL"; exit_code = EXIT_CHECK_FAIL }
+		ri = ri + 1
+	}
+	
+	# Generate flow findings
+	mut flow_findings := array()
+	mut fcounter := 0
+	ri = 0
+	while ri < len(step_results) {
+		sr := step_results[ri]
+		st := to_string(sr["status"])
+		if st == "fail" || st == "blocked" || st == "error" {
+			fcounter = fcounter + 1
+			mut ff := {}
+			ff["id"] = "LENS-FLOW-" + pad3_str(fcounter)
+			ff["check_name"] = "FLOW"
+			ff["severity"] = "error"
+			if st == "blocked" { ff["severity"] = "warning" }
+			if st == "error" { ff["severity"] = "critical" }
+			ff["title"] = "Flow step " + to_string(sr["index"]) + " " + st + ": " + to_string(sr["type"])
+			ff["description"] = "Flow step " + to_string(sr["index"]) + " (" + to_string(sr["type"]) + ") " + st + "."
+			if to_string(sr["error"]) != "" {
+				ff["description"] = to_string(sr["error"])
+			}
+			ff["evidence"] = "flow-steps.json step " + to_string(sr["index"])
+			ff["suggested_repair_task"] = "Review flow step " + to_string(sr["index"]) + " in flow-steps.json. Check the step configuration and safety rules."
+			if st == "blocked" {
+				ff["suggested_repair_task"] = "Step was blocked by safety rules. Review the safety model and step configuration."
+			}
+			flow_findings = append(flow_findings, redact_finding(ff))
+		}
+		ri = ri + 1
+	}
+
+	# Build the artifact list from files that were ACTUALLY written.
+	mut flow_artifacts := array("lens-report.md", "lens-report.json", "metadata.json", "flow.json", "flow-steps.json")
+	if is_trueish(provider_ok) {
+		flow_artifacts = append(flow_artifacts, "console.json")
+		flow_artifacts = append(flow_artifacts, "network.json")
+		if is_falseish(executed) {
+			flow_artifacts = append(flow_artifacts, "dom-summary.json")
+			mut pvi := 0
+			while pvi < len(provider_viewports) {
+				pvp := provider_viewports[pvi]
+				if is_trueish(has_key(pvp, "screenshot")) && to_string(pvp["screenshot"]) != "" {
+					flow_artifacts = append(flow_artifacts, "screenshots/" + to_string(pvp["name"]) + ".png")
+				}
+				pvi = pvi + 1
+			}
+		}
+	}
+
+	# Executed flows: list per-step screenshots and the recording (Phase 4.1/4.2).
+	if is_trueish(executed) {
+		mut esi := 0
+		while esi < len(step_results) {
+			esr := step_results[esi]
+			if is_trueish(has_key(esr, "screenshot")) && to_string(esr["screenshot"]) != "" {
+				flow_artifacts = append(flow_artifacts, to_string(esr["screenshot"]))
+			}
+			esi = esi + 1
+		}
+		if flow_video != "" {
+			flow_artifacts = append(flow_artifacts, flow_video)
+		}
+	}
+
+	# Write markdown report
+	meta := {
+		"status": status,
+		"started_at": started_at,
+		"finished_at": finished_at,
+		"duration_ms": duration_ms,
+		"out_dir": out_dir,
+		"exit_code": exit_code,
+		"provider_ran": provider_ok,
+		"nav_url": redact_url(nav_url),
+		"artifacts": flow_artifacts
+	}
+
+	config["version"] = LENS_VERSION
+
+	# Write metadata.json (previously listed but never written).
+	mut meta_config := {
+		"url": nav_url,
+		"version": LENS_VERSION,
+		"viewports": flow["viewports"],
+		"fail_on": fail_on,
+		"allow_external": flow["allow_external"],
+		"check_links": false,
+		"timeout": flow["timeout_seconds"]
+	}
+	flow_metadata_json := generate_metadata_json(meta_config, meta, array(), provider_meta)
+	write_file(out_dir + "/metadata.json", flow_metadata_json)
+
+	md_report := generate_flow_report(config, meta, flow, step_results, passed, failed, blocked, skipped, errored, flow_findings)
+	write_file(out_dir + "/lens-report.md", md_report)
+	
+	json_report := generate_flow_json_report(config, meta, flow, step_results, passed, failed, blocked, skipped, errored, flow_findings)
+	write_file(out_dir + "/lens-report.json", json_report)
+
+	# Note: the Phase 4.3 walkthrough.html is generated by run_flow_exec at a
+	# shallow call depth (the Kujo VM's native stack cannot afford to build it
+	# from inside this large finalize frame). It is listed here if present.
+	if is_trueish(executed) && is_trueish(file_exists(out_dir + "/walkthrough.html")) {
+		flow_artifacts = append(flow_artifacts, "walkthrough.html")
+	}
+
+	# Eval output if requested
+	eval_out_path := to_string(config["eval_out"])
+	if eval_out_path != "" {
+		mut eval_results := array()
+		# Build eval results from flow steps
+		eval_json := to_json({
+			"schema_version": 1,
+			"tool": "lens",
+			"status": status,
+			"flow": flow_name,
+			"summary": {
+				"total": len(step_results),
+				"passed": passed,
+				"failed": failed,
+				"blocked": blocked,
+				"skipped": skipped,
+				"errored": errored
+			},
+			"results": step_results
+		})
+		write_file(eval_out_path, eval_json)
+	}
+	
+	# Terminal output
+	if status == "PASS" {
+		print("Lens flow completed: " + status)
+	} else {
+		print("Lens flow completed: " + status)
+		if failed > 0 { print("Failed steps: " + to_string(failed)) }
+		if blocked > 0 { print("Blocked steps: " + to_string(blocked)) }
+	}
+	print("Report: " + out_dir + "/lens-report.md")
+	
+	return exit_code
+}
+
+# ── Phase 4.1 / 4.2: interactive flow execution (top-level entry) ─────
+#
+# Executes a flow's safe steps in a real browser session, optionally recording
+# video, then hands off to the shared finalize step. This is a top-level entry
+# (called directly from run()) rather than a branch inside run_flow: the Kujo
+# VM has a shallow native call stack, and the interactive path nests one level
+# deeper (plan → safety checks) than the read-only path. Rooting it shallowly
+# keeps it within the stack budget. The full safety model still applies — every
+# step is safety-checked in plan_flow_program before anything is executed.
+export func run_flow_exec(config) {
+	flow_path := to_string(config["url"])
+	if flow_path == "" {
+		print("Lens: flow file path is required.")
+		print("Usage: lens flow <flow-file> [flags]")
+		return EXIT_INVALID_INPUT
+	}
+
+	flow_result := load_flow_file(flow_path)
+	if is_falseish(flow_result["valid"]) {
+		print("Lens failed: " + to_string(flow_result["error"]))
+		return EXIT_INVALID_INPUT
+	}
+
+	flow := flow_result["flow"]
+	flow_steps := flow["steps"]
+	flow_url := to_string(flow["url"])
+
+	if is_trueish(has_key(config, "allow_external")) && is_trueish(config["allow_external"]) {
+		flow["allow_external"] = true
+	}
+
+	if is_trueish(config["verbose"]) {
+		print("[lens] Flow loaded (execute mode): " + to_string(flow["name"]))
+		print("[lens] Steps: " + to_string(len(flow_steps)))
+	}
+
+	started_at := now_utc()
+	started_ms := current_timestamp()
+
+	mut out_dir := to_string(config["out_dir"])
+	if out_dir == "" {
+		out_dir = ".lens/runs/" + format_timestamp_dir(0)
+	}
+	config["out_dir"] = out_dir
+	if is_falseish(path_exists(out_dir)) {
+		create_dir(out_dir)
+	}
+	if is_falseish(path_exists(out_dir)) {
+		print("Lens error: failed to create output directory: " + out_dir)
+		return EXIT_ARTIFACT_FAIL
+	}
+	if is_falseish(path_exists(out_dir + "/screenshots")) {
+		create_dir(out_dir + "/screenshots")
+	}
+
+	# Determine the navigation target: explicit flow url, else first visit.
+	mut nav_url := flow_url
+	if nav_url == "" {
+		mut fvi := 0
+		while fvi < len(flow_steps) {
+			if get_step_type(flow_steps[fvi]) == "visit" {
+				nav_url = get_step_value(flow_steps[fvi], "visit")
+				fvi = len(flow_steps) + 1
+			} else {
+				fvi = fvi + 1
+			}
+		}
+	}
+
+	if nav_url == "" {
+		print("Lens failed: flow has no navigation target (url or a visit step).")
+		return EXIT_INVALID_INPUT
+	}
+	nav_validation := validate_url(nav_url, flow["allow_external"])
+	if is_falseish(nav_validation["valid"]) {
+		print("Lens failed: " + to_string(nav_validation["error"]))
+		return EXIT_INVALID_INPUT
+	}
+	if is_falseish(node_available()) {
+		print("Lens error: Node.js is required for --execute flows.")
+		return EXIT_BROWSER_FAIL
+	}
+
+	# Plan (safety-gates every step) → execute → map results.
+	plan := plan_flow_program(flow_steps, flow)
+	program := {
+		"url": nav_url,
+		"viewport": flow_first_viewport(flow),
+		"timeout": to_int(to_string(flow["timeout_seconds"])) * 1000,
+		"record": is_trueish(config["record"]),
+		"auth_file": to_string(config["auth_file"]),
+		"steps": plan["program"]
+	}
+	bridge_res := run_flow_bridge(program, out_dir)
+	if is_trueish(has_key(bridge_res, "error")) {
+		print("Lens error: " + to_string(bridge_res["message"]))
+		return EXIT_BROWSER_FAIL
+	}
+
+	step_results := map_flow_results(flow_steps, bridge_res, plan["blocked"])
+	write_flow_evidence(out_dir, bridge_res["console_messages"], bridge_res["network_events"])
+	mut flow_video := to_string(bridge_res["video"])
+
+	# Transcode the recording to mp4 (H.264) when ffmpeg is available, so it
+	# plays inline in every browser (Safari won't play webm). Done here, not in
+	# the bridge, so the bridge stays fast and never trips the process limit.
+	# The webm is kept as a fallback source referenced by the walkthrough.
+	if flow_video == "video/walkthrough.webm" {
+		webm_path := out_dir + "/video/walkthrough.webm"
+		mp4_path := out_dir + "/video/walkthrough.mp4"
+		if is_trueish(file_exists(webm_path)) && is_trueish(ffmpeg_available()) {
+			try {
+				conv := spawn_process(array("ffmpeg", "-y", "-loglevel", "error", "-i", webm_path, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", mp4_path))
+				if is_trueish(conv.success) && is_trueish(file_exists(mp4_path)) {
+					flow_video = "video/walkthrough.mp4"
+				}
+			} except e {
+				# ffmpeg failed or unavailable — keep the webm.
+			}
+		}
+	}
+
+	# Redact step errors before they reach ANY artifact (walkthrough or reports).
+	mut red_steps := array()
+	mut rsi := 0
+	while rsi < len(step_results) {
+		mut s := step_results[rsi]
+		if is_trueish(has_key(s, "error")) {
+			s["error"] = redact_text(to_string(s["error"]))
+		}
+		red_steps = append(red_steps, s)
+		rsi = rsi + 1
+	}
+
+	# ── Phase 4.3: walkthrough artifact, generated here at a shallow call
+	# depth (run → run_flow_exec → generate_walkthrough_html) so the Kujo VM
+	# stack stays within budget. Emitted when --walkthrough is set or a
+	# recording was produced (the video is only useful with the timeline).
+	if is_trueish(config["walkthrough"]) || flow_video != "" {
+		mut w_pass := 0
+		mut w_fail := 0
+		mut w_blocked := 0
+		mut w_skipped := 0
+		mut wi := 0
+		while wi < len(red_steps) {
+			wst := to_string(red_steps[wi]["status"])
+			if wst == "pass" {
+				w_pass = w_pass + 1
+			} else if wst == "fail" || wst == "error" {
+				w_fail = w_fail + 1
+			} else if wst == "blocked" {
+				w_blocked = w_blocked + 1
+			} else {
+				w_skipped = w_skipped + 1
+			}
+			wi = wi + 1
+		}
+		mut w_status := "PASS"
+		if w_fail > 0 {
+			w_status = "FAIL"
+		}
+		mut w_final_url := ""
+		if is_trueish(has_key(bridge_res, "final_url")) {
+			w_final_url = redact_url(to_string(bridge_res["final_url"]))
+		}
+		w_meta := {
+			"status": w_status,
+			"started_at": started_at,
+			"finished_at": now_utc(),
+			"duration_ms": current_timestamp() - started_ms,
+			"final_url": w_final_url
+		}
+		walk_html := generate_walkthrough_html(flow, w_meta, red_steps, flow_video, w_pass, w_fail, w_blocked, w_skipped)
+		write_file(out_dir + "/walkthrough.html", walk_html, true)
+	}
+
+	return finalize_flow_run(config, flow, red_steps, true, array(), {}, flow_video, true, nav_url, started_at, started_ms, out_dir)
+}
+
+# Safety-gate every step and build the executable program for the bridge.
+# Returns { "program": [...executable steps...], "blocked": { index: reason } }.
+# Top-level entry for `lens flow --validate`. Kept shallow (run →
+# run_flow_validate → validate_flow_dry_run) so the Kujo VM's native stack
+# stays within budget — the large run_flow frame is bypassed entirely.
+# Top-level entry for `lens inspect <url>` — selector discovery. Loads the page
+# read-only and dumps interactive elements (buttons, links, inputs, modal
+# triggers) with suggested selectors + text, so an author can write accurate
+# flow steps. Kept shallow (run → run_inspect → …) for the Kujo VM stack.
+export func run_inspect(config) {
+	url := to_string(config["url"])
+	if url == "" {
+		print("Lens: URL is required.")
+		print("Usage: lens inspect <url> [flags]")
+		return EXIT_INVALID_INPUT
+	}
+	validation := validate_url(url, config["allow_external"])
+	if is_falseish(validation["valid"]) {
+		print("Lens failed: " + to_string(validation["error"]))
+		return EXIT_INVALID_INPUT
+	}
+	if is_falseish(node_available()) {
+		print("Lens error: Node.js is required for browser automation.")
+		print("Install Node.js from https://nodejs.org")
+		return EXIT_BROWSER_FAIL
+	}
+
+	timeout := to_string(config["timeout"])
+	args := array("node", "bridge/inspect-bridge.js", "--url", url, "--timeout", timeout)
+	res := spawn_process(args, { "timeout_ms": 120000 })
+	out := trim(to_string(res.stdout))
+	if out == "" {
+		print("Lens error: inspect bridge produced no output. " + trim(to_string(res.stderr)))
+		return EXIT_BROWSER_FAIL
+	}
+
+	parsed := parse_json(out)
+	mut elements := array()
+	if is_trueish(has_key(parsed, "elements")) {
+		elements = parsed["elements"]
+	}
+
+	# Redact each element's text/selector/href before output (defense in depth).
+	mut clean := array()
+	mut ei := 0
+	while ei < len(elements) {
+		mut el := elements[ei]
+		if is_trueish(has_key(el, "text")) {
+			el["text"] = redact_text(to_string(el["text"]))
+		}
+		if is_trueish(has_key(el, "selector")) {
+			el["selector"] = redact_text(to_string(el["selector"]))
+		}
+		if is_trueish(has_key(el, "href")) {
+			el["href"] = redact_url(to_string(el["href"]))
+		}
+		clean = append(clean, el)
+		ei = ei + 1
+	}
+
+	# Output directory + elements.json.
+	mut out_dir := to_string(config["out_dir"])
+	if out_dir == "" {
+		out_dir = ".lens/runs/" + format_timestamp_dir(0)
+	}
+	if is_falseish(path_exists(out_dir)) {
+		create_dir(out_dir)
+	}
+	write_file(out_dir + "/elements.json", to_json({
+		"url": redact_url(url),
+		"final_url": redact_url(to_string(parsed["final_url"])),
+		"title": redact_text(to_string(parsed["title"])),
+		"count": len(clean),
+		"elements": clean
+	}), true)
+
+	if is_trueish(config["json_output"]) {
+		print(to_json(clean))
+		return EXIT_OK
+	}
+
+	# Readable summary.
+	print("Lens inspect — " + redact_text(to_string(parsed["title"])))
+	print("URL: " + redact_url(to_string(parsed["final_url"])))
+	print("Found " + to_string(len(clean)) + " interactive element(s):")
+	print("")
+	mut ci := 0
+	while ci < len(clean) {
+		el := clean[ci]
+		kind := to_string(el["kind"])
+		text := to_string(el["text"])
+		sel := to_string(el["selector"])
+		mut label := "\"" + text + "\""
+		if text == "" {
+			label = "(no text)"
+		}
+		print("  [" + kind + "] " + label + "  →  " + sel)
+		ci = ci + 1
+	}
+	print("")
+	print("Saved: " + out_dir + "/elements.json")
+	print("Use these selectors to author a flow; validate it with: lens flow <file> --validate")
+	return EXIT_OK
+}
+
+export func run_flow_validate(config) {
+	flow_path := to_string(config["url"])
+	if flow_path == "" {
+		print("Lens: flow file path is required.")
+		print("Usage: lens flow <flow-file> --validate")
+		return EXIT_INVALID_INPUT
+	}
+	flow_result := load_flow_file(flow_path)
+	if is_falseish(flow_result["valid"]) {
+		print("Lens failed: " + to_string(flow_result["error"]))
+		return EXIT_INVALID_INPUT
+	}
+	flow := flow_result["flow"]
+	if is_trueish(has_key(config, "allow_external")) && is_trueish(config["allow_external"]) {
+		flow["allow_external"] = true
+	}
+	flow_steps := flow["steps"]
+	json_mode := is_trueish(config["json_output"])
+
+	# The whole loop is INLINE here (no validate_flow_dry_run / per-step verdict
+	# wrappers) so the safety helpers run at a shallow VM stack depth
+	# (run → run_flow_validate → check_click_safety) — nesting them deeper
+	# overflows the Kujo VM's small native stack.
+	if is_falseish(json_mode) {
+		print("Lens flow validation — " + to_string(flow["name"]))
+		print("URL: " + to_string(flow["url"]))
+		print("Steps: " + to_string(len(flow_steps)))
+		print("")
+	}
+
+	mut results := array()
+	mut problems := 0
+	mut si := 0
+	while si < len(flow_steps) {
+		step := flow_steps[si]
+		idx := si + 1
+		st := get_step_type(step)
+		mut status := "ok"
+		mut detail := ""
+
+		if st == "unknown" {
+			status = "INVALID"
+			detail = "unknown step type"
+		} else {
+			req := step_required_field_error(step, st)
+			if req != "" {
+				status = "INVALID"
+				detail = req
+			} else if st == "click" {
+				safety := check_click_safety(get_step_dict(step, "click"), flow)
+				if is_falseish(safety["allowed"]) {
+					status = "BLOCKED"
+					detail = to_string(safety["reason"])
+				}
+			} else if st == "type" {
+				safety := check_type_safety(get_step_dict(step, "type"))
+				if is_falseish(safety["allowed"]) {
+					status = "BLOCKED"
+					detail = to_string(safety["reason"])
+				}
+			} else if st == "visit" {
+				v := validate_url(get_step_value(step, "visit"), flow["allow_external"])
+				if is_falseish(v["valid"]) {
+					status = "BLOCKED"
+					detail = to_string(v["error"])
+				}
+			} else if st == "wait" {
+				wd := get_step_dict(step, "wait")
+				mut ms := 0
+				if is_trueish(has_key(wd, "ms")) {
+					ms = to_int(to_string(wd["ms"]))
+				}
+				if ms > 10000 {
+					status = "BLOCKED"
+					detail = "wait " + to_string(ms) + "ms exceeds the 10000ms max"
+				}
+			}
+		}
+
+		if status != "ok" {
+			problems = problems + 1
+		}
+		results = append(results, { "index": idx, "type": st, "status": status, "detail": detail })
+		if is_falseish(json_mode) {
+			mut line := "  " + to_string(idx) + ". " + st + " — " + status
+			if detail != "" {
+				line = line + ": " + detail
+			}
+			print(line)
+		}
+		si = si + 1
+	}
+
+	# Machine-readable verdict for autonomous agents (parse instead of scrape).
+	if is_trueish(json_mode) {
+		print(to_json({
+			"tool": "lens",
+			"command": "flow-validate",
+			"name": to_string(flow["name"]),
+			"valid": problems == 0,
+			"step_count": len(flow_steps),
+			"problem_count": problems,
+			"steps": results
+		}))
+		if problems == 0 {
+			return EXIT_OK
+		}
+		return EXIT_CHECK_FAIL
+	}
+
+	print("")
+	if problems == 0 {
+		print("Valid: all " + to_string(len(flow_steps)) + " steps are well-formed and pass the safety model.")
+		print("Run it for real with:  lens flow <file> --execute --record --walkthrough")
+		return EXIT_OK
+	}
+	print("Found " + to_string(problems) + " issue(s). Fix them before running with --execute.")
+	return EXIT_CHECK_FAIL
+}
+
+# Return a human-readable error if a step is missing a required field, else "".
+# Exported so the flow field-validation core is unit-tested directly.
+export func step_required_field_error(step, st) {
+	if st == "visit" {
+		if get_step_value(step, "visit") == "" { return "missing URL (e.g. {\"visit\": \"http://localhost:3000\"})" }
+	} else if st == "click" {
+		d := get_step_dict(step, "click")
+		if is_falseish(has_key(d, "selector")) || to_string(d["selector"]) == "" { return "missing selector" }
+	} else if st == "type" {
+		d := get_step_dict(step, "type")
+		if is_falseish(has_key(d, "selector")) || to_string(d["selector"]) == "" { return "missing selector" }
+	} else if st == "scroll" {
+		d := get_step_dict(step, "scroll")
+		has_sel := is_trueish(has_key(d, "selector")) && to_string(d["selector"]) != ""
+		if is_falseish(has_sel) && is_falseish(has_key(d, "y")) { return "missing selector or y" }
+	} else if st == "wait_for_selector" || st == "assert_selector" || st == "assert_not_selector" {
+		if get_step_value(step, st) == "" { return "missing selector" }
+	} else if st == "wait_for_text" || st == "assert_text" {
+		if get_step_value(step, st) == "" { return "missing text" }
+	}
+	return ""
+}
+
+func plan_flow_program(flow_steps, flow) {
+	mut program_steps := array()
+	mut blocked := {}
+	mut si := 0
+	while si < len(flow_steps) {
+		step := flow_steps[si]
+		idx := si + 1
+		st := get_step_type(step)
+		mut is_blocked := false
+		mut reason := ""
+
+		if st == "click" {
+			safety := check_click_safety(get_step_dict(step, "click"), flow)
+			if is_falseish(safety["allowed"]) { is_blocked = true; reason = to_string(safety["reason"]) }
+		} else if st == "type" {
+			safety := check_type_safety(get_step_dict(step, "type"))
+			if is_falseish(safety["allowed"]) { is_blocked = true; reason = to_string(safety["reason"]) }
+		} else if st == "visit" {
+			v := validate_url(get_step_value(step, "visit"), flow["allow_external"])
+			if is_falseish(v["valid"]) { is_blocked = true; reason = to_string(v["error"]) }
+		} else if st == "wait" {
+			d := get_step_dict(step, "wait")
+			mut ms := 0
+			if is_trueish(has_key(d, "ms")) { ms = to_int(to_string(d["ms"])) }
+			if ms > 10000 { is_blocked = true; reason = "Wait duration " + to_string(ms) + "ms exceeds maximum 10000ms." }
+		}
+
+		if is_trueish(is_blocked) {
+			blocked[to_string(idx)] = reason
+		} else {
+			ps := build_program_step(step, idx)
+			if ps != null {
+				program_steps = append(program_steps, ps)
+			}
+		}
+		si = si + 1
+	}
+	return { "program": program_steps, "blocked": blocked }
+}
+
+# Map the bridge's per-step results back onto every flow step. Blocked steps
+# keep their block reason; console/network assertions are evaluated against the
+# evidence the bridge collected during execution.
+func map_flow_results(flow_steps, bridge_res, blocked) {
+	mut exec_map := {}
+	bsteps := bridge_res["steps"]
+	mut bi := 0
+	while bi < len(bsteps) {
+		bs := bsteps[bi]
+		exec_map[to_string(bs["index"])] = bs
+		bi = bi + 1
+	}
+	console_messages := bridge_res["console_messages"]
+	network_events := bridge_res["network_events"]
+
+	mut console_errors := 0
+	mut ci := 0
+	while ci < len(console_messages) {
+		if is_trueish(has_key(console_messages[ci], "type")) && to_string(console_messages[ci]["type"]) == "error" {
+			console_errors = console_errors + 1
+		}
+		ci = ci + 1
+	}
+
+	mut step_results := array()
+	mut si := 0
+	while si < len(flow_steps) {
+		idx := si + 1
+		st := get_step_type(flow_steps[si])
+		key := to_string(idx)
+		mut sr := { "index": idx, "type": st, "started_at": now_utc(), "viewport": "desktop", "status": "skipped" }
+
+		if is_trueish(has_key(blocked, key)) {
+			sr["status"] = "blocked"
+			sr["error"] = to_string(blocked[key])
+		} else if st == "assert_no_console_errors" {
+			if console_errors == 0 {
+				sr["status"] = "pass"
+				sr["error"] = "No console errors during execution."
+			} else {
+				sr["status"] = "fail"
+				sr["error"] = to_string(console_errors) + " console error(s) during execution. See console.json."
+			}
+		} else if st == "assert_no_failed_requests" {
+			if len(network_events) == 0 {
+				sr["status"] = "pass"
+				sr["error"] = "No failed network requests during execution."
+			} else {
+				sr["status"] = "fail"
+				sr["error"] = to_string(len(network_events)) + " failed network request(s) during execution. See network.json."
+			}
+		} else if is_trueish(has_key(exec_map, key)) {
+			bs := exec_map[key]
+			sr["status"] = to_string(bs["status"])
+			sr["error"] = to_string(bs["message"])
+			if is_trueish(has_key(bs, "screenshot")) && to_string(bs["screenshot"]) != "" {
+				sr["screenshot"] = to_string(bs["screenshot"])
+			}
+		} else {
+			sr["status"] = "skipped"
+			sr["error"] = "Step was not executed."
+		}
+
+		sr["finished_at"] = now_utc()
+		step_results = append(step_results, sr)
+		si = si + 1
+	}
+	return step_results
+}
+
+# Write redacted console.json / network.json from an executed flow session.
+func write_flow_evidence(out_dir, console_messages, network_events) {
+	mut red_console := array()
+	mut rci := 0
+	while rci < len(console_messages) {
+		red_console = append(red_console, redact_console_message(console_messages[rci]))
+		rci = rci + 1
+	}
+	write_file(out_dir + "/console.json", to_json(red_console), true)
+
+	mut red_network := array()
+	mut rni := 0
+	while rni < len(network_events) {
+		red_network = append(red_network, redact_network_event(network_events[rni]))
+		rni = rni + 1
+	}
+	write_file(out_dir + "/network.json", to_json(red_network), true)
+	return true
+}
+
+# First viewport name from a flow (defaults to desktop).
+func flow_first_viewport(flow) {
+	if is_trueish(has_key(flow, "viewports")) {
+		vps := flow["viewports"]
+		if len(vps) > 0 {
+			return to_string(vps[0])
+		}
+	}
+	return "desktop"
+}
+
+# Execute a visit step. Safety is always enforced. The step is reported
+# as passed only when Lens actually navigated to this URL and captured
+# evidence; additional navigations beyond the primary one are reported as
+# skipped (Lens flow performs a single read-only navigation).
+func execute_visit_step(step, flow, nav_url, provider_ok, sr) {
+	url := get_step_value(step, "visit")
+	if url == "" {
+		sr["status"] = "error"
+		sr["error"] = "Visit step has no URL."
+		return sr
+	}
+
+	# URL safety check
+	validation := validate_url(url, flow["allow_external"])
+	if is_falseish(validation["valid"]) {
+		sr["status"] = "blocked"
+		sr["error"] = to_string(validation["error"])
+		return sr
+	}
+
+	if is_trueish(provider_ok) && url == nav_url {
+		sr["status"] = "pass"
+		sr["error"] = "Navigated and captured runtime evidence."
+		return sr
+	}
+
+	if is_trueish(provider_ok) {
+		sr["status"] = "skipped"
+		sr["error"] = "URL is safe, but Lens flow performs only the primary navigation. This additional navigation was not executed."
+		return sr
+	}
+
+	sr["status"] = "skipped"
+	sr["error"] = "URL is safe, but navigation evidence was not captured (browser provider unavailable)."
+	return sr
+}
+
+# Execute a screenshot step. Screenshots are captured per viewport during
+# the primary navigation; a named screenshot step is acknowledged against
+# that capture. Reported skipped if no navigation evidence was captured.
+func execute_screenshot_step(step, flow, provider_ok, sr) {
+	mut name := "screenshot"
+	if is_trueish(has_key(step, "screenshot")) {
+		scr := step["screenshot"]
+		if is_trueish(has_key(scr, "name")) {
+			name = to_string(scr["name"])
+		}
+	}
+
+	if is_trueish(provider_ok) {
+		sr["status"] = "pass"
+		sr["error"] = "Captured per-viewport screenshots at the primary navigation (see screenshots/)."
+		return sr
+	}
+
+	sr["status"] = "skipped"
+	sr["error"] = "No screenshot captured (browser provider unavailable)."
+	return sr
+}
+
+# Execute a static wait step. Safety-limited; the wait itself has no
+# evidence impact and is not actually slept, so it is reported as skipped
+# (never as a fabricated pass) unless it violates the safety limit.
+func execute_wait_step(step, sr) {
+	mut ms := 0
+	if is_trueish(has_key(step, "wait")) {
+		wait_val := step["wait"]
+		if is_trueish(has_key(wait_val, "ms")) {
+			ms = to_int(to_string(wait_val["ms"]))
+		}
+	}
+
+	if ms > 10000 {
+		sr["status"] = "blocked"
+		sr["error"] = "Wait duration " + to_string(ms) + "ms exceeds maximum 10000ms."
+		return sr
+	}
+
+	sr["status"] = "skipped"
+	sr["error"] = "Static wait is not executed in flow mode (no evidence impact)."
+	return sr
+}
+
+# Execute an assert_no_console_errors step against captured evidence.
+func execute_assert_no_console_errors(bridge_data, provider_ok, sr) {
+	if is_falseish(provider_ok) {
+		sr["status"] = "skipped"
+		sr["error"] = "Could not verify: no navigation evidence was captured."
+		return sr
+	}
+	mut console_messages := array()
+	if is_trueish(has_key(bridge_data, "console_messages")) {
+		console_messages = bridge_data["console_messages"]
+	}
+	mut error_count := 0
+	mut idx := 0
+	while idx < len(console_messages) {
+		msg := console_messages[idx]
+		if is_trueish(has_key(msg, "type")) && to_string(msg["type"]) == "error" {
+			error_count = error_count + 1
+		}
+		idx = idx + 1
+	}
+	if error_count == 0 {
+		sr["status"] = "pass"
+		sr["error"] = "No console errors in the captured navigation snapshot."
+	} else {
+		sr["status"] = "fail"
+		sr["error"] = to_string(error_count) + " console error(s) detected. See console.json."
+	}
+	return sr
+}
+
+# Execute an assert_no_failed_requests step against captured evidence.
+# The bridge only records 4xx/5xx responses and outright request failures,
+# so any captured network event is a failed request.
+func execute_assert_no_failed_requests(bridge_data, provider_ok, sr) {
+	if is_falseish(provider_ok) {
+		sr["status"] = "skipped"
+		sr["error"] = "Could not verify: no navigation evidence was captured."
+		return sr
+	}
+	mut network_events := array()
+	if is_trueish(has_key(bridge_data, "network_events")) {
+		network_events = bridge_data["network_events"]
+	}
+	if len(network_events) == 0 {
+		sr["status"] = "pass"
+		sr["error"] = "No failed network requests in the captured navigation snapshot."
+	} else {
+		sr["status"] = "fail"
+		sr["error"] = to_string(len(network_events)) + " failed/error network request(s) detected. See network.json."
+	}
+	return sr
+}
+
+# Execute a click step (safety-checked).
+func execute_click_step(step, flow, sr) {
+	click_data := get_step_dict(step, "click")
+	
+	safety := check_click_safety(click_data, flow)
+	if is_falseish(safety["allowed"]) {
+		sr["status"] = "blocked"
+		sr["error"] = to_string(safety["reason"])
+		return sr
+	}
+	
+	# Click requires browser bridge — stub as skipped with note
+	sr["status"] = "skipped"
+	sr["error"] = "Click execution requires browser bridge extension (planned for future release)."
+	return sr
+}
+
+# Execute a type step (safety-checked, redacted).
+func execute_type_step(step, sr) {
+	type_data := get_step_dict(step, "type")
+	
+	safety := check_type_safety(type_data)
+	if is_falseish(safety["allowed"]) {
+		sr["status"] = "blocked"
+		sr["error"] = to_string(safety["reason"])
+		return sr
+	}
+	
+	# Type requires browser bridge — stub as skipped
+	sr["status"] = "skipped"
+	sr["error"] = "Type execution requires browser bridge extension (planned for future release)."
+	return sr
+}
+
+# ── Flow report generation ──────────────────────────────────────────
+
+# Generate Markdown report for a flow run.
+func generate_flow_report(config, meta, flow, step_results, passed, failed, blocked, skipped, errored, flow_findings) {
+	mut lines := array()
+	
+	lines = append(lines, "# Lens Flow Report")
+	lines = append(lines, "")
+	lines = append(lines, "Status: " + to_string(meta["status"]))
+	lines = append(lines, "Flow: " + to_string(flow["name"]))
+	lines = append(lines, "Flow file: " + to_string(config["url"]))
+	lines = append(lines, "URL: " + to_string(flow["url"]))
+	lines = append(lines, "Started: " + to_string(meta["started_at"]))
+	lines = append(lines, "Finished: " + to_string(meta["finished_at"]))
+	lines = append(lines, "Duration: " + to_string(meta["duration_ms"]) + "ms")
+	lines = append(lines, "Output Directory: " + to_string(meta["out_dir"]))
+	lines = append(lines, "")
+	
+	# Summary
+	lines = append(lines, "## Summary")
+	lines = append(lines, "")
+	lines = append(lines, "Total steps: " + to_string(len(step_results)))
+	lines = append(lines, "Passed: " + to_string(passed))
+	lines = append(lines, "Failed: " + to_string(failed))
+	lines = append(lines, "Blocked: " + to_string(blocked))
+	lines = append(lines, "Skipped: " + to_string(skipped))
+	lines = append(lines, "Errored: " + to_string(errored))
+	lines = append(lines, "Exit code: " + to_string(meta["exit_code"]))
+	lines = append(lines, "")
+	
+	# Step results
+	lines = append(lines, "## Steps")
+	lines = append(lines, "")
+	mut ri := 0
+	while ri < len(step_results) {
+		sr := step_results[ri]
+		status_icon := "?"
+		st := to_string(sr["status"])
+		if st == "pass" { status_icon = "[PASS]" }
+		if st == "fail" { status_icon = "[FAIL]" }
+		if st == "blocked" { status_icon = "[BLOCKED]" }
+		if st == "skipped" { status_icon = "[SKIPPED]" }
+		if st == "error" { status_icon = "[ERROR]" }
+		
+		lines = append(lines, "### Step " + to_string(sr["index"]) + ": " + to_string(sr["type"]) + " " + status_icon)
+		if to_string(sr["error"]) != "" {
+			lines = append(lines, "  " + to_string(sr["error"]))
+		}
+		lines = append(lines, "")
+		ri = ri + 1
+	}
+	
+	# Flow findings
+	if len(flow_findings) > 0 {
+		lines = append(lines, "## Flow Findings")
+		lines = append(lines, "")
+		mut fi := 0
+		while fi < len(flow_findings) {
+			ff := flow_findings[fi]
+			lines = append(lines, "- **" + to_string(ff["id"]) + "** — " + to_string(ff["title"]))
+			lines = append(lines, "  " + to_string(ff["description"]))
+			if to_string(ff["suggested_repair_task"]) != "" {
+				lines = append(lines, "  Repair: " + to_string(ff["suggested_repair_task"]))
+			}
+			lines = append(lines, "")
+			fi = fi + 1
+		}
+	}
+	
+	# Evidence
+	lines = append(lines, "## Evidence")
+	lines = append(lines, "")
+	lines = append(lines, "- Flow definition: `flow.json`")
+	lines = append(lines, "- Step results: `flow-steps.json`")
+	lines = append(lines, "- Console log: `console.json`")
+	lines = append(lines, "- Network log: `network.json`")
+	lines = append(lines, "")
+	
+	# Agent Repair Brief
+	lines = append(lines, "## Agent Repair Brief")
+	lines = append(lines, "")
+	if failed == 0 && blocked == 0 {
+		lines = append(lines, "Flow completed successfully. All steps passed.")
+	} else {
+		if failed > 0 {
+			lines = append(lines, to_string(failed) + " step(s) failed. Review `flow-steps.json` for details.")
+		}
+		if blocked > 0 {
+			lines = append(lines, to_string(blocked) + " step(s) were blocked by safety rules. Review the flow definition and safety model.")
+		}
+	}
+	lines = append(lines, "")
+	lines = append(lines, "Do not assume the root cause is implementation-specific without reviewing the step evidence.")
+	lines = append(lines, "")
+	
+	# Artifacts
+	lines = append(lines, "## Artifacts")
+	lines = append(lines, "")
+	artifacts := meta["artifacts"]
+	mut ai := 0
+	while ai < len(artifacts) {
+		lines = append(lines, "- `" + to_string(artifacts[ai]) + "`")
+		ai = ai + 1
+	}
+	
+	return str_join(lines, "\n")
+}
+
+# Generate JSON report for a flow run.
+func generate_flow_json_report(config, meta, flow, step_results, passed, failed, blocked, skipped, errored, flow_findings) {
+	mut report := {}
+	report["schema_version"] = "1"
+	report["tool"] = "lens"
+	report["status"] = meta["status"]
+	report["flow"] = {
+		"enabled": true,
+		"path": config["url"],
+		"name": flow["name"],
+		"total_steps": len(step_results),
+		"passed_steps": passed,
+		"failed_steps": failed,
+		"blocked_steps": blocked,
+		"skipped_steps": skipped,
+		"errored_steps": errored
+	}
+	report["steps"] = step_results
+	report["findings"] = flow_findings
+	report["artifacts"] = meta["artifacts"]
+	
+	return to_json(report)
+}
+
+# Helper: pad a number to 3 digits as string.
+func pad3_str(n) {
+	if n < 10 {
+		return "00" + to_string(n)
+	}
+	if n < 100 {
+		return "0" + to_string(n)
+	}
+	return to_string(n)
+}
+
+# ── Phase 3.2: watch loop ────────────────────────────────────────────
+#
+# Runs the check pipeline repeatedly until the process is interrupted. Each
+# iteration calls run() with --watch removed (a fresh, single run), then sleeps
+# for the interval. Recursion depth stays at 1 because the inner run has no
+# watch flag. The loop is exited by Ctrl-C (SIGINT), the conventional way to
+# stop a watcher.
+func run_watch(argv, interval_seconds) {
+	stripped := remove_flag(argv, "--watch")
+	print("Lens watch — re-running every " + to_string(interval_seconds) + "s. Press Ctrl-C to stop.")
+	mut iteration := 0
+	while true {
+		iteration = iteration + 1
+		print("")
+		print("── watch run #" + to_string(iteration) + " ──────────────────────────────")
+		run(stripped)
+		# Sleep between runs via the system sleep (Unix); avoids busy-waiting.
+		spawn_process(array("sleep", to_string(interval_seconds)))
+	}
+	return EXIT_OK
+}
+
+# Helper: return a copy of argv with a boolean flag removed.
+func remove_flag(argv, flag_name) {
+	mut out := array()
+	mut idx := 0
+	while idx < len(argv) {
+		if to_string(argv[idx]) != flag_name {
+			out = append(out, argv[idx])
+		}
+		idx = idx + 1
+	}
+	return out
+}
+
+# Helper: check if a flag is present in raw argv.
+func has_flag_raw(argv, flag_name) {
+	mut idx := 0
+	while idx < len(argv) {
+		if to_string(argv[idx]) == flag_name {
+			return true
+		}
+		idx = idx + 1
+	}
+	return false
+}
+
+# Helper: count findings by severity.
+func count_severity(check_results, severity) {
+	mut count := 0
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			if to_string(f["severity"]) == severity {
+				count = count + 1
+			}
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	return count
+}
+
+# Helper: write metadata.json (used on early-exit provider failure path).
+func write_metadata_file(config, meta, check_results, out_dir, provider_meta) {
+	metadata_json := generate_metadata_json(config, meta, check_results, provider_meta)
+	meta_path := out_dir + "/metadata.json"
+	if is_trueish(file_exists(meta_path)) {
+		delete_file(meta_path)
+	}
+	write_file(meta_path, metadata_json)
+}
+
+# Helper: check whether Node.js is available without crashing the VM.
+# spawn_process raises an uncatchable error if the binary is missing, so
+# callers that can degrade gracefully should gate on this first.
+func node_available() {
+	check := spawn_process(array("node", "--version"))
+	return is_trueish(check.success)
+}
+
+# Helper: whether ffmpeg is on PATH. Guarded with try/except so a missing
+# binary can never crash the run — mp4 transcode is purely optional.
+func ffmpeg_available() {
+	mut ok := false
+	try {
+		check := spawn_process(array("ffmpeg", "-version"))
+		ok = is_trueish(check.success)
+	} except e {
+		ok = false
+	}
+	return ok
+}
+
+# Helper: write the redacted runtime artifacts (console.json, network.json,
+# dom-summary.json) for a provider result and return the bridge_data dict
+# used by checks and flow assertions. Shared by the check and flow paths
+# so redaction and shape stay identical.
+func write_runtime_artifacts(provider_result, out_dir) {
+	console_messages := extract_console_messages(provider_result)
+	network_events := extract_network_events(provider_result)
+	dom_summaries := extract_dom_summaries(provider_result)
+	raw_links := extract_all_links(provider_result)
+
+	# Console (redacted).
+	mut redacted_console := array()
+	mut ci := 0
+	while ci < len(console_messages) {
+		redacted_console = append(redacted_console, redact_console_message(console_messages[ci]))
+		ci = ci + 1
+	}
+	console_path := out_dir + "/console.json"
+	if is_trueish(file_exists(console_path)) { delete_file(console_path) }
+	write_file(console_path, to_json(redacted_console))
+
+	# Network (redacted).
+	mut redacted_network := array()
+	mut ni := 0
+	while ni < len(network_events) {
+		redacted_network = append(redacted_network, redact_network_event(network_events[ni]))
+		ni = ni + 1
+	}
+	network_path := out_dir + "/network.json"
+	if is_trueish(file_exists(network_path)) { delete_file(network_path) }
+	write_file(network_path, to_json(redacted_network))
+
+	# DOM summaries (redacted).
+	mut redacted_dom := array()
+	mut di := 0
+	while di < len(dom_summaries) {
+		redacted_dom = append(redacted_dom, redact_dom_summary(dom_summaries[di]))
+		di = di + 1
+	}
+	dom_path := out_dir + "/dom-summary.json"
+	if is_trueish(file_exists(dom_path)) { delete_file(dom_path) }
+	write_file(dom_path, to_json(redacted_dom))
+
+	return {
+		"provider_result": provider_result,
+		"console_messages": console_messages,
+		"network_events": network_events,
+		"dom_summaries": dom_summaries,
+		"raw_links": raw_links
+	}
+}

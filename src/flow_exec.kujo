@@ -1,0 +1,126 @@
+# src/flow_exec.kujo — Lens interactive flow execution (Phase 4.1 / 4.2).
+#
+# Builds an executable step program from the SAFE steps of a flow (Kujo has
+# already applied the safety model; blocked steps are excluded here), invokes
+# the interactive flow-bridge, and returns real per-step results plus the
+# captured console/network evidence and optional video path.
+#
+# This module never decides safety — it only executes what it is given. The
+# caller (runner.run_flow) is responsible for safety gating.
+
+from src.common import is_trueish, is_falseish
+from src.flow import get_step_type, get_step_value, get_step_dict
+
+# Build a program step dict for the bridge from a flow step, or null if the
+# step type is not executable by the interactive bridge (e.g. the
+# console/network assertions, which Kujo evaluates against captured evidence).
+export func build_program_step(step, index) {
+	st := get_step_type(step)
+	mut ps := { "index": index, "type": st }
+
+	if st == "visit" {
+		ps["url"] = get_step_value(step, "visit")
+		return ps
+	}
+	if st == "click" {
+		d := get_step_dict(step, "click")
+		ps["selector"] = to_string(d["selector"])
+		return ps
+	}
+	if st == "type" {
+		d := get_step_dict(step, "type")
+		ps["selector"] = to_string(d["selector"])
+		ps["value"] = to_string(d["value"])
+		return ps
+	}
+	if st == "wait" {
+		d := get_step_dict(step, "wait")
+		mut ms := 0
+		if is_trueish(has_key(d, "ms")) {
+			ms = to_int(to_string(d["ms"]))
+		}
+		ps["ms"] = ms
+		return ps
+	}
+	if st == "wait_for_selector" {
+		ps["selector"] = get_step_value(step, "wait_for_selector")
+		return ps
+	}
+	if st == "wait_for_text" {
+		ps["text"] = get_step_value(step, "wait_for_text")
+		return ps
+	}
+	if st == "assert_selector" {
+		ps["selector"] = get_step_value(step, "assert_selector")
+		return ps
+	}
+	if st == "assert_not_selector" {
+		ps["selector"] = get_step_value(step, "assert_not_selector")
+		return ps
+	}
+	if st == "assert_text" {
+		ps["text"] = get_step_value(step, "assert_text")
+		return ps
+	}
+	if st == "screenshot" {
+		d := get_step_dict(step, "screenshot")
+		mut name := "step"
+		if is_trueish(has_key(d, "name")) {
+			name = to_string(d["name"])
+		}
+		ps["name"] = name
+		return ps
+	}
+	if st == "scroll" {
+		d := get_step_dict(step, "scroll")
+		if is_trueish(has_key(d, "selector")) {
+			ps["selector"] = to_string(d["selector"])
+		}
+		if is_trueish(has_key(d, "y")) {
+			ps["y"] = to_int(to_string(d["y"]))
+		}
+		return ps
+	}
+	# Not executable by the bridge (console/network assertions handled in Kujo).
+	return null
+}
+
+# Run the interactive flow bridge against a prepared program.
+# program: { url, viewport, timeout, record, auth_file, steps: [...] }
+# Returns the parsed bridge result, or { error: true, ... } on failure.
+export func run_flow_bridge(program, out_dir) {
+	program_path := out_dir + "/flow-program.json"
+	if is_trueish(file_exists(program_path)) {
+		delete_file(program_path)
+	}
+	write_file(program_path, to_json(program), true)
+
+	screenshots_dir := out_dir + "/screenshots"
+	video_dir := out_dir + "/video"
+	if is_trueish(program["record"]) && is_falseish(path_exists(video_dir)) {
+		create_dir(video_dir)
+	}
+
+	args := array("node", "bridge/flow-bridge.js", "--program", program_path, "--screenshot-dir", screenshots_dir, "--video-dir", video_dir)
+	# spawn_process kills the child after 30s by default; an interactive,
+	# recorded journey through several real pages can run longer, so raise the
+	# ceiling. Per-step Playwright timeouts still bound individual actions.
+	res := spawn_process(args, { "timeout_ms": 300000 })
+
+	# The program file can contain real typed values (e.g. credentials for a
+	# secret field). It is an internal handoff, never a persisted artifact —
+	# delete it immediately once the bridge has consumed it.
+	if is_trueish(file_exists(program_path)) {
+		delete_file(program_path)
+	}
+
+	out := to_string(res.stdout)
+	if is_trueish(str_blank(out)) {
+		return { "error": true, "message": "flow bridge produced no output: " + to_string(res.stderr) }
+	}
+	return parse_json(out)
+}
+
+func str_blank(s) {
+	return trim(to_string(s)) == ""
+}

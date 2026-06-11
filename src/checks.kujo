@@ -1,0 +1,1626 @@
+# Phase 3: Real deterministic classification.
+
+from src.common import is_trueish, is_falseish, str_starts_with, str_contains, str_lower, str_trim
+from src.redact import redact_url
+
+# Per-check finding counters for stable IDs.
+mut COUNTER_PAGE := 0
+mut COUNTER_CONSOLE := 0
+mut COUNTER_NETWORK := 0
+mut COUNTER_BLANK := 0
+mut COUNTER_OVERFLOW := 0
+mut COUNTER_SCREENSHOT := 0
+mut COUNTER_LINKS := 0
+mut COUNTER_SPEC := 0
+
+# Reset all counters (for test isolation).
+export func reset_finding_counter() {
+	COUNTER_PAGE = 0
+	COUNTER_CONSOLE = 0
+	COUNTER_NETWORK = 0
+	COUNTER_BLANK = 0
+	COUNTER_OVERFLOW = 0
+	COUNTER_SCREENSHOT = 0
+	COUNTER_LINKS = 0
+	COUNTER_SPEC = 0
+}
+
+# Generate a stable finding ID for a given check prefix.
+func make_finding_id(prefix) {
+	if prefix == "PAGELOAD" {
+		COUNTER_PAGE = COUNTER_PAGE + 1
+		return "LENS-PAGELOAD-" + pad3(COUNTER_PAGE)
+	}
+	if prefix == "CONSOLE" {
+		COUNTER_CONSOLE = COUNTER_CONSOLE + 1
+		return "LENS-CONSOLE-" + pad3(COUNTER_CONSOLE)
+	}
+	if prefix == "NETWORK" {
+		COUNTER_NETWORK = COUNTER_NETWORK + 1
+		return "LENS-NETWORK-" + pad3(COUNTER_NETWORK)
+	}
+	if prefix == "BLANK" {
+		COUNTER_BLANK = COUNTER_BLANK + 1
+		return "LENS-BLANK-" + pad3(COUNTER_BLANK)
+	}
+	if prefix == "OVERFLOW" {
+		COUNTER_OVERFLOW = COUNTER_OVERFLOW + 1
+		return "LENS-OVERFLOW-" + pad3(COUNTER_OVERFLOW)
+	}
+	if prefix == "SCREENSHOT" {
+		COUNTER_SCREENSHOT = COUNTER_SCREENSHOT + 1
+		return "LENS-SCREENSHOT-" + pad3(COUNTER_SCREENSHOT)
+	}
+	if prefix == "LINKS" {
+		COUNTER_LINKS = COUNTER_LINKS + 1
+		return "LENS-LINKS-" + pad3(COUNTER_LINKS)
+	}
+	if prefix == "SPEC" {
+		COUNTER_SPEC = COUNTER_SPEC + 1
+		return "LENS-SPEC-" + pad3(COUNTER_SPEC)
+	}
+	# Fallback
+	COUNTER_PAGE = COUNTER_PAGE + 1
+	return "LENS-FINDING-" + pad3(COUNTER_PAGE)
+}
+
+# Pad a number to 3 digits.
+func pad3(n) {
+	if n < 10 {
+		return "00" + to_string(n)
+	}
+	if n < 100 {
+		return "0" + to_string(n)
+	}
+	return to_string(n)
+}
+
+# ── Result structures ────────────────────────────────────────────────
+
+# Check result: the output of running a single check.
+export func new_check_result(name, id) {
+	mut cr := {}
+	cr["name"] = name
+	cr["id"] = id
+	cr["status"] = "pass"
+	cr["severity"] = "info"
+	cr["finding_count"] = 0
+	cr["findings"] = array()
+	cr["duration_ms"] = 0
+	return cr
+}
+
+# A single finding within a check result.
+export func new_finding(severity, check_prefix, title, description, evidence, repair_task) {
+	mut f := {}
+	f["id"] = make_finding_id(check_prefix)
+	f["check_name"] = check_prefix
+	f["severity"] = severity
+	f["title"] = title
+	f["description"] = description
+	f["evidence"] = evidence
+	f["suggested_repair_task"] = repair_task
+	return f
+}
+
+# Add a finding to a check result and update severity/status.
+export func add_finding(check, finding) {
+	mut new_check := {}
+	new_check["name"] = check["name"]
+	new_check["id"] = check["id"]
+	new_check["status"] = check["status"]
+	new_check["severity"] = check["severity"]
+	new_check["finding_count"] = check["finding_count"] + 1
+	new_check["findings"] = append(check["findings"], finding)
+	new_check["duration_ms"] = check["duration_ms"]
+	
+	finding_sev := to_string(finding["severity"])
+	if finding_sev == "critical" || finding_sev == "error" {
+		new_check["status"] = "fail"
+		new_check["severity"] = finding_sev
+	} else if finding_sev == "warning" {
+		if new_check["status"] != "fail" {
+			new_check["status"] = "fail"
+			if new_check["severity"] == "info" {
+				new_check["severity"] = "warning"
+			}
+		}
+	}
+	
+	return new_check
+}
+
+# Determine worst severity across check results.
+export func worst_severity(check_results) {
+	mut worst := "info"
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		check_sev := to_string(cr["severity"])
+		if check_sev == "critical" {
+			return "critical"
+		}
+		if check_sev == "error" && worst != "critical" {
+			worst = "error"
+		}
+		if check_sev == "warning" && worst != "critical" && worst != "error" {
+			worst = "warning"
+		}
+		idx = idx + 1
+	}
+	return worst
+}
+
+# Count findings by severity across all checks.
+export func count_findings_by_severity(check_results, severity) {
+	mut count := 0
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			if to_string(f["severity"]) == severity {
+				count = count + 1
+			}
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	return count
+}
+
+# ── Helpers ──────────────────────────────────────────────────────────
+
+# Check if a number is present and valid (not null).
+func valid_number(val) {
+	return val != null && to_string(val) != "null"
+}
+
+# Get numeric value, defaulting to 0.
+func num_or_zero(val) {
+	if is_trueish(valid_number(val)) {
+		return to_int(to_string(val))
+	}
+	return 0
+}
+
+# ── Check 1: Page Load ───────────────────────────────────────────────
+
+export func check_page_load(config, bridge_data) {
+	cr := new_check_result("Page Load", "page_load")
+	provider_result := bridge_data["provider_result"]
+
+	viewports := provider_result["viewports"]
+
+	# No viewports at all → the browser produced nothing usable.
+	if len(viewports) == 0 {
+		cr = add_finding(cr, new_finding(
+			"critical", "PAGELOAD",
+			"Browser provider failure",
+			"Lens could not launch or control the browser, or no viewport produced usable data.",
+			"metadata.json, provider_errors",
+			"Investigate the browser provider failure recorded in metadata.json. Ensure Node.js and Playwright are installed."
+		))
+		return cr
+	}
+
+	# Classify per-viewport navigation errors. Partial errors are not a
+	# total failure — the page-load check reports the appropriate severity
+	# while the run continues to collect evidence from healthy viewports.
+	mut nav_error_count := 0
+	mut failed_viewports := ""
+	mut vi := 0
+	while vi < len(viewports) {
+		vp := viewports[vi]
+		if is_trueish(has_key(vp, "navigation_error")) {
+			nav_err := vp["navigation_error"]
+			if nav_err != null && to_string(nav_err) != "" {
+				nav_error_count = nav_error_count + 1
+				vp_name := ""
+				if is_trueish(has_key(vp, "name")) {
+					vp_name = to_string(vp["name"])
+				}
+				if failed_viewports != "" {
+					failed_viewports = failed_viewports + ", "
+				}
+				failed_viewports = failed_viewports + vp_name
+			}
+		}
+		vi = vi + 1
+	}
+
+	if nav_error_count == 0 {
+		return cr
+	}
+
+	if nav_error_count == len(viewports) {
+		cr = add_finding(cr, new_finding(
+			"critical", "PAGELOAD",
+			"Page failed to load in all viewports",
+			"The page could not be loaded in any viewport (" + failed_viewports + ").",
+			"metadata.json provider_errors, navigation_error per viewport",
+			"Check that the URL is correct and the server is running."
+		))
+		return cr
+	}
+
+	cr = add_finding(cr, new_finding(
+		"error", "PAGELOAD",
+		"Page load error in some viewports",
+		to_string(nav_error_count) + " viewport(s) had navigation errors: " + failed_viewports + ".",
+		"metadata.json provider_errors, navigation_error per viewport",
+		"Check why the affected viewport(s) failed to load."
+	))
+	return cr
+}
+
+# ── Check 2: Console Errors ──────────────────────────────────────────
+
+export func check_console_errors(config, bridge_data) {
+	cr := new_check_result("Console Errors", "console_errors")
+	console_messages := bridge_data["console_messages"]
+	
+	mut idx := 0
+	while idx < len(console_messages) {
+		msg := console_messages[idx]
+		msg_type := ""
+		msg_text := ""
+		msg_viewport := ""
+		
+		if is_trueish(has_key(msg, "type")) {
+			msg_type = to_string(msg["type"])
+		}
+		if is_trueish(has_key(msg, "text")) {
+			msg_text = to_string(msg["text"])
+		}
+		if is_trueish(has_key(msg, "viewport")) {
+			msg_viewport = to_string(msg["viewport"])
+		}
+		
+		if msg_type == "error" {
+			mut evidence := "console.json entry " + to_string(idx + 1)
+			mut repair := "Investigate the runtime console error shown in console.json entry " + to_string(idx + 1) + "."
+			
+			cr = add_finding(cr, new_finding(
+				"error", "CONSOLE",
+				"Console error: " + msg_text,
+				"Browser console error during page load. Viewport: " + msg_viewport,
+				evidence,
+				repair
+			))
+		} else if msg_type == "warning" || msg_type == "warn" {
+			mut evidence := "console.json entry " + to_string(idx + 1)
+			mut repair := "Review the warning in console.json entry " + to_string(idx + 1) + "."
+			
+			cr = add_finding(cr, new_finding(
+				"warning", "CONSOLE",
+				"Console warning: " + msg_text,
+				"Browser console warning during page load. Viewport: " + msg_viewport,
+				evidence,
+				repair
+			))
+		}
+		
+		idx = idx + 1
+	}
+	
+	return cr
+}
+
+# ── Check 3: Network Failures ────────────────────────────────────────
+
+export func check_network_failures(config, bridge_data) {
+	cr := new_check_result("Network Failures", "network_failures")
+	network_events := bridge_data["network_events"]
+	
+	mut idx := 0
+	while idx < len(network_events) {
+		event := network_events[idx]
+		evt_url := ""
+		evt_method := ""
+		evt_status := -1
+		evt_failure := ""
+		evt_type := ""
+		evt_viewport := ""
+		
+		if is_trueish(has_key(event, "url")) {
+			evt_url = to_string(event["url"])
+		}
+		if is_trueish(has_key(event, "method")) {
+			evt_method = to_string(event["method"])
+		}
+		if is_trueish(has_key(event, "status")) && event["status"] != null {
+			evt_status = to_int(to_string(event["status"]))
+		}
+		if is_trueish(has_key(event, "failure_text")) {
+			evt_failure = to_string(event["failure_text"])
+		}
+		if is_trueish(has_key(event, "resource_type")) {
+			evt_type = to_string(event["resource_type"])
+		}
+		if is_trueish(has_key(event, "viewport")) {
+			evt_viewport = to_string(event["viewport"])
+		}
+		
+		mut sev := "warning"
+		mut title := ""
+		mut desc := ""
+		mut repair := ""
+		
+		if evt_status < 0 && evt_failure != "" {
+			sev = "error"
+			title = "Failed request: " + evt_method + " " + evt_url
+			desc = "Network request failed: " + evt_failure
+			repair = "Investigate the failed request in network.json entry " + to_string(idx + 1) + "."
+		} else if evt_status >= 500 {
+			sev = "error"
+			title = "HTTP " + to_string(evt_status) + ": " + evt_method + " " + evt_url
+			desc = "Server error response for " + evt_url
+			repair = "Check why the server returned HTTP " + to_string(evt_status) + "."
+		} else if evt_status >= 400 {
+			sev = "warning"
+			title = "HTTP " + to_string(evt_status) + ": " + evt_method + " " + evt_url
+			desc = "Client error response for " + evt_url
+			repair = "Check why the request returned HTTP " + to_string(evt_status) + "."
+		} else {
+			title = "Network event: " + evt_method + " " + evt_url
+			desc = "Network event with status " + to_string(evt_status)
+			repair = "Investigate the network event in network.json entry " + to_string(idx + 1) + "."
+		}
+		
+		if evt_viewport != "" {
+			desc = desc + ". Viewport: " + evt_viewport
+		}
+		if evt_type != "" {
+			desc = desc + ". Type: " + evt_type
+		}
+		
+		cr = add_finding(cr, new_finding(
+			sev, "NETWORK", title, desc,
+			"network.json entry " + to_string(idx + 1),
+			repair
+		))
+		
+		idx = idx + 1
+	}
+	
+	return cr
+}
+
+# ── Check 4: Blank Page ──────────────────────────────────────────────
+
+export func check_blank_page(config, bridge_data) {
+	cr := new_check_result("Blank Page", "blank_page")
+	dom_summaries := bridge_data["dom_summaries"]
+	
+	mut idx := 0
+	while idx < len(dom_summaries) {
+		summary := dom_summaries[idx]
+		vp_name := ""
+		title := ""
+		body_len := 0
+		elem_count := 0
+		heading_count := 0
+		link_count := 0
+		doc_height := 0
+		has_body := true
+		
+		if is_trueish(has_key(summary, "viewport")) {
+			vp_name = to_string(summary["viewport"])
+		}
+		if is_trueish(has_key(summary, "title")) {
+			title = to_string(summary["title"])
+		}
+		body_len = num_or_zero(summary["body_text_length"])
+		elem_count = num_or_zero(summary["visible_element_count"])
+		heading_count = num_or_zero(summary["heading_count"])
+		link_count = num_or_zero(summary["link_count"])
+		doc_height = num_or_zero(summary["document_height"])
+		if is_trueish(has_key(summary, "has_body")) {
+			has_body = is_trueish(summary["has_body"])
+		}
+		
+		# Multi-signal blank page detection.
+		mut blank_signals := 0
+		
+		if is_falseish(has_body) {
+			blank_signals = blank_signals + 1
+		}
+		if body_len < 10 {
+			blank_signals = blank_signals + 1
+		}
+		if elem_count < 5 {
+			blank_signals = blank_signals + 1
+		}
+		if title == "" || title == "null" {
+			blank_signals = blank_signals + 1
+		}
+		if heading_count == 0 && body_len < 100 {
+			blank_signals = blank_signals + 1
+		}
+		if link_count == 0 && body_len < 50 {
+			blank_signals = blank_signals + 1
+		}
+		if doc_height < 100 && doc_height > 0 {
+			blank_signals = blank_signals + 1
+		}
+		
+		mut evidence := "dom-summary.json, screenshots/" + vp_name + ".png"
+		
+		if blank_signals >= 5 {
+			cr = add_finding(cr, new_finding(
+				"critical", "BLANK",
+				"Page appears blank in " + vp_name + " viewport",
+				"Very little rendered content. Body: " + to_string(body_len) + " chars, elements: " + to_string(elem_count),
+				evidence,
+				"Investigate why the " + vp_name + " viewport appears blank based on dom-summary.json."
+			))
+		} else if blank_signals >= 3 {
+			cr = add_finding(cr, new_finding(
+				"warning", "BLANK",
+				"Page appears sparse in " + vp_name + " viewport",
+				"Limited rendered content. Body: " + to_string(body_len) + " chars, elements: " + to_string(elem_count),
+				evidence,
+				"Review the DOM summary for the " + vp_name + " viewport. Lens found limited content."
+			))
+		}
+		
+		idx = idx + 1
+	}
+	
+	return cr
+}
+
+# ── Check 5: Horizontal Overflow ─────────────────────────────────────
+
+# Build a compact string of overflow offender selectors from a DOM summary
+# (Phase 4.4). Returns "" when none were detected.
+func overflow_offenders_str(summary) {
+	if is_falseish(has_key(summary, "overflow_elements")) {
+		return ""
+	}
+	elems := summary["overflow_elements"]
+	if elems == null {
+		return ""
+	}
+	mut parts := array()
+	mut idx := 0
+	while idx < len(elems) {
+		e := elems[idx]
+		sel := ""
+		if is_trueish(has_key(e, "selector")) {
+			sel = to_string(e["selector"])
+		}
+		w := ""
+		if is_trueish(has_key(e, "width")) {
+			w = to_string(e["width"])
+		}
+		if sel != "" {
+			parts = append(parts, sel + " (" + w + "px)")
+		}
+		idx = idx + 1
+	}
+	return str_join_simple(parts, ", ")
+}
+
+# Minimal string join (avoids importing str_join into the hot check path).
+func str_join_simple(arr, sep) {
+	mut out := ""
+	mut idx := 0
+	while idx < len(arr) {
+		if idx > 0 {
+			out = out + sep
+		}
+		out = out + to_string(arr[idx])
+		idx = idx + 1
+	}
+	return out
+}
+
+export func check_horizontal_overflow(config, bridge_data) {
+	cr := new_check_result("Horizontal Overflow", "horizontal_overflow")
+	dom_summaries := bridge_data["dom_summaries"]
+	
+	mut idx := 0
+	while idx < len(dom_summaries) {
+		summary := dom_summaries[idx]
+		vp_name := ""
+		doc_width := 0
+		vp_width := 0
+		
+		if is_trueish(has_key(summary, "viewport")) {
+			vp_name = to_string(summary["viewport"])
+		}
+		doc_width = num_or_zero(summary["document_width"])
+		vp_width = num_or_zero(summary["viewport_width"])
+		
+		if doc_width > 0 && vp_width > 0 && doc_width > vp_width {
+			mut sev := "warning"
+			mut title := "Horizontal overflow in " + vp_name + " viewport"
+			mut desc := "Document width " + to_string(doc_width) + "px > viewport " + to_string(vp_width) + "px"
+			mut repair := "Review the layout for the " + vp_name + " viewport. Document width exceeds viewport by " + to_string(doc_width - vp_width) + "px."
+
+			# Phase 4.4: name the offending element(s) when the bridge found them.
+			offenders := overflow_offenders_str(summary)
+			if offenders != "" {
+				desc = desc + ". Offending element(s): " + offenders
+				repair = "Constrain or fix the overflowing element(s) in the " + vp_name + " viewport: " + offenders
+			}
+			
+			if doc_width >= vp_width + 100 {
+				sev = "error"
+				title = "Severe horizontal overflow in " + vp_name + " viewport"
+				repair = "Inspect wide fixed-width elements, images, or tables in the " + vp_name + " viewport."
+			}
+			
+			cr = add_finding(cr, new_finding(
+				sev, "OVERFLOW", title, desc,
+				"dom-summary.json",
+				repair
+			))
+		}
+		
+		idx = idx + 1
+	}
+	
+	return cr
+}
+
+# ── Performance metrics check (Phase 2.1) ────────────────────────────
+#
+# Opt-in (config["perf"]). Emits LENS-PERF findings when a measured metric
+# exceeds its threshold. Timing values are environment-dependent, so this
+# never runs unless explicitly enabled, preserving deterministic default runs.
+export func check_performance(config, bridge_data) {
+	cr := new_check_result("Performance", "performance")
+	if is_falseish(has_key(bridge_data, "metrics")) {
+		return cr
+	}
+	metrics := bridge_data["metrics"]
+
+	lcp_threshold := num_or_zero(config["perf_lcp_ms"])
+	cls_threshold := num_or_zero(config["perf_cls_x100"])
+	ttfb_threshold := num_or_zero(config["perf_ttfb_ms"])
+
+	mut idx := 0
+	while idx < len(metrics) {
+		m := metrics[idx]
+		vp := ""
+		if is_trueish(has_key(m, "viewport")) {
+			vp = to_string(m["viewport"])
+		}
+
+		if is_trueish(has_key(m, "lcp_ms")) && m["lcp_ms"] != null {
+			lcp := num_or_zero(m["lcp_ms"])
+			if lcp_threshold > 0 && lcp > lcp_threshold {
+				cr = add_finding(cr, new_finding(
+					"warning", "PERF",
+					"Slow Largest Contentful Paint in " + vp + " viewport",
+					"LCP " + to_string(lcp) + "ms exceeds threshold " + to_string(lcp_threshold) + "ms.",
+					"metrics.json",
+					"Investigate render-blocking resources, large images, or slow server response for the main content."
+				))
+			}
+		}
+
+		if is_trueish(has_key(m, "ttfb_ms")) && m["ttfb_ms"] != null {
+			ttfb := num_or_zero(m["ttfb_ms"])
+			if ttfb_threshold > 0 && ttfb > ttfb_threshold {
+				cr = add_finding(cr, new_finding(
+					"warning", "PERF",
+					"Slow Time To First Byte in " + vp + " viewport",
+					"TTFB " + to_string(ttfb) + "ms exceeds threshold " + to_string(ttfb_threshold) + "ms.",
+					"metrics.json",
+					"Investigate server response time, redirects, or backend latency."
+				))
+			}
+		}
+
+		# CLS is captured as a float; compare against threshold/100.
+		if is_trueish(has_key(m, "cls")) && m["cls"] != null {
+			cls_x100 := m["cls"] * 100
+			if cls_threshold > 0 && cls_x100 > cls_threshold {
+				cr = add_finding(cr, new_finding(
+					"warning", "PERF",
+					"High Cumulative Layout Shift in " + vp + " viewport",
+					"CLS " + to_string(m["cls"]) + " exceeds threshold " + to_string(cls_threshold) + "/100.",
+					"metrics.json",
+					"Reserve space for images/ads/embeds and avoid inserting content above existing content."
+				))
+			}
+		}
+
+		idx = idx + 1
+	}
+
+	return cr
+}
+
+# ── Check 6: Screenshot Capture ──────────────────────────────────────
+
+export func check_screenshots(config, bridge_data) {
+	cr := new_check_result("Screenshots", "screenshots")
+	provider_result := bridge_data["provider_result"]
+	viewports := provider_result["viewports"]
+	
+	mut idx := 0
+	while idx < len(viewports) {
+		vp := viewports[idx]
+		vp_name := ""
+		screenshot_path := ""
+		
+		if is_trueish(has_key(vp, "name")) {
+			vp_name = to_string(vp["name"])
+		}
+		if is_trueish(has_key(vp, "screenshot")) {
+			screenshot_path = to_string(vp["screenshot"])
+		}
+		
+		if screenshot_path == "" && vp_name != "" {
+			cr = add_finding(cr, new_finding(
+				"error", "SCREENSHOT",
+				"Missing screenshot for " + vp_name,
+				"Lens could not capture a screenshot for the " + vp_name + " viewport.",
+				"metadata.json",
+				"Investigate why Lens could not capture the " + vp_name + " screenshot."
+			))
+		}
+		
+		idx = idx + 1
+	}
+	
+	return cr
+}
+
+# ── Check 7: Link Check ──────────────────────────────────────────────
+
+# Unsafe URL schemes to skip.
+UNSAFE_SCHEMES := array("mailto:", "tel:", "sms:", "javascript:", "data:", "blob:", "file:", "ftp:", "chrome:", "about:")
+
+# Destructive-looking path patterns to skip.
+DESTRUCTIVE_PATTERNS := array("/delete", "/destroy", "/remove", "/logout", "/signout", "/sign-out", "/admin/delete")
+
+# Check if a link href starts with an unsafe scheme.
+export func has_unsafe_scheme(href) {
+	mut s := str_lower(to_string(href))
+	mut idx := 0
+	while idx < len(UNSAFE_SCHEMES) {
+		if is_trueish(str_starts_with(s, UNSAFE_SCHEMES[idx])) {
+			return true
+		}
+		idx = idx + 1
+	}
+	return false
+}
+
+# Check if a link looks destructive.
+export func is_destructive_path(href) {
+	mut s := str_lower(to_string(href))
+	# Check path patterns
+	mut idx := 0
+	while idx < len(DESTRUCTIVE_PATTERNS) {
+		if is_trueish(str_contains(s, DESTRUCTIVE_PATTERNS[idx])) {
+			return true
+		}
+		idx = idx + 1
+	}
+	# Check query string patterns
+	if is_trueish(str_contains(s, "?delete")) || is_trueish(str_contains(s, "&delete")) {
+		return true
+	}
+	if is_trueish(str_contains(s, "action=delete")) {
+		return true
+	}
+	return false
+}
+
+# Normalize a URL relative to a base URL.
+export func normalize_url(href, base_url) {
+	mut h := str_trim(to_string(href))
+	
+	# Empty href
+	if h == "" {
+		return ""
+	}
+	
+	# Fragment-only
+	if is_trueish(str_starts_with(h, "#")) {
+		return ""
+	}
+	
+	# Absolute URL
+	if is_trueish(str_starts_with(h, "http://")) || is_trueish(str_starts_with(h, "https://")) {
+		return h
+	}
+	
+	# Root-relative
+	if is_trueish(str_starts_with(h, "/")) {
+		# Strip path from base_url to get origin
+		mut origin := base_url
+		# Find third slash (after https://)
+		mut slash_count := 0
+		mut i := 0
+		while i < len(origin) {
+			if origin[i] == "/" {
+				slash_count = slash_count + 1
+				if slash_count == 3 {
+					origin = substring(origin, 0, i)
+					i = len(origin) + 1
+				}
+			}
+			i = i + 1
+		}
+		return origin + h
+	}
+	
+	# Path-relative (starts with ./ or just name)
+	if is_trueish(str_starts_with(h, "./")) {
+		h = substring(h, 2, len(h))
+	}
+	# Append to base path
+	return base_url + "/" + h
+}
+
+# Check if a URL is same-origin as the base URL.
+export func is_same_origin(url, base_url) {
+	mut u := str_lower(url)
+	mut b := str_lower(base_url)
+	
+	# Find third slash in each to compare origins
+	mut u_slash := 0
+	mut u_i := 0
+	while u_i < len(u) {
+		if u[u_i] == "/" {
+			u_slash = u_slash + 1
+			if u_slash == 3 {
+				u = substring(u, 0, u_i)
+				u_i = len(u) + 1
+			}
+		}
+		u_i = u_i + 1
+	}
+	
+	mut b_slash := 0
+	mut b_i := 0
+	while b_i < len(b) {
+		if b[b_i] == "/" {
+			b_slash = b_slash + 1
+			if b_slash == 3 {
+				b = substring(b, 0, b_i)
+				b_i = len(b) + 1
+			}
+		}
+		b_i = b_i + 1
+	}
+	
+	return u == b
+}
+
+# Stored link results (accessible for writing links.json).
+mut LINK_RESULTS := array()
+
+export func get_link_results() {
+	return LINK_RESULTS
+}
+
+export func check_links(config, bridge_data) {
+	cr := new_check_result("Link Check", "link_check")
+	
+	if is_falseish(config["check_links"]) {
+		cr["status"] = "skipped"
+		cr = add_finding(cr, new_finding(
+			"info", "LINKS",
+			"Link check skipped",
+			"Use --check-links to enable link checking.",
+			"links.json (not generated)",
+			"Use --check-links flag to enable same-origin link checking."
+		))
+		return cr
+	}
+	
+	# Extract links from provider data
+	raw_links := bridge_data["raw_links"]
+	base_url := to_string(config["url"])
+	max_links := config["max_links"]
+	
+	# Reset stored results
+	LINK_RESULTS = array()
+	
+	mut checked_count := 0
+	mut link_idx := 0
+	
+	while link_idx < len(raw_links) && checked_count < max_links {
+		raw := raw_links[link_idx]
+		href := ""
+		text := ""
+		vp := ""
+		
+		if is_trueish(has_key(raw, "href")) {
+			href = to_string(raw["href"])
+		}
+		if is_trueish(has_key(raw, "text")) {
+			text = to_string(raw["text"])
+		}
+		if is_trueish(has_key(raw, "viewport")) {
+			vp = to_string(raw["viewport"])
+		}
+		
+		# Skip empty hrefs
+		if href == "" {
+			mut skip_result := {
+				"href": href,
+				"normalized_url": "",
+				"same_origin": false,
+				"checked": false,
+				"ok": false,
+				"status": -1,
+				"method": "",
+				"error": "",
+				"source_text": text,
+				"viewport": vp,
+				"skipped_reason": "empty_href"
+			}
+			LINK_RESULTS = append(LINK_RESULTS, skip_result)
+			link_idx = link_idx + 1
+			continue
+		}
+		
+		# Skip unsafe schemes
+		if is_trueish(has_unsafe_scheme(href)) {
+			mut skip_result := {
+				"href": href,
+				"normalized_url": "",
+				"same_origin": false,
+				"checked": false,
+				"ok": false,
+				"status": -1,
+				"method": "",
+				"error": "",
+				"source_text": text,
+				"viewport": vp,
+				"skipped_reason": "unsupported_scheme"
+			}
+			LINK_RESULTS = append(LINK_RESULTS, skip_result)
+			link_idx = link_idx + 1
+			continue
+		}
+		
+		# Normalize URL
+		normalized := redact_url(normalize_url(href, base_url))
+		
+		# Skip fragment-only (normalize_url returns "" for fragments)
+		if normalized == "" {
+			mut skip_result := {
+				"href": href,
+				"normalized_url": "",
+				"same_origin": false,
+				"checked": false,
+				"ok": false,
+				"status": -1,
+				"method": "",
+				"error": "",
+				"source_text": text,
+				"viewport": vp,
+				"skipped_reason": "fragment_only"
+			}
+			LINK_RESULTS = append(LINK_RESULTS, skip_result)
+			link_idx = link_idx + 1
+			continue
+		}
+		
+		# Check same-origin
+		same_origin := is_same_origin(normalized, base_url)
+		
+		if is_falseish(same_origin) {
+			mut skip_result := {
+				"href": href,
+				"normalized_url": normalized,
+				"same_origin": false,
+				"checked": false,
+				"ok": false,
+				"status": -1,
+				"method": "",
+				"error": "",
+				"source_text": text,
+				"viewport": vp,
+				"skipped_reason": "external_url"
+			}
+			LINK_RESULTS = append(LINK_RESULTS, skip_result)
+			link_idx = link_idx + 1
+			continue
+		}
+		
+		# Skip destructive paths
+		if is_trueish(is_destructive_path(normalized)) {
+			mut skip_result := {
+				"href": href,
+				"normalized_url": normalized,
+				"same_origin": true,
+				"checked": false,
+				"ok": false,
+				"status": -1,
+				"method": "",
+				"error": "",
+				"source_text": text,
+				"viewport": vp,
+				"skipped_reason": "destructive_path"
+			}
+			LINK_RESULTS = append(LINK_RESULTS, skip_result)
+			link_idx = link_idx + 1
+			continue
+		}
+		
+		# Make GET request for same-origin link
+		checked_count = checked_count + 1
+		
+		mut link_result := {
+			"href": href,
+			"normalized_url": normalized,
+			"same_origin": true,
+			"checked": true,
+			"ok": false,
+			"status": -1,
+			"method": "GET",
+			"error": "",
+			"source_text": text,
+			"viewport": vp,
+			"skipped_reason": ""
+		}
+		
+		# Make the request
+		mut request_ok := false
+		mut status := -1
+		mut error_msg := ""
+		
+		# Use http_get (Kujo builtin)
+		response := http_get(normalized)
+		
+		# Check if response is an error
+		if is_trueish(has_key(response, "status")) {
+			status = to_int(to_string(response["status"]))
+			if status >= 200 && status < 400 {
+				request_ok = true
+			}
+		} else {
+			error_msg = "Request failed"
+		}
+		
+		link_result["status"] = status
+		link_result["ok"] = request_ok
+		link_result["error"] = error_msg
+		
+		LINK_RESULTS = append(LINK_RESULTS, link_result)
+		
+		# Generate findings
+		if status >= 500 {
+			cr = add_finding(cr, new_finding(
+				"error", "LINKS",
+				"Broken link (HTTP " + to_string(status) + "): " + text,
+				"Same-origin link " + normalized + " returned HTTP " + to_string(status) + ".",
+				"links.json entry " + to_string(link_idx + 1),
+				"Check why the same-origin link " + normalized + " returned HTTP " + to_string(status) + "."
+			))
+		} else if status >= 400 {
+			cr = add_finding(cr, new_finding(
+				"warning", "LINKS",
+				"Broken link (HTTP " + to_string(status) + "): " + text,
+				"Same-origin link " + normalized + " returned HTTP " + to_string(status) + ".",
+				"links.json entry " + to_string(link_idx + 1),
+				"Investigate the broken same-origin link recorded in links.json entry " + to_string(link_idx + 1) + "."
+			))
+		} else if is_falseish(request_ok) {
+			cr = add_finding(cr, new_finding(
+				"error", "LINKS",
+				"Failed link: " + text,
+				"Same-origin link " + normalized + " could not be reached.",
+				"links.json entry " + to_string(link_idx + 1),
+				"Investigate the failed link recorded in links.json entry " + to_string(link_idx + 1) + "."
+			))
+		}
+		
+		link_idx = link_idx + 1
+	}
+	
+	return cr
+}
+
+# ── Spec-backed checks ───────────────────────────────────────────────
+
+# Run all Spec-backed checks.
+# spec_data: the validated spec dict from src/spec.kujo
+# bridge_data: the provider bridge data (console, network, DOM, links)
+export func run_spec_checks(config, spec_data, bridge_data) {
+	if is_falseish(is_trueish(has_key(spec_data, "assertions"))) {
+		return array()
+	}
+	
+	assertions := spec_data["assertions"]
+	mut results := array()
+	
+	# URL assertions
+	if is_trueish(has_key(assertions, "url")) {
+		results = append(results, check_spec_url(assertions, bridge_data))
+	}
+	
+	# Title assertions
+	if is_trueish(has_key(assertions, "title")) {
+		results = append(results, check_spec_title(assertions, bridge_data))
+	}
+	
+	# Text assertions
+	if is_trueish(has_key(assertions, "text")) {
+		results = append(results, check_spec_text(assertions, bridge_data))
+	}
+	
+	# Selector assertions
+	if is_trueish(has_key(assertions, "selectors")) {
+		results = append(results, check_spec_selectors(assertions, bridge_data))
+	}
+	
+	# Console assertions
+	if is_trueish(has_key(assertions, "console")) {
+		results = append(results, check_spec_console(assertions, bridge_data))
+	}
+	
+	# Network assertions
+	if is_trueish(has_key(assertions, "network")) {
+		results = append(results, check_spec_network(assertions, bridge_data))
+	}
+	
+	# Layout assertions
+	if is_trueish(has_key(assertions, "layout")) {
+		results = append(results, check_spec_layout(assertions, bridge_data))
+	}
+	
+	# Link assertions
+	if is_trueish(has_key(assertions, "links")) {
+		results = append(results, check_spec_links(assertions, bridge_data, config))
+	}
+	
+	return results
+}
+
+# Check URL path_contains assertion.
+func check_spec_url(assertions, bridge_data) {
+	cr := new_check_result("Spec: URL", "spec_url")
+	
+	if is_falseish(has_key(assertions, "url")) {
+		return cr
+	}
+	
+	url_spec := assertions["url"]
+	
+	if is_trueish(has_key(url_spec, "path_contains")) {
+		expected := to_string(url_spec["path_contains"])
+		provider_result := bridge_data["provider_result"]
+		viewports := provider_result["viewports"]
+		
+		if len(viewports) > 0 {
+			vp := viewports[0]
+			mut actual_url := ""
+			if is_trueish(has_key(vp, "final_url")) {
+				actual_url = to_string(vp["final_url"])
+			}
+			
+			if is_trueish(str_contains(actual_url, expected)) {
+				cr["status"] = "pass"
+			} else {
+				mut fu := {}
+				fu["id"] = make_finding_id("SPEC")
+				fu["check_name"] = "SPEC"
+				fu["severity"] = "error"
+				fu["title"] = "URL path does not contain expected text"
+				fu["description"] = "Spec expected URL path to contain '" + expected + "', but actual URL was '" + actual_url + "'."
+				fu["evidence"] = "spec file, dom-summary.json final_url"
+				fu["suggested_repair_task"] = "Verify the page navigated to the expected URL path."
+				cr["findings"] = append(cr["findings"], fu)
+				cr["finding_count"] = cr["finding_count"] + 1
+				cr["status"] = "fail"
+				cr["severity"] = "error"
+			}
+		}
+	}
+	
+	return cr
+}
+
+# Check title assertions.
+func check_spec_title(assertions, bridge_data) {
+	cr := new_check_result("Spec: Title", "spec_title")
+	
+	if is_falseish(has_key(assertions, "title")) {
+		return cr
+	}
+	
+	title_spec := assertions["title"]
+	
+	if is_trueish(has_key(title_spec, "contains")) {
+		expected := to_string(title_spec["contains"])
+		provider_result := bridge_data["provider_result"]
+		viewports := provider_result["viewports"]
+		
+		if len(viewports) > 0 {
+			vp := viewports[0]
+			mut actual_title := ""
+			if is_trueish(has_key(vp, "title")) {
+				actual_title = to_string(vp["title"])
+			}
+			# Also check dom_summaries for title
+			dom_summaries := bridge_data["dom_summaries"]
+			if actual_title == "" && len(dom_summaries) > 0 {
+				ds := dom_summaries[0]
+				if is_trueish(has_key(ds, "title")) {
+					actual_title = to_string(ds["title"])
+				}
+			}
+			
+			if is_trueish(str_contains(str_lower(actual_title), str_lower(expected))) {
+				cr["status"] = "pass"
+			} else {
+				mut f := {}
+				f["id"] = make_finding_id("SPEC")
+				f["check_name"] = "SPEC"
+				f["severity"] = "error"
+				f["title"] = "Page title does not contain expected text"
+				f["description"] = "Spec expected title to contain '" + expected + "', but actual title was '" + actual_title + "'."
+				f["evidence"] = "spec file, dom-summary.json title field"
+				f["suggested_repair_task"] = "Investigate why the rendered page title does not match the Spec expectation. Update the page title or the Spec accordingly."
+				cr["findings"] = append(cr["findings"], f)
+				cr["finding_count"] = cr["finding_count"] + 1
+				cr["status"] = "fail"
+				cr["severity"] = "error"
+			}
+		}
+	}
+	
+	return cr
+}
+
+# Check text assertions.
+func check_spec_text(assertions, bridge_data) {
+	cr := new_check_result("Spec: Text", "spec_text")
+	
+	if is_falseish(has_key(assertions, "text")) {
+		return cr
+	}
+	
+	text_spec := assertions["text"]
+	
+	if is_trueish(has_key(text_spec, "contains")) {
+		expected_list := text_spec["contains"]
+		dom_summaries := bridge_data["dom_summaries"]
+		
+		mut body_text := ""
+		if len(dom_summaries) > 0 {
+			ds := dom_summaries[0]
+			if is_trueish(has_key(ds, "visible_text_sample")) {
+				body_text = str_lower(to_string(ds["visible_text_sample"]))
+			}
+		}
+		
+		mut all_found := true
+		mut missing_items := array()
+		mut ei := 0
+		while ei < len(expected_list) {
+			expected := str_lower(to_string(expected_list[ei]))
+			if is_falseish(str_contains(body_text, expected)) {
+				all_found = false
+				missing_items = append(missing_items, expected_list[ei])
+			}
+			ei = ei + 1
+		}
+		
+		if all_found {
+			cr["status"] = "pass"
+		} else {
+			mut missing_str := ""
+			mut mi := 0
+			while mi < len(missing_items) {
+				if mi > 0 {
+					missing_str = missing_str + ", "
+				}
+				missing_str = missing_str + "'" + to_string(missing_items[mi]) + "'"
+				mi = mi + 1
+			}
+			mut f := {}
+			f["id"] = make_finding_id("SPEC")
+			f["check_name"] = "SPEC"
+			f["severity"] = "error"
+			f["title"] = "Expected page text was missing"
+			f["description"] = "Spec expected page to contain: " + missing_str + "."
+			f["evidence"] = "spec file, dom-summary.json visible_text_sample"
+			f["suggested_repair_task"] = "Check whether the expected text should appear on initial page load. Verify the content is rendered correctly."
+			cr["findings"] = append(cr["findings"], f)
+			cr["finding_count"] = cr["finding_count"] + 1
+			cr["status"] = "fail"
+			cr["severity"] = "error"
+		}
+	}
+	
+	return cr
+}
+
+# Check selector assertions.
+# Uses DOM summary to check for known elements. Full selector matching
+# requires the bridge to capture selector presence.
+func check_spec_selectors(assertions, bridge_data) {
+	cr := new_check_result("Spec: Selectors", "spec_selectors")
+	
+	if is_falseish(has_key(assertions, "selectors")) {
+		return cr
+	}
+	
+	sel_spec := assertions["selectors"]
+	dom_summaries := bridge_data["dom_summaries"]
+	
+	mut ds := {}
+	if len(dom_summaries) > 0 {
+		ds = dom_summaries[0]
+	}
+	
+	# Check exists
+	if is_trueish(has_key(sel_spec, "exists")) {
+		exists_list := sel_spec["exists"]
+		mut missing := array()
+		mut ei := 0
+		while ei < len(exists_list) {
+			sel := to_string(exists_list[ei])
+			# Check known selectors: main, body
+			if sel == "main" {
+				if is_trueish(has_key(ds, "has_main")) {
+					if is_falseish(is_trueish(ds["has_main"])) {
+						missing = append(missing, sel)
+					}
+				}
+			} else if sel == "body" {
+				if is_trueish(has_key(ds, "has_body")) {
+					if is_falseish(is_trueish(ds["has_body"])) {
+						missing = append(missing, sel)
+					}
+				}
+			} else {
+				# For data-testid and other selectors, note as unchecked
+				mut fi := {}
+				fi["id"] = make_finding_id("SPEC")
+				fi["check_name"] = "SPEC"
+				fi["severity"] = "info"
+				fi["title"] = "Selector check skipped: " + sel
+				fi["description"] = "Selector '" + sel + "' requires full DOM inspection which is not yet supported. Only 'main' and 'body' selectors can be verified with current DOM summary data."
+				fi["evidence"] = "spec file, dom-summary.json"
+				fi["suggested_repair_task"] = "Selector '" + sel + "' was not checked. For full selector support, consider v0.2 selector matching."
+				cr["findings"] = append(cr["findings"], fi)
+				cr["finding_count"] = cr["finding_count"] + 1
+			}
+			ei = ei + 1
+		}
+		
+		if len(missing) > 0 {
+			mut miss_str := ""
+			mut mi := 0
+			while mi < len(missing) {
+				if mi > 0 {
+					miss_str = miss_str + ", "
+				}
+				miss_str = miss_str + "'" + to_string(missing[mi]) + "'"
+				mi = mi + 1
+			}
+			mut fm := {}
+			fm["id"] = make_finding_id("SPEC")
+			fm["check_name"] = "SPEC"
+			fm["severity"] = "error"
+			fm["title"] = "Expected selector was missing"
+			fm["description"] = "Spec expected selector(s) to exist: " + miss_str + ", but Lens did not find them in the captured DOM."
+			fm["evidence"] = "spec file, dom-summary.json"
+			fm["suggested_repair_task"] = "Verify whether the expected elements should render on initial page load and update the implementation or Spec accordingly."
+			cr["findings"] = append(cr["findings"], fm)
+			cr["finding_count"] = cr["finding_count"] + 1
+			cr["status"] = "fail"
+			cr["severity"] = "error"
+		} else if cr["finding_count"] > 0 {
+			# Has info findings but no error findings — pass
+			cr["status"] = "pass"
+		} else {
+			cr["status"] = "pass"
+		}
+	}
+	
+	# Check not_exists
+	if is_trueish(has_key(sel_spec, "not_exists")) {
+		not_exists_list := sel_spec["not_exists"]
+		mut found_unwanted := array()
+		mut ni := 0
+		while ni < len(not_exists_list) {
+			sel := to_string(not_exists_list[ni])
+			if sel == "main" {
+				if is_trueish(has_key(ds, "has_main")) {
+					if is_trueish(is_trueish(ds["has_main"])) {
+						found_unwanted = append(found_unwanted, sel)
+					}
+				}
+			} else if sel == "body" {
+				# Body always exists — note as unchecked
+			} else {
+				mut fn := {}
+				fn["id"] = make_finding_id("SPEC")
+				fn["check_name"] = "SPEC"
+				fn["severity"] = "info"
+				fn["title"] = "Selector not_exists check skipped: " + sel
+				fn["description"] = "Selector '" + sel + "' not_exists check requires full DOM inspection which is not yet supported."
+				fn["evidence"] = "spec file, dom-summary.json"
+				fn["suggested_repair_task"] = "Selector '" + sel + "' was not checked for not_exists. For full selector support, consider v0.2."
+				cr["findings"] = append(cr["findings"], fn)
+				cr["finding_count"] = cr["finding_count"] + 1
+			}
+			ni = ni + 1
+		}
+		
+		if len(found_unwanted) > 0 {
+			mut fu_str := ""
+			mut fi := 0
+			while fi < len(found_unwanted) {
+				if fi > 0 {
+					fu_str = fu_str + ", "
+				}
+				fu_str = fu_str + "'" + to_string(found_unwanted[fi]) + "'"
+				fi = fi + 1
+			}
+			mut fu := {}
+			fu["id"] = make_finding_id("SPEC")
+			fu["check_name"] = "SPEC"
+			fu["severity"] = "error"
+			fu["title"] = "Unexpected selector was found"
+			fu["description"] = "Spec expected selector(s) to NOT exist: " + fu_str + ", but Lens found them in the captured DOM."
+			fu["evidence"] = "spec file, dom-summary.json"
+			fu["suggested_repair_task"] = "Verify whether these elements should be absent from the initial page state. Update the implementation or Spec accordingly."
+			cr["findings"] = append(cr["findings"], fu)
+			cr["finding_count"] = cr["finding_count"] + 1
+			cr["status"] = "fail"
+			cr["severity"] = "error"
+		}
+	}
+	
+	return cr
+}
+
+# Check console no_errors assertion.
+func check_spec_console(assertions, bridge_data) {
+	cr := new_check_result("Spec: Console", "spec_console")
+	
+	if is_falseish(has_key(assertions, "console")) {
+		return cr
+	}
+	
+	console_spec := assertions["console"]
+	
+	if is_trueish(spec_get_bool_assertion(console_spec, "no_errors")) {
+		console_messages := bridge_data["console_messages"]
+		mut error_count := 0
+		mut mi := 0
+		while mi < len(console_messages) {
+			msg := console_messages[mi]
+			if is_trueish(has_key(msg, "type")) && to_string(msg["type"]) == "error" {
+				error_count = error_count + 1
+			}
+			mi = mi + 1
+		}
+		
+		if error_count == 0 {
+			cr["status"] = "pass"
+		} else {
+			mut fc := {}
+			fc["id"] = make_finding_id("SPEC")
+			fc["check_name"] = "SPEC"
+			fc["severity"] = "error"
+			fc["title"] = "Console errors detected"
+			fc["description"] = "Spec requires no console errors, but " + to_string(error_count) + " console error(s) were detected."
+			fc["evidence"] = "spec file, console.json"
+			fc["suggested_repair_task"] = "Review console errors in console.json. Fix the underlying issues or update the Spec if console errors are expected."
+			cr["findings"] = append(cr["findings"], fc)
+			cr["finding_count"] = cr["finding_count"] + 1
+			cr["status"] = "fail"
+			cr["severity"] = "error"
+		}
+	}
+	
+	return cr
+}
+
+# Check network no_5xx assertion.
+func check_spec_network(assertions, bridge_data) {
+	cr := new_check_result("Spec: Network", "spec_network")
+	
+	if is_falseish(has_key(assertions, "network")) {
+		return cr
+	}
+	
+	network_spec := assertions["network"]
+	
+	if is_trueish(spec_get_bool_assertion(network_spec, "no_5xx")) {
+		network_events := bridge_data["network_events"]
+		mut error_5xx := 0
+		mut ni := 0
+		while ni < len(network_events) {
+			event := network_events[ni]
+			if is_trueish(has_key(event, "status")) {
+				status := to_int(to_string(event["status"]))
+				if status >= 500 && status < 600 {
+					error_5xx = error_5xx + 1
+				}
+			}
+			ni = ni + 1
+		}
+		
+		if error_5xx == 0 {
+			cr["status"] = "pass"
+		} else {
+			mut fn := {}
+			fn["id"] = make_finding_id("SPEC")
+			fn["check_name"] = "SPEC"
+			fn["severity"] = "error"
+			fn["title"] = "5xx server errors detected"
+			fn["description"] = "Spec requires no 5xx responses, but " + to_string(error_5xx) + " 5xx response(s) were detected."
+			fn["evidence"] = "spec file, network.json"
+			fn["suggested_repair_task"] = "Review network errors in network.json. Fix the server-side issues causing 5xx responses."
+			cr["findings"] = append(cr["findings"], fn)
+			cr["finding_count"] = cr["finding_count"] + 1
+			cr["status"] = "fail"
+			cr["severity"] = "error"
+		}
+	}
+	
+	return cr
+}
+
+# Check layout no_horizontal_overflow assertion.
+func check_spec_layout(assertions, bridge_data) {
+	cr := new_check_result("Spec: Layout", "spec_layout")
+	
+	if is_falseish(has_key(assertions, "layout")) {
+		return cr
+	}
+	
+	layout_spec := assertions["layout"]
+	
+	if is_trueish(spec_get_bool_assertion(layout_spec, "no_horizontal_overflow")) {
+		dom_summaries := bridge_data["dom_summaries"]
+		mut has_overflow := false
+		mut di := 0
+		while di < len(dom_summaries) {
+			ds := dom_summaries[di]
+			if is_trueish(has_key(ds, "document_width")) && is_trueish(has_key(ds, "viewport_width")) {
+				doc_w := to_int(to_string(ds["document_width"]))
+				vp_w := to_int(to_string(ds["viewport_width"]))
+				if doc_w > vp_w {
+					has_overflow = true
+				}
+			}
+			di = di + 1
+		}
+		
+		if is_falseish(has_overflow) {
+			cr["status"] = "pass"
+		} else {
+			mut fl := {}
+			fl["id"] = make_finding_id("SPEC")
+			fl["check_name"] = "SPEC"
+			fl["severity"] = "error"
+			fl["title"] = "Horizontal overflow detected"
+			fl["description"] = "Spec requires no horizontal overflow, but the document width exceeds the viewport width in at least one viewport."
+			fl["evidence"] = "spec file, dom-summary.json document_width vs viewport_width"
+			fl["suggested_repair_task"] = "Review the page layout. Check for elements that exceed the viewport width. Use browser devtools to identify the offending element."
+			cr["findings"] = append(cr["findings"], fl)
+			cr["finding_count"] = cr["finding_count"] + 1
+			cr["status"] = "fail"
+			cr["severity"] = "error"
+		}
+	}
+	
+	return cr
+}
+
+# Check links no_broken_same_origin assertion.
+func check_spec_links(assertions, bridge_data, config) {
+	cr := new_check_result("Spec: Links", "spec_links")
+	
+	if is_falseish(has_key(assertions, "links")) {
+		return cr
+	}
+	
+	links_spec := assertions["links"]
+	
+	if is_trueish(spec_get_bool_assertion(links_spec, "no_broken_same_origin")) {
+		if is_falseish(config["check_links"]) {
+			cr["status"] = "skipped"
+			mut fk := {}
+			fk["id"] = make_finding_id("SPEC")
+			fk["check_name"] = "SPEC"
+			fk["severity"] = "info"
+			fk["title"] = "Link check skipped: --check-links not enabled"
+			fk["description"] = "Spec requires no broken same-origin links, but --check-links was not enabled. Links were not checked."
+			fk["evidence"] = "spec file"
+			fk["suggested_repair_task"] = "Enable --check-links to verify same-origin links against the Spec assertion."
+			cr["findings"] = append(cr["findings"], fk)
+			cr["finding_count"] = cr["finding_count"] + 1
+			return cr
+		}
+		
+		link_results := get_link_results()
+		mut broken_count := 0
+		mut li := 0
+		while li < len(link_results) {
+			lr := link_results[li]
+			if is_trueish(has_key(lr, "status")) {
+				status := to_int(to_string(lr["status"]))
+				if status < 200 || status >= 400 {
+					broken_count = broken_count + 1
+				}
+			}
+			li = li + 1
+		}
+		
+		if broken_count == 0 {
+			cr["status"] = "pass"
+		} else {
+			mut fb := {}
+			fb["id"] = make_finding_id("SPEC")
+			fb["check_name"] = "SPEC"
+			fb["severity"] = "error"
+			fb["title"] = "Broken same-origin links detected"
+			fb["description"] = "Spec requires no broken same-origin links, but " + to_string(broken_count) + " broken link(s) were found."
+			fb["evidence"] = "spec file, links.json"
+			fb["suggested_repair_task"] = "Review broken links in links.json. Fix the broken links or update the Spec if some broken links are expected."
+			cr["findings"] = append(cr["findings"], fb)
+			cr["finding_count"] = cr["finding_count"] + 1
+			cr["status"] = "fail"
+			cr["severity"] = "error"
+		}
+	}
+	
+	return cr
+}
+
+# Helper: get a boolean from a spec assertion dict.
+func spec_get_bool_assertion(spec_dict, key) {
+	if is_falseish(has_key(spec_dict, key)) {
+		return false
+	}
+	return is_trueish(spec_dict[key])
+}
+
+export func run_all_checks(config, bridge_data) {
+	reset_finding_counter()
+	
+	mut results := array()
+	
+	results = append(results, check_page_load(config, bridge_data))
+	results = append(results, check_console_errors(config, bridge_data))
+	results = append(results, check_network_failures(config, bridge_data))
+	results = append(results, check_blank_page(config, bridge_data))
+	results = append(results, check_horizontal_overflow(config, bridge_data))
+	results = append(results, check_screenshots(config, bridge_data))
+	results = append(results, check_links(config, bridge_data))
+
+	# Phase 2.1: performance metrics (opt-in via --perf).
+	if is_trueish(has_key(config, "perf")) && is_trueish(config["perf"]) {
+		results = append(results, check_performance(config, bridge_data))
+	}
+	
+	# Phase 7: Spec-backed checks (if --spec provided)
+	if is_trueish(has_key(config, "spec_data")) {
+		spec_data := config["spec_data"]
+		if is_trueish(is_trueish(has_key(spec_data, "valid"))) {
+			if is_trueish(spec_data["valid"]) {
+				spec_results := run_spec_checks(config, spec_data, bridge_data)
+				mut si := 0
+				while si < len(spec_results) {
+					results = append(results, spec_results[si])
+					si = si + 1
+				}
+			}
+		}
+	}
+	
+	return results
+}

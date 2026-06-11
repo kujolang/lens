@@ -1,0 +1,34 @@
+[package]
+name = "lens"
+version = "0.9.0"
+description = "Deterministic browser/visual QA tool for AI-built software. Gives agents eyes by opening a local app or URL, collecting evidence, and producing agent-ready repair reports."
+license = "MIT"
+authors = ["Robert DeVore <me@robertdevore.com>"]
+repository = "https://github.com/kujolang/lens"
+keywords = ["kujo", "browser", "qa", "visual-testing", "devtools"]
+categories = ["developer-tools"]
+readme = "README.md"
+
+[package.status]
+stage = "beta"
+stability = "stabilizing"
+public_api = false
+notes = "Browser checks, safe flows, visual baselines, and axe-core accessibility scanning are implemented. Centralized secret redaction across all artifacts."
+
+[kujo]
+minimum_version = "0.1.0"
+entry = "lens.kujo"
+sources = ["src", "."]
+includes = ["README.md", "tests", "docs"]
+excludes = [".git", ".dogfood", "dist", "build", "node_modules", "bridge/node_modules"]
+
+[scripts]
+test = "kujo test"
+smoke = "kujo run lens.kujo -- check http://localhost:3000 --json"
+
+[dependencies]
+
+[trust]
+checksum = ""
+signature = ""
+signing_key = ""

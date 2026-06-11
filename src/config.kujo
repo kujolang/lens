@@ -1,0 +1,831 @@
+# src/config.kujo — Lens CLI configuration and argument parsing.
+#
+# Defines the Config struct, parses CLI arguments for `lens check <url>`,
+# and provides default values for all configuration options.
+
+from src.common import is_trueish, is_falseish, str_starts_with, str_contains
+
+# Single source of truth for the Lens version string. Keep kennel.toml and
+# lens.spec.yml in sync with this when releasing.
+export func lens_version() {
+	return "0.9.0"
+}
+
+# Severity levels ordered from least to most severe.
+# Used for --fail-on threshold comparisons.
+SEVERITY_ORDER := array("info", "warning", "error", "critical")
+
+# Allowed localhost host values (checked without port).
+ALLOWED_LOCAL_HOSTS := array("localhost", "127.0.0.1", "::1", "[::1]")
+
+# Default viewports for screenshot capture.
+DEFAULT_VIEWPORTS := array("desktop", "mobile")
+
+# Viewport dimensions. These MUST match the dimensions used by the
+# browser bridge (bridge/browser-bridge.js VIEWPORT_SIZES).
+VIEWPORT_SIZES := {
+	"desktop": "1440x900",
+	"mobile": "390x844"
+}
+
+# Default timeout in seconds.
+DEFAULT_TIMEOUT := 30
+
+# Default max links to check when --check-links is enabled.
+DEFAULT_MAX_LINKS := 50
+
+# Default fail threshold.
+DEFAULT_FAIL_ON := "error"
+
+# Default diff threshold for visual comparison.
+DEFAULT_DIFF_THRESHOLD_VAL := 0.01
+
+# Default output directory base.
+DEFAULT_OUT_DIR_BASE := ".lens/runs"
+
+# Default post-load settle window in milliseconds (Phase 1.2). After the page
+# reaches network-idle, Lens waits this long to capture any final console or
+# network activity. Kept small because readiness is now event-driven.
+DEFAULT_SETTLE_MS := 400
+
+# Default maximum number of viewports captured concurrently (Phase 1.3).
+# 0 means "no explicit cap" → the provider uses the viewport count.
+DEFAULT_MAX_CONCURRENCY := 0
+
+# Check whether a token looks like a custom viewport size "<width>x<height>"
+# (e.g. "1024x768"). Returns true only when both sides are positive integers.
+export func is_size_token(raw) {
+	token := to_lower(to_string(raw))
+	xpos := index_of(token, "x")
+	if xpos <= 0 {
+		return false
+	}
+	if xpos + 1 >= len(token) {
+		return false
+	}
+	w_str := substring(token, 0, xpos)
+	h_str := substring(token, xpos + 1, len(token))
+	if is_falseish(is_digits(w_str)) || is_falseish(is_digits(h_str)) {
+		return false
+	}
+	return to_int(w_str) > 0 && to_int(h_str) > 0
+}
+
+# Check whether a string is non-empty and all ASCII digits.
+export func is_digits(s) {
+	if len(s) == 0 {
+		return false
+	}
+	mut i := 0
+	while i < len(s) {
+		ch := s[i]
+		if ch < "0" || ch > "9" {
+			return false
+		}
+		i = i + 1
+	}
+	return true
+}
+
+# Parse a viewport string. Accepts the preset names "desktop"/"mobile" and
+# custom "<width>x<height>" sizes (Phase 1.3). Returns the normalized token
+# (lowercased) if valid, empty string otherwise.
+export func parse_viewport(raw) {
+	lower := to_lower(to_string(raw))
+	if lower == "desktop" || lower == "mobile" {
+		return lower
+	}
+	if is_trueish(is_size_token(lower)) {
+		return lower
+	}
+	return ""
+}
+
+# Parse a severity level string.
+# Returns the severity if valid, empty string otherwise.
+export func parse_severity(raw) {
+	lower := to_lower(to_string(raw))
+	if lower == "info" || lower == "warning" || lower == "error" || lower == "critical" {
+		return lower
+	}
+	return ""
+}
+
+# Get the numeric index of a severity level.
+# Returns -1 if invalid.
+export func severity_index(severity) {
+	mut idx := 0
+	while idx < len(SEVERITY_ORDER) {
+		if SEVERITY_ORDER[idx] == severity {
+			return idx
+		}
+		idx = idx + 1
+	}
+	return -1
+}
+
+# Check if a given severity meets or exceeds the threshold.
+export func severity_meets_threshold(severity, threshold) {
+	return severity_index(severity) >= severity_index(threshold)
+}
+
+# Check if a flag is present in CLI args.
+export func has_flag(argv, flag_name) {
+	mut idx := 1
+	while idx < len(argv) {
+		if to_string(argv[idx]) == flag_name {
+			return true
+		}
+		idx = idx + 1
+	}
+	return false
+}
+
+# Get the value of a flag from CLI args.
+# Returns default_value if the flag is not present.
+export func flag_value(argv, flag_name, default_value) {
+	mut idx := 1
+	while idx < len(argv) {
+		if to_string(argv[idx]) == flag_name {
+			if idx + 1 < len(argv) {
+				next := to_string(argv[idx + 1])
+				if is_falseish(str_starts_with(next, "--")) {
+					return next
+				}
+			}
+			return default_value
+		}
+		idx = idx + 1
+	}
+	return default_value
+}
+
+# Check if a subcommand is present in argv.
+# The subcommand must be the first non-flag argument (after argv[0]).
+export func parse_subcommand(argv) {
+	if len(argv) < 1 {
+		return ""
+	}
+	arg := to_string(argv[0])
+	if is_trueish(str_starts_with(arg, "--")) {
+		return ""
+	}
+	return arg
+}
+
+# Parse viewports from CLI flags.
+# Supports multiple --viewport flags. Returns array of viewport names.
+export func parse_viewports(argv) {
+	mut viewports := array()
+	mut idx := 1
+	while idx < len(argv) {
+		if to_string(argv[idx]) == "--viewport" {
+			if idx + 1 < len(argv) {
+				vp := parse_viewport(to_string(argv[idx + 1]))
+				if vp != "" {
+					viewports = append(viewports, vp)
+				}
+			}
+		}
+		idx = idx + 1
+	}
+	# Default to both if none specified.
+	if len(viewports) == 0 {
+		viewports = DEFAULT_VIEWPORTS
+	}
+	return viewports
+}
+
+# Parse the --fail-on value. Returns the severity string.
+export func parse_fail_on(argv) {
+	raw := flag_value(argv, "--fail-on", DEFAULT_FAIL_ON)
+	parsed := parse_severity(raw)
+	if parsed == "" {
+		return DEFAULT_FAIL_ON
+	}
+	return parsed
+}
+
+# Check if --json flag is present.
+export func is_json_mode(argv) {
+	return has_flag(argv, "--json")
+}
+
+# Check if --verbose flag is present.
+export func is_verbose(argv) {
+	return has_flag(argv, "--verbose")
+}
+
+# Check if --check-links flag is present.
+export func is_check_links(argv) {
+	return has_flag(argv, "--check-links")
+}
+
+# Check if --allow-external flag is present.
+export func is_allow_external(argv) {
+	return has_flag(argv, "--allow-external")
+}
+
+# Parse the --timeout value. Returns integer seconds.
+export func parse_timeout(argv) {
+	raw := flag_value(argv, "--timeout", to_string(DEFAULT_TIMEOUT))
+	mut val := DEFAULT_TIMEOUT
+	# Simple integer parsing
+	if raw != "" {
+		val = to_int(raw)
+	}
+	if val < 1 {
+		val = DEFAULT_TIMEOUT
+	}
+	if val > 300 {
+		val = 300
+	}
+	return val
+}
+
+# Parse the --max-links value. Returns integer.
+export func parse_max_links(argv) {
+	raw := flag_value(argv, "--max-links", to_string(DEFAULT_MAX_LINKS))
+	mut val := DEFAULT_MAX_LINKS
+	if raw != "" {
+		val = to_int(raw)
+	}
+	if val < 1 {
+		val = DEFAULT_MAX_LINKS
+	}
+	if val > 500 {
+		val = 500
+	}
+	return val
+}
+
+# Parse the --settle-ms value (Phase 1.2). Returns integer milliseconds.
+export func parse_settle_ms(argv) {
+	raw := flag_value(argv, "--settle-ms", to_string(DEFAULT_SETTLE_MS))
+	mut val := DEFAULT_SETTLE_MS
+	if raw != "" {
+		val = to_int(raw)
+	}
+	if val < 0 {
+		val = DEFAULT_SETTLE_MS
+	}
+	if val > 10000 {
+		val = 10000
+	}
+	return val
+}
+
+# Parse the --max-concurrency value (Phase 1.3). 0 means "no explicit cap".
+export func parse_max_concurrency(argv) {
+	raw := flag_value(argv, "--max-concurrency", to_string(DEFAULT_MAX_CONCURRENCY))
+	mut val := DEFAULT_MAX_CONCURRENCY
+	if raw != "" {
+		val = to_int(raw)
+	}
+	if val < 0 {
+		val = DEFAULT_MAX_CONCURRENCY
+	}
+	if val > 16 {
+		val = 16
+	}
+	return val
+}
+
+# Parse the --config path. Returns the explicit config path or empty string.
+export func parse_config_path(argv) {
+	return flag_value(argv, "--config", "")
+}
+
+# Parse the --out path. Returns the custom path or empty string for default.
+export func parse_out_dir(argv) {
+	return flag_value(argv, "--out", "")
+}
+
+# Parse the --spec path. Returns the spec file path or empty string.
+export func parse_spec_path(argv) {
+	return flag_value(argv, "--spec", "")
+}
+
+# Parse the --eval-out path. Returns the eval output path or empty string.
+export func parse_eval_out(argv) {
+	return flag_value(argv, "--eval-out", "")
+}
+
+# Parse the --baseline flag. Returns true if set.
+export func is_baseline(argv) {
+	return has_flag(argv, "--baseline")
+}
+
+# Parse the --compare-baseline flag. Returns true if set.
+export func is_compare_baseline(argv) {
+	return has_flag(argv, "--compare-baseline")
+}
+
+# Parse the --update-baseline flag. Returns true if set.
+export func is_update_baseline(argv) {
+	return has_flag(argv, "--update-baseline")
+}
+
+# Parse the --baseline-dir value.
+export func parse_baseline_dir(argv) {
+	return flag_value(argv, "--baseline-dir", ".lens/baselines")
+}
+
+# Parse the --diff-threshold value.
+export func parse_diff_threshold(argv) {
+	raw := flag_value(argv, "--diff-threshold", "")
+	if raw == "" {
+		return DEFAULT_DIFF_THRESHOLD_VAL
+	}
+	val := to_number(raw)
+	if val < 0.0 || val > 1.0 {
+		return DEFAULT_DIFF_THRESHOLD_VAL
+	}
+	return val
+}
+
+# Default performance thresholds (Phase 2.1). Findings are emitted only when a
+# measured metric exceeds these. Generous defaults; tune via the config file.
+DEFAULT_PERF_LCP_MS := 4000
+DEFAULT_PERF_CLS_X100 := 25
+DEFAULT_PERF_TTFB_MS := 1500
+
+# Parse the --perf flag (Phase 2.1). Performance metric capture is opt-in
+# because timing values are environment-dependent; keeping it off by default
+# preserves deterministic output for normal runs.
+export func is_perf(argv) {
+	return has_flag(argv, "--perf")
+}
+
+# Parse the --html flag (Phase 3.1). Also write a self-contained HTML report.
+export func is_html(argv) {
+	return has_flag(argv, "--html")
+}
+
+# Parse the --execute flag (Phase 4.1). Actually execute interactive flow steps
+# (click/type/wait_for/assert) instead of reporting them as skipped. Opt-in:
+# this is the one mode where Lens performs real interaction, still gated by the
+# flow safety model (every step is safety-checked before execution).
+export func is_execute(argv) {
+	return has_flag(argv, "--execute")
+}
+
+# Parse the --record flag (Phase 4.2). Record the flow session to video.
+export func is_record(argv) {
+	return has_flag(argv, "--record")
+}
+
+# Parse the --walkthrough flag (Phase 4.3). Emit a shareable walkthrough.html.
+export func is_walkthrough(argv) {
+	return has_flag(argv, "--walkthrough")
+}
+
+# Parse the --validate flag. Dry-run: validate a flow's structure, step types,
+# required fields, and safety gating WITHOUT launching a browser.
+export func is_validate(argv) {
+	return has_flag(argv, "--validate")
+}
+
+# Parse the --watch flag (Phase 3.2). Re-run on an interval until interrupted.
+export func is_watch(argv) {
+	return has_flag(argv, "--watch")
+}
+
+# Parse --watch-interval seconds (Phase 3.2). Default 5, min 1, max 3600.
+export func parse_watch_interval(argv) {
+	raw := flag_value(argv, "--watch-interval", "5")
+	mut val := 5
+	if raw != "" {
+		val = to_int(raw)
+	}
+	if val < 1 {
+		val = 5
+	}
+	if val > 3600 {
+		val = 3600
+	}
+	return val
+}
+
+# Parse --ledger path (Phase 3.3). RunLedger output file, or "" to disable.
+export func parse_ledger(argv) {
+	return flag_value(argv, "--ledger", "")
+}
+
+# Parse --howl path (Phase 3.4). Howl summary output file, or "" to disable.
+export func parse_howl(argv) {
+	return flag_value(argv, "--howl", "")
+}
+
+# Parse the --accessibility flag. Also accepts --a11y alias.
+export func is_accessibility(argv) {
+	if is_trueish(has_flag(argv, "--accessibility")) {
+		return true
+	}
+	return has_flag(argv, "--a11y")
+}
+
+# Parse --a11y-tags. Returns array of tag strings.
+# Uses index_of/substring because Kujo does not support string indexing.
+export func parse_a11y_tags(argv) {
+	raw := flag_value(argv, "--a11y-tags", "")
+	if raw == "" {
+		return array("wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice")
+	}
+	# Split by comma using index_of + substring (no string indexing).
+	mut tags := array()
+	mut remaining := raw
+	while len(remaining) > 0 {
+		comma_pos := index_of(remaining, ",")
+		if comma_pos < 0 {
+			# No more commas — remaining is the last tag.
+			if remaining != "" {
+				tags = append(tags, remaining)
+			}
+			remaining = ""
+		} else {
+			tag := substring(remaining, 0, comma_pos)
+			if tag != "" {
+				tags = append(tags, tag)
+			}
+			# Advance past the comma.
+			if comma_pos + 1 < len(remaining) {
+				remaining = substring(remaining, comma_pos + 1, len(remaining))
+			} else {
+				remaining = ""
+			}
+		}
+	}
+	if len(tags) == 0 {
+		tags = append(tags, raw)
+	}
+	return tags
+}
+
+# Parse --a11y-include.
+export func parse_a11y_include(argv) {
+	return flag_value(argv, "--a11y-include", "")
+}
+
+# Parse --a11y-exclude.
+export func parse_a11y_exclude(argv) {
+	return flag_value(argv, "--a11y-exclude", "")
+}
+
+# Known flags that consume a following value argument.
+FLAGS_WITH_VALUES := array("--out", "--viewport", "--timeout", "--max-links", "--fail-on", "--spec", "--eval-out", "--baseline-dir", "--diff-threshold", "--a11y-tags", "--a11y-include", "--a11y-exclude", "--config", "--settle-ms", "--max-concurrency", "--browser", "--throttle", "--device", "--max-depth", "--max-pages", "--auth-file", "--watch-interval", "--ledger", "--howl")
+
+# Check if a flag name consumes a value argument.
+func flag_takes_value(flag_name) {
+	mut idx := 0
+	while idx < len(FLAGS_WITH_VALUES) {
+		if FLAGS_WITH_VALUES[idx] == flag_name {
+			return true
+		}
+		idx = idx + 1
+	}
+	return false
+}
+
+# Build the full Config from CLI args.
+# argv[0] should be the subcommand ("check"), argv[1] should be the URL.
+export func build_config(argv) {
+	# Extract URL (first positional after subcommand)
+	mut url := ""
+	mut subcommand := ""
+	
+	if len(argv) >= 1 {
+		subcommand = to_string(argv[0])
+	}
+	
+	# Find the first positional argument, skipping flags and their values.
+	mut idx := 1
+	mut skip_next := false
+	while idx < len(argv) {
+		arg := to_string(argv[idx])
+		if is_trueish(skip_next) {
+			skip_next = false
+			idx = idx + 1
+			continue
+		}
+		if is_trueish(str_starts_with(arg, "--")) {
+			if is_trueish(flag_takes_value(arg)) {
+				skip_next = true
+			}
+			idx = idx + 1
+			continue
+		}
+		# Found a positional (not a flag, not a flag value)
+		url = arg
+		idx = len(argv) + 1
+	}
+	
+	mut config := {
+		"subcommand": subcommand,
+		"url": url,
+		"out_dir": parse_out_dir(argv),
+		"viewports": parse_viewports(argv),
+		"timeout": parse_timeout(argv),
+		"verbose": is_verbose(argv),
+		"json_output": is_json_mode(argv),
+		"check_links": is_check_links(argv),
+		"max_links": parse_max_links(argv),
+		"allow_external": is_allow_external(argv),
+		"fail_on": parse_fail_on(argv),
+		"spec_path": parse_spec_path(argv),
+		"eval_out": parse_eval_out(argv),
+		"baseline": is_baseline(argv),
+		"compare_baseline": is_compare_baseline(argv),
+		"update_baseline": is_update_baseline(argv),
+		"baseline_dir": parse_baseline_dir(argv),
+		"diff_threshold": parse_diff_threshold(argv),
+		"accessibility": is_accessibility(argv),
+		"a11y_tags": parse_a11y_tags(argv),
+		"a11y_include": parse_a11y_include(argv),
+		"a11y_exclude": parse_a11y_exclude(argv),
+		"settle_ms": parse_settle_ms(argv),
+		"max_concurrency": parse_max_concurrency(argv),
+		"config_path": parse_config_path(argv),
+		"perf": is_perf(argv),
+		"perf_lcp_ms": DEFAULT_PERF_LCP_MS,
+		"perf_cls_x100": DEFAULT_PERF_CLS_X100,
+		"perf_ttfb_ms": DEFAULT_PERF_TTFB_MS,
+		"browser": parse_browser(argv),
+		"throttle": parse_throttle(argv),
+		"device": parse_device(argv),
+		"crawl": is_crawl(argv),
+		"max_depth": parse_max_depth(argv),
+		"max_pages": parse_max_pages(argv),
+		"auth_file": parse_auth_file(argv),
+		"html": is_html(argv),
+		"watch": is_watch(argv),
+		"watch_interval": parse_watch_interval(argv),
+		"ledger": parse_ledger(argv),
+		"howl": parse_howl(argv),
+		"execute": is_execute(argv),
+		"record": is_record(argv),
+		"walkthrough": is_walkthrough(argv),
+		"validate": is_validate(argv)
+	}
+
+	return config
+}
+
+# ── Phase 2 flag parsers ─────────────────────────────────────────────
+
+# Parse --browser (Phase 2.3). chromium (default), firefox, or webkit.
+export func parse_browser(argv) {
+	raw := to_lower(flag_value(argv, "--browser", "chromium"))
+	if raw == "chromium" || raw == "firefox" || raw == "webkit" {
+		return raw
+	}
+	return "chromium"
+}
+
+# Parse --throttle (Phase 2.2). A named network profile, or "" for none.
+export func parse_throttle(argv) {
+	raw := to_lower(flag_value(argv, "--throttle", ""))
+	if raw == "3g" || raw == "4g" || raw == "slow-3g" || raw == "none" {
+		if raw == "none" {
+			return ""
+		}
+		return raw
+	}
+	return ""
+}
+
+# Parse --device (Phase 2.2). A Playwright device descriptor name, or "".
+export func parse_device(argv) {
+	return flag_value(argv, "--device", "")
+}
+
+# Parse the --crawl flag (Phase 2.5). Bounded same-origin crawl, opt-in.
+export func is_crawl(argv) {
+	return has_flag(argv, "--crawl")
+}
+
+# Parse --max-depth (Phase 2.5). Crawl depth from the start URL (default 1).
+export func parse_max_depth(argv) {
+	raw := flag_value(argv, "--max-depth", "1")
+	mut val := 1
+	if raw != "" {
+		val = to_int(raw)
+	}
+	if val < 0 {
+		val = 1
+	}
+	if val > 5 {
+		val = 5
+	}
+	return val
+}
+
+# Parse --max-pages (Phase 2.5). Total pages a crawl may visit (default 20).
+export func parse_max_pages(argv) {
+	raw := flag_value(argv, "--max-pages", "20")
+	mut val := 20
+	if raw != "" {
+		val = to_int(raw)
+	}
+	if val < 1 {
+		val = 20
+	}
+	if val > 200 {
+		val = 200
+	}
+	return val
+}
+
+# Parse --auth-file (Phase 2.4). Path to a storage-state/headers file. Empty
+# unless explicitly provided; auth injection is opt-in and never on the CLI.
+export func parse_auth_file(argv) {
+	return flag_value(argv, "--auth-file", "")
+}
+
+# Merge project config-file values into a built config (Phase 1.1).
+#
+# Precedence is: built-in defaults < config file < CLI flags. A file value is
+# applied only when the corresponding CLI flag is ABSENT from argv, so an
+# explicit flag always wins. Boolean flags are additive (a flag can turn a
+# feature on; it cannot turn off something the file enabled — document this).
+#
+# Supported file keys mirror the flag names with underscores (e.g. fail_on,
+# check_links, max_links, allow_external, timeout, viewports, out_dir,
+# accessibility, a11y_tags, a11y_include, a11y_exclude, diff_threshold,
+# baseline_dir, settle_ms, max_concurrency). Unknown keys are ignored.
+export func merge_file_config(config, argv, file_data) {
+	mut merged := config
+
+	# (config_key, file_key, flag_name) for scalar/string/number/bool values.
+	specs := array(
+		array("out_dir", "out_dir", "--out"),
+		array("timeout", "timeout", "--timeout"),
+		array("max_links", "max_links", "--max-links"),
+		array("fail_on", "fail_on", "--fail-on"),
+		array("baseline_dir", "baseline_dir", "--baseline-dir"),
+		array("diff_threshold", "diff_threshold", "--diff-threshold"),
+		array("a11y_include", "a11y_include", "--a11y-include"),
+		array("a11y_exclude", "a11y_exclude", "--a11y-exclude"),
+		array("settle_ms", "settle_ms", "--settle-ms"),
+		array("max_concurrency", "max_concurrency", "--max-concurrency"),
+		array("check_links", "check_links", "--check-links"),
+		array("allow_external", "allow_external", "--allow-external"),
+		array("browser", "browser", "--browser"),
+		array("throttle", "throttle", "--throttle"),
+		array("device", "device", "--device"),
+		array("perf", "perf", "--perf"),
+		array("perf_lcp_ms", "perf_lcp_ms", "--perf-lcp-ms"),
+		array("perf_cls_x100", "perf_cls_x100", "--perf-cls-x100"),
+		array("perf_ttfb_ms", "perf_ttfb_ms", "--perf-ttfb-ms"),
+		array("crawl", "crawl", "--crawl"),
+		array("max_depth", "max_depth", "--max-depth"),
+		array("max_pages", "max_pages", "--max-pages"),
+		array("auth_file", "auth_file", "--auth-file"),
+		array("html", "html", "--html"),
+		array("watch_interval", "watch_interval", "--watch-interval"),
+		array("ledger", "ledger", "--ledger"),
+		array("howl", "howl", "--howl")
+	)
+
+	mut i := 0
+	while i < len(specs) {
+		spec := specs[i]
+		config_key := to_string(spec[0])
+		file_key := to_string(spec[1])
+		flag_name := to_string(spec[2])
+		if is_trueish(has_key(file_data, file_key)) && is_falseish(has_flag(argv, flag_name)) {
+			merged[config_key] = file_data[file_key]
+		}
+		i = i + 1
+	}
+
+	# fail_on from the file must be a valid severity; ignore invalid values.
+	if is_trueish(has_key(merged, "fail_on")) {
+		fo := parse_severity(to_string(merged["fail_on"]))
+		if fo == "" {
+			merged["fail_on"] = DEFAULT_FAIL_ON
+		} else {
+			merged["fail_on"] = fo
+		}
+	}
+
+	# accessibility: file can enable it; --accessibility/--a11y still win.
+	if is_trueish(has_key(file_data, "accessibility")) && is_falseish(is_accessibility(argv)) {
+		merged["accessibility"] = file_data["accessibility"]
+	}
+
+	# a11y_tags is an array; apply only when --a11y-tags was not given.
+	if is_trueish(has_key(file_data, "a11y_tags")) && is_falseish(has_flag(argv, "--a11y-tags")) {
+		merged["a11y_tags"] = file_data["a11y_tags"]
+	}
+
+	# viewports: validate each token; apply only when no --viewport flag given.
+	if is_trueish(has_key(file_data, "viewports")) && is_falseish(has_flag(argv, "--viewport")) {
+		raw_vps := file_data["viewports"]
+		mut vps := array()
+		mut vi := 0
+		while vi < len(raw_vps) {
+			vp := parse_viewport(to_string(raw_vps[vi]))
+			if vp != "" {
+				vps = append(vps, vp)
+			}
+			vi = vi + 1
+		}
+		if len(vps) > 0 {
+			merged["viewports"] = vps
+		}
+	}
+
+	return merged
+}
+
+# Print help text.
+export func print_help() {
+	print("Lens v" + lens_version())
+	print("")
+	print("Deterministic browser/visual QA tool for AI-built software.")
+	print("Gives agents eyes by opening a local app or URL and collecting evidence.")
+	print("")
+	print("Usage:")
+	print("  lens check <url> [flags]")
+	print("  lens flow <flow-file> [flags]")
+	print("")
+	print("Commands:")
+	print("  check    Run browser checks against a URL")
+	print("  flow     Execute a safe browser flow file")
+	print("  inspect  List a page's interactive elements + suggested selectors")
+	print("")
+	print("Flow flags:")
+	print("  --execute      Actually perform interactive steps (safety-gated)")
+	print("  --record       Record the flow session to video (with --execute)")
+	print("  --walkthrough  Emit a shareable walkthrough.html proof artifact")
+	print("  --validate     Dry-run: check a flow's structure + safety (no browser)")
+	print("")
+	print("Flags:")
+	print("  --config <path>     Load defaults from a TOML file (default: ./.lens.toml)")
+	print("  --out <path>        Output directory (default: .lens/runs/<timestamp>)")
+	print("  --viewport <name>   Viewport to capture: desktop, mobile, or WxH (repeatable)")
+	print("  --settle-ms <n>     Post-readiness settle window in ms (default: 400)")
+	print("  --max-concurrency <n> Max viewports captured at once (default: all)")
+	print("  --timeout <seconds> Page load timeout in seconds (default: 30, max: 300)")
+	print("  --verbose           Print expanded terminal output")
+	print("  --json              Print JSON summary to stdout")
+	print("  --check-links       Check same-origin visible links (off by default)")
+	print("  --max-links <n>     Max links to check when --check-links (default: 50)")
+	print("  --allow-external    Allow checking external/public URLs")
+	print("  --fail-on <level>   Severity threshold: info, warning, error, critical")
+	print("                      (default: error)")
+	print("  --spec <path>       Spec file with browser assertions (JSON)")
+	print("  --eval-out <path>   Write Eval-compatible JSON output")
+	print("  --baseline          Save screenshots as visual baselines")
+	print("  --compare-baseline  Compare screenshots against baselines")
+	print("  --baseline-dir <d>  Baseline directory (default: .lens/baselines)")
+	print("  --diff-threshold <n> Visual diff threshold 0.0-1.0 (default: 0.01)")
+	print("  --update-baseline   Allow overwriting existing baselines")
+	print("  --perf              Capture performance metrics (LCP/CLS/TTFB; opt-in)")
+	print("  --browser <name>    Browser engine: chromium, firefox, webkit")
+	print("  --throttle <prof>   Network throttle: 3g, slow-3g, 4g")
+	print("  --device <name>     Emulate a Playwright device descriptor")
+	print("  --crawl             Bounded same-origin crawl (opt-in)")
+	print("  --max-depth <n>     Crawl depth from start URL (default: 1, max: 5)")
+	print("  --max-pages <n>     Max pages to crawl (default: 20, max: 200)")
+	print("  --auth-file <path>  Inject auth storage-state/headers (opt-in; never logged)")
+	print("  --html              Also write a self-contained HTML report")
+	print("  --watch             Re-run on an interval until interrupted (Ctrl-C)")
+	print("  --watch-interval <n> Seconds between watch runs (default: 5)")
+	print("  --ledger <path>     Append a RunLedger-compatible record")
+	print("  --howl <path>       Write a Howl pass/fail summary")
+	print("  --accessibility     Run automated accessibility checks (axe-core)")
+	print("  --a11y              Alias for --accessibility")
+	print("  --a11y-tags <tags>  Comma-separated a11y rule tags")
+	print("  --a11y-include <s>  CSS selector scope for a11y checks")
+	print("  --a11y-exclude <s>  CSS selector to exclude from a11y checks")
+	print("  --help              Print this help message")
+	print("  --version           Print version information")
+	print("")
+	print("Exit codes:")
+	print("  0  No failures above --fail-on threshold")
+	print("  1  Check findings above --fail-on threshold")
+	print("  2  Invalid CLI/config/input")
+	print("  3  Browser/provider/runtime failure")
+	print("  4  Artifact/report writing failure")
+	print("")
+	print("Examples:")
+	print("  lens check http://localhost:3000")
+	print("  lens check http://localhost:8080 --viewport mobile --json")
+	print("  lens check https://example.com --allow-external --check-links")
+	print("  lens check http://127.0.0.1:3000 --fail-on warning --verbose")
+	print("  lens check http://localhost:3000 --spec ./specs/dashboard.json")
+	print("  lens check http://localhost:3000 --eval-out ./eval/lens-results.json")
+	print("  lens inspect http://localhost:3000/account")
+	print("  lens flow examples/flows/account-modal.json --validate")
+	print("  lens flow examples/flows/site-journey.json --execute --record --walkthrough")
+	print("")
+	print("See docs/reference.md and docs/flow-authoring.md for full documentation.")
+}
+
+# Print version text.
+export func print_version() {
+	print("Lens v" + lens_version())
+	print("Deterministic browser/visual QA for AI-built software.")
+}

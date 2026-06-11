@@ -1,0 +1,95 @@
+# src/common.kujo — Lens shared utilities.
+#
+# Provides helpers for truthiness checks, string operations, and
+# common patterns used across the Lens codebase.
+#
+# Kujo's built-in contains(), starts_with(), has_key() return int-like
+# values (0 or 1). These wrappers normalize to boolean semantics.
+
+# Check if a value is truthy (true or 1).
+export func is_trueish(value) {
+	return value == true || value == 1
+}
+
+# Check if a value is falsy (false or 0).
+export func is_falseish(value) {
+	return value == false || value == 0
+}
+
+# Check if string starts with prefix.
+# Kujo's starts_with() may return int, so compare explicitly.
+export func str_starts_with(s, prefix) {
+	return is_trueish(starts_with(s, prefix))
+}
+
+# Check if string contains a substring.
+# Kujo's contains() returns int (1 or 0), so compare explicitly.
+export func str_contains(s, substr) {
+	return is_trueish(contains(s, substr))
+}
+
+# Check if string ends with suffix.
+export func str_ends_with(s, suffix) {
+	return is_trueish(ends_with(s, suffix))
+}
+
+# Check if a dict has a key.
+export func dict_has_key(map_obj, key_name) {
+	return is_trueish(has_key(map_obj, key_name))
+}
+
+# Trim whitespace from both ends of a string.
+export func str_trim(s) {
+	return trim(s)
+}
+
+# Convert a string to lowercase.
+export func str_lower(s) {
+	return to_lower(s)
+}
+
+# Join an array of strings with a separator.
+export func str_join(arr, sep) {
+	mut result := ""
+	mut i := 0
+	while i < len(arr) {
+		if i > 0 {
+			result = result + sep
+		}
+		result = result + to_string(arr[i])
+		i = i + 1
+	}
+	return result
+}
+
+# Pad a number with leading zeros to a given width.
+export func pad_zero(n, width) {
+	mut s := to_string(n)
+	while len(s) < width {
+		s = "0" + s
+	}
+	return s
+}
+
+# Format a Unix timestamp (seconds) as an ISO-like directory-safe string.
+# Example: 1717165330 -> "2026-05-31T14-22-10"
+export func format_timestamp_dir(ts_secs) {
+	# Use now_utc() format and sanitize it
+	mut raw := now_utc()
+	# Replace colons with hyphens for filesystem safety
+	# now_utc returns something like "2026-05-31T14:22:10Z"
+	mut result := ""
+	mut i := 0
+	while i < len(raw) {
+		ch := raw[i]
+		if ch == ":" {
+			result = result + "-"
+		} else if ch == "Z" {
+			# skip trailing Z
+		} else {
+			result = result + ch
+		}
+		i = i + 1
+	}
+	return result
+}

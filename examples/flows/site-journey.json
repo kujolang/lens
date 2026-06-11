@@ -1,0 +1,19 @@
+{
+  "name": "Site journey — Free Tools to a guide",
+  "description": "An interactive, recorded journey: open the site, click a header link, scroll to a section, and click a link inside it. Run with `lens flow examples/flows/site-journey.json --execute --record --walkthrough`. Every click is still safety-checked (safe: true required). Selectors use Playwright's CSS + text engines; swap them for your own site.",
+  "url": "https://robertdevore.com",
+  "allow_external": true,
+  "viewports": ["desktop"],
+  "timeout_seconds": 20,
+  "steps": [
+    { "visit": "https://robertdevore.com" },
+    { "screenshot": { "name": "1-home" } },
+    { "click": { "selector": "a[href=\"/free-ai-tools/\"]", "safe": true } },
+    { "wait_for_selector": "h3:has-text(\"Plan. Prompt. Publish\")" },
+    { "scroll": { "selector": "h3:has-text(\"Plan. Prompt. Publish\")" } },
+    { "screenshot": { "name": "2-guide-section" } },
+    { "click": { "selector": "a[href*=\"plan-prompt-publish\"]", "safe": true } },
+    { "wait_for_selector": "h1" },
+    { "screenshot": { "name": "3-guide-page" } }
+  ]
+}

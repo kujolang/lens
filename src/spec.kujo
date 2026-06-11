@@ -1,0 +1,174 @@
+# src/spec.kujo — Lens Spec file loading, parsing, and validation.
+#
+# Supports a small deterministic subset of browser-checkable Spec assertions.
+# Unsupported fields produce warnings, not hard failures.
+
+from src.common import is_trueish, is_falseish, str_contains, str_starts_with
+
+# Known supported spec assertion keys.
+SUPPORTED_SPEC_KEYS := array(
+	"url",
+	"title",
+	"text",
+	"selectors",
+	"console",
+	"network",
+	"layout",
+	"links"
+)
+
+# Load and parse a Spec file (JSON format).
+# Returns a dict with "valid", "assertions", "warnings", "error".
+export func load_spec_file(spec_path) {
+	if spec_path == "" {
+		return {
+			"valid": false,
+			"error": "No spec file path provided.",
+			"assertions": {},
+			"warnings": array(),
+			"supported_count": 0,
+			"unsupported_count": 0
+		}
+	}
+	
+	if is_falseish(file_exists(spec_path)) {
+		return {
+			"valid": false,
+			"error": "Spec file not found: " + spec_path,
+			"assertions": {},
+			"warnings": array(),
+			"supported_count": 0,
+			"unsupported_count": 0
+		}
+	}
+	
+	raw := read_file(spec_path)
+	if raw == "" {
+		return {
+			"valid": false,
+			"error": "Spec file is empty: " + spec_path,
+			"assertions": {},
+			"warnings": array(),
+			"supported_count": 0,
+			"unsupported_count": 0
+		}
+	}
+	
+	parsed := parse_json(raw)
+	if is_falseish(has_key(parsed, "title")) && is_falseish(has_key(parsed, "url")) && is_falseish(has_key(parsed, "console")) && is_falseish(has_key(parsed, "network")) && is_falseish(has_key(parsed, "layout")) && is_falseish(has_key(parsed, "links")) && is_falseish(has_key(parsed, "text")) && is_falseish(has_key(parsed, "selectors")) {
+		return {
+			"valid": false,
+			"error": "Failed to parse Spec file as JSON or no recognized assertion keys: " + spec_path,
+			"assertions": {},
+			"warnings": array(),
+			"supported_count": 0,
+			"unsupported_count": 0
+		}
+	}
+	
+	return validate_spec(parsed, spec_path)
+}
+
+# Validate parsed Spec content and classify supported/unsupported assertions.
+func validate_spec(spec_data, spec_path) {
+	mut assertions := {}
+	mut warnings := array()
+	mut supported_count := 0
+	mut unsupported_count := 0
+	
+	# Check each known supported key
+	mut ki := 0
+	while ki < len(SUPPORTED_SPEC_KEYS) {
+		key := SUPPORTED_SPEC_KEYS[ki]
+		if is_trueish(has_key(spec_data, key)) {
+			assertions[key] = spec_data[key]
+			supported_count = supported_count + 1
+		}
+		ki = ki + 1
+	}
+	
+	# Count unsupported keys (keys in spec_data not in SUPPORTED_SPEC_KEYS)
+	mut check_ki := 0
+	while check_ki < len(SUPPORTED_SPEC_KEYS) {
+		key := SUPPORTED_SPEC_KEYS[check_ki]
+		if is_falseish(has_key(spec_data, key)) {
+			# Key not present — that's fine, it's optional
+		}
+		check_ki = check_ki + 1
+	}
+	# We can't easily iterate unknown keys without keys(), so skip unsupported count
+	# Unsupported keys are silently ignored (they don't crash the run)
+	
+	if supported_count == 0 && unsupported_count == 0 {
+		return {
+			"valid": false,
+			"error": "Spec file contains no assertions: " + spec_path,
+			"assertions": assertions,
+			"warnings": warnings,
+			"supported_count": 0,
+			"unsupported_count": 0
+		}
+	}
+	
+	return {
+		"valid": true,
+		"error": "",
+		"assertions": assertions,
+		"warnings": warnings,
+		"supported_count": supported_count,
+		"unsupported_count": unsupported_count
+	}
+}
+
+# Check if a key is a supported Spec assertion category.
+func is_supported_spec_key(key) {
+	mut idx := 0
+	while idx < len(SUPPORTED_SPEC_KEYS) {
+		if SUPPORTED_SPEC_KEYS[idx] == key {
+			return true
+		}
+		idx = idx + 1
+	}
+	return false
+}
+
+# Check if an assertion dict has a specific sub-key.
+func spec_has_key(assertions, category, sub_key) {
+	if is_falseish(has_key(assertions, category)) {
+		return false
+	}
+	cat := assertions[category]
+	if is_falseish(has_key(cat, sub_key)) {
+		return false
+	}
+	return true
+}
+
+# Get a string value from an assertion sub-key.
+func spec_get_string(assertions, category, sub_key) {
+	if is_falseish(spec_has_key(assertions, category, sub_key)) {
+		return ""
+	}
+	cat := assertions[category]
+	return to_string(cat[sub_key])
+}
+
+# Get a boolean value from an assertion sub-key.
+func spec_get_bool(assertions, category, sub_key) {
+	if is_falseish(spec_has_key(assertions, category, sub_key)) {
+		return false
+	}
+	cat := assertions[category]
+	return is_trueish(cat[sub_key])
+}
+
+# Get an array value from an assertion sub-key.
+func spec_get_array(assertions, category, sub_key) {
+	if is_falseish(spec_has_key(assertions, category, sub_key)) {
+		return array()
+	}
+	cat := assertions[category]
+	val := cat[sub_key]
+	# Kujo arrays are always arrays; if somehow not, return empty
+	return val
+}

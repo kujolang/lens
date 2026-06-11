@@ -1,0 +1,90 @@
+name: "lens"
+goal: "Build a deterministic browser/visual QA tool for AI-built software. Lens gives agents eyes by opening a local app or URL, interacting with it in controlled ways, collecting evidence, and producing an agent-ready repair report."
+id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+status: "complete"
+version: "0.9.0"
+created_at: "2026-05-31T00:00:00Z"
+priority: "high"
+background: |
+  Lens is a Kujo/Kujo ecosystem tool that fills the browser/visual QA gap.
+  AI agents building software need deterministic, evidence-based feedback about
+  what they just built. Lens provides that feedback loop.
+
+  The CLI foundation, URL safety, reporting infrastructure, and artifact
+  pipeline are complete, as are browser checks, safe flows, visual baselines,
+  and accessibility scanning, all with centralized secret redaction.
+
+scope: |
+  Implemented:
+  - CLI foundation with `lens check <url>` command
+  - URL validation (localhost-first, --allow-external opt-in)
+  - CLI flag parsing (--out, --viewport, --timeout, --verbose, --json,
+    --check-links, --max-links, --allow-external, --fail-on)
+  - Playwright/Node.js bridge for Chromium browser automation
+  - Dual-viewport (desktop 1440×900, mobile 390×844) screenshot capture
+  - Console, network, and DOM evidence collection
+  - Deterministic checks: page load, console errors, network failures,
+    blank page (multi-factor), horizontal overflow, screenshots, link checking
+  - Finding IDs with per-check prefixes (LENS-PAGELOAD-1, etc.)
+  - Exit codes 0-4 for pass/fail/input/runtime/artifact states
+  - Secret redaction for headers, query params, URLs, JWT tokens
+  - Markdown report with Summary, severity sections, evidence, repair tasks,
+    Agent Repair Brief, and artifacts listing
+  - JSON report with schema_version 1, summary, repair_brief, checks arrays
+  - Link check opt-in with same-origin detection, unsafe scheme skipping,
+    HTTP-based verification with normalized link results
+  - 231-test suite covering CLI parsing, URL validation, checks, findings,
+    report generation, redaction, provider shapes, error/exit-code paths,
+    and artifact writing
+
+  Implemented since the original Phase 1 spec:
+  - Playwright/Chromium browser checks with redacted evidence capture
+  - Same-origin, opt-in, shallow link checking
+  - Spec-backed deterministic assertions (--spec) and Eval output (--eval-out)
+  - Safe browser flows (lens flow) with a strict safety model
+  - Visual baselines and pixel diffing (--baseline / --compare-baseline)
+  - axe-core automated accessibility scanning (--accessibility / --a11y)
+  - Centralized secret redaction across every artifact AND report
+
+  Deliberate exclusions (still out of scope):
+  - No AI/LLM/vision integration or subjective design critique
+  - No interactive flow execution beyond the declared navigation
+    (click/type/wait_for/assert_text are safety-checked but not executed)
+  - No login/credential management or payment workflows
+  - No recursive crawling
+  - No security namespace (CSP, HTTPS, cookie security checks)
+
+non_goals:
+  - "AI/LLM-powered visual analysis"
+  - "Subjective design critique"
+  - "Dashboards or web UI"
+  - "Database storage"
+  - "Cloud sync"
+  - "Login / credential management"
+  - "Payment workflows"
+  - "Recursive crawling"
+  - "Interactive flow automation (click/type execution)"
+  - "Package manager"
+  - "Security scanner / security namespace"
+
+relevant_systems:
+  - "kujo (core language/runtime)"
+  - "kujo-kennel (package manager)"
+  - "Node.js + Playwright + axe-core (browser bridge)"
+  - "Python + Pillow + numpy (visual diff bridge)"
+
+acceptance_criteria:
+  - "lens check http://localhost:3000 succeeds"
+  - "lens check https://example.com is blocked with exit code 2"
+  - "lens check https://example.com --allow-external succeeds"
+  - "lens check --help prints usage"
+  - "--out flag creates custom output directory"
+  - "Markdown report is generated at lens-report.md"
+  - "JSON report is generated at lens-report.json"
+  - "metadata.json is generated"
+  - "--json flag prints JSON summary to stdout"
+  - "No secret appears unredacted in any artifact or report"
+  - "lens flow evaluates assert_no_console_errors against captured evidence"
+  - "--baseline creates valid PNG baselines; --update-baseline required to overwrite"
+  - "--accessibility runs axe-core and degrades honestly when unavailable"
+  - "All tests pass"

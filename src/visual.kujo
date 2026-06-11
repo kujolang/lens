@@ -1,0 +1,303 @@
+# src/visual.kujo — Lens visual regression / screenshot diffing.
+#
+# Manages baseline storage, screenshot comparison via Python bridge,
+# and visual diff findings.
+
+from src.common import is_trueish, is_falseish
+
+# Default baseline directory.
+DEFAULT_BASELINE_DIR := ".lens/baselines"
+
+# Default diff threshold (1%).
+DEFAULT_DIFF_THRESHOLD := 0.01
+
+# ── Baseline path helpers ────────────────────────────────────────────
+
+# Build the baseline directory path for a check run.
+export func baseline_dir_for_check(config) {
+	base := baseline_base_dir(config)
+	url := to_string(config["url"])
+	# Use simple replacement for unsafe characters
+	mut safe_name := url
+	safe_name = replace(safe_name, "://", "_")
+	safe_name = replace(safe_name, "/", "_")
+	safe_name = replace(safe_name, ":", "_")
+	safe_name = replace(safe_name, "@", "_")
+	safe_name = replace(safe_name, "?", "_")
+	safe_name = replace(safe_name, "&", "_")
+	safe_name = replace(safe_name, "=", "_")
+	safe_name = replace(safe_name, ".", "_")
+	if safe_name == "" {
+		safe_name = "default"
+	}
+	return base + "/check/" + safe_name
+}
+
+# Build the baseline directory path for a flow run.
+export func baseline_dir_for_flow(config, flow) {
+	base := baseline_base_dir(config)
+	mut flow_name := "flow"
+	if is_trueish(has_key(flow, "name")) {
+		flow_name = to_string(flow["name"])
+	}
+	# Sanitize flow name
+	mut safe_name := flow_name
+	safe_name = replace(safe_name, "/", "_")
+	safe_name = replace(safe_name, ":", "_")
+	safe_name = replace(safe_name, " ", "_")
+	if safe_name == "" {
+		safe_name = "default_flow"
+	}
+	return base + "/flow/" + safe_name
+}
+
+# Get the base baseline directory from config.
+func baseline_base_dir(config) {
+	if is_trueish(has_key(config, "baseline_dir")) {
+		bd := to_string(config["baseline_dir"])
+		if bd != "" {
+			return bd
+		}
+	}
+	return DEFAULT_BASELINE_DIR
+}
+
+# ── Baseline management ─────────────────────────────────────────────
+
+# Save current screenshots as baselines.
+# Returns array of saved baseline paths.
+export func save_baselines(config, run_dir, viewports, baseline_dir) {
+	mut saved := array()
+	
+	if is_falseish(path_exists(baseline_dir)) {
+		create_dir(baseline_dir)
+	}
+	
+	mut vi := 0
+	while vi < len(viewports) {
+		vp := viewports[vi]
+		vp_name := to_string(vp["name"])
+		
+		src := run_dir + "/screenshots/" + vp_name + ".png"
+		dst := baseline_dir + "/" + vp_name + ".png"
+		
+		if is_trueish(file_exists(src)) {
+			# Check if baseline already exists
+			mut should_save := true
+			if is_trueish(file_exists(dst)) {
+				if is_falseish(is_trueish(config["update_baseline"])) {
+					should_save = false
+				} else {
+					delete_file(dst)
+				}
+			}
+
+			if is_trueish(should_save) {
+				# Copy the PNG with a binary-safe copy. read_file/write_file
+				# operate on UTF-8 text and corrupt (or fail on) binary data,
+				# so we shell out to `cp` instead.
+				if is_trueish(copy_file_binary(src, dst)) {
+					saved = append(saved, dst)
+				}
+			}
+		}
+		vi = vi + 1
+	}
+	
+	# Write baseline metadata
+	if len(saved) > 0 {
+		meta := {}
+		meta["schema_version"] = "1"
+		meta["created_at"] = now_utc()
+		meta["tool"] = "lens"
+		meta["command"] = to_string(config["subcommand"])
+		meta["url"] = to_string(config["url"])
+		meta["viewports"] = array()
+		mut mi := 0
+		while mi < len(viewports) {
+			vp_name := to_string(viewports[mi]["name"])
+			meta["viewports"] = append(meta["viewports"], vp_name)
+			mi = mi + 1
+		}
+		meta_json := to_json(meta)
+		write_file(baseline_dir + "/baseline-metadata.json", meta_json)
+	}
+	
+	return saved
+}
+
+# ── Visual comparison ────────────────────────────────────────────────
+
+# Compare screenshots against baselines.
+# Returns array of visual diff results.
+export func compare_baselines(config, run_dir, viewports, baseline_dir) {
+	mut results := array()
+	threshold := DEFAULT_DIFF_THRESHOLD
+	if is_trueish(has_key(config, "diff_threshold")) {
+		threshold = config["diff_threshold"]
+	}
+	
+	mut vi := 0
+	while vi < len(viewports) {
+		vp := viewports[vi]
+		vp_name := to_string(vp["name"])
+		
+		current_path := run_dir + "/screenshots/" + vp_name + ".png"
+		baseline_path := baseline_dir + "/" + vp_name + ".png"
+		diff_path := run_dir + "/diffs/" + vp_name + ".diff.png"
+		
+		# Ensure diffs directory
+		diffs_dir := run_dir + "/diffs"
+		if is_falseish(path_exists(diffs_dir)) {
+			create_dir(diffs_dir)
+		}
+		
+		mut result := {}
+		result["id"] = "LENS-VISUAL-" + pad3_vis(vi + 1)
+		result["screenshot_name"] = vp_name
+		result["viewport"] = vp_name
+		result["current_path"] = current_path
+		result["baseline_path"] = baseline_path
+		result["diff_path"] = diff_path
+		result["threshold"] = threshold
+		result["status"] = "error"
+		
+		# Check baseline exists
+		if is_falseish(file_exists(baseline_path)) {
+			result["status"] = "missing_baseline"
+			result["error"] = "Baseline not found: " + baseline_path
+			results = append(results, result)
+			vi = vi + 1
+			continue
+		}
+		
+		# Check current exists
+		if is_falseish(file_exists(current_path)) {
+			result["status"] = "error"
+			result["error"] = "Current screenshot not found: " + current_path
+			results = append(results, result)
+			vi = vi + 1
+			continue
+		}
+		
+		# Run visual diff via Python bridge
+		cmd := "python3 bridge/visual-diff.py " + current_path + " " + baseline_path + " --threshold " + to_string(threshold) + " --diff-output " + diff_path + " --json"
+		diff_result := spawn_process(array("python3", "bridge/visual-diff.py", current_path, baseline_path, "--threshold", to_string(threshold), "--diff-output", diff_path, "--json"))
+		
+		if is_trueish(diff_result.success) {
+			raw := diff_result.stdout
+			parsed := parse_json(raw)
+			if is_trueish(has_key(parsed, "status")) {
+				result["status"] = to_string(parsed["status"])
+				result["difference_ratio"] = parsed["difference_ratio"]
+				result["changed_pixels"] = parsed["changed_pixels"]
+				result["total_pixels"] = parsed["total_pixels"]
+				result["dimensions_match"] = parsed["dimensions_match"]
+				if is_trueish(has_key(parsed, "current_dimensions")) {
+					result["current_dimensions"] = parsed["current_dimensions"]
+				}
+				if is_trueish(has_key(parsed, "baseline_dimensions")) {
+					result["baseline_dimensions"] = parsed["baseline_dimensions"]
+				}
+				if is_trueish(has_key(parsed, "error")) && to_string(parsed["error"]) != "" {
+					result["error"] = to_string(parsed["error"])
+				}
+			}
+		} else {
+			result["status"] = "error"
+			result["error"] = "Visual diff script failed: " + diff_result.stderr
+		}
+		
+		results = append(results, result)
+		vi = vi + 1
+	}
+	
+	return results
+}
+
+# Copy a binary file from src to dst using the system `cp` command.
+# Returns true on success (destination exists afterward).
+# Kujo's read_file/write_file are UTF-8 only and cannot safely copy
+# binary content such as PNG screenshots.
+export func copy_file_binary(src, dst) {
+	if is_falseish(file_exists(src)) {
+		return false
+	}
+	result := spawn_process(array("cp", src, dst))
+	if is_falseish(result.success) {
+		return false
+	}
+	return is_trueish(file_exists(dst))
+}
+
+# Helper: pad a number to 3 digits.
+func pad3_vis(n) {
+	if n < 10 {
+		return "00" + to_string(n)
+	}
+	if n < 100 {
+		return "0" + to_string(n)
+	}
+	return to_string(n)
+}
+
+# Convert visual diff results to Lens findings.
+export func visual_results_to_findings(results) {
+	mut findings := array()
+	
+	mut ri := 0
+	while ri < len(results) {
+		r := results[ri]
+		st := to_string(r["status"])
+		
+		if st == "pass" {
+			ri = ri + 1
+			continue
+		}
+		
+		mut sev := "error"
+		mut title := "Visual diff detected"
+		mut desc := ""
+		mut repair := ""
+		
+		if st == "missing_baseline" {
+			sev = "warning"
+			title = "Missing visual baseline for " + to_string(r["viewport"])
+			desc = "No baseline screenshot exists for " + to_string(r["viewport"]) + ". Baseline path: " + to_string(r["baseline_path"])
+			repair = "Create a baseline by running Lens with --baseline. If this is the intended initial state, the current screenshot should become the baseline."
+		} else if st == "fail" {
+			sev = "error"
+			title = "Visual regression detected in " + to_string(r["viewport"])
+			mut ratio_str := ""
+			if is_trueish(has_key(r, "difference_ratio")) {
+				ratio_str = to_string(r["difference_ratio"])
+			}
+			desc = "Screenshot for " + to_string(r["viewport"]) + " differs from baseline beyond the configured threshold. Difference ratio: " + ratio_str + " (threshold: " + to_string(r["threshold"]) + ")."
+			repair = "Review the visual diff at " + to_string(r["diff_path"]) + ". If the change is intentional, update the baseline with --baseline --update-baseline. If unintended, investigate the visual change."
+		} else if st == "dimension_mismatch" {
+			sev = "error"
+			title = "Viewport dimension mismatch for " + to_string(r["viewport"])
+			desc = "Current and baseline screenshots have different dimensions. The viewport configuration may have changed."
+			repair = "Verify the viewport configuration matches the baseline. Recreate the baseline with --baseline --update-baseline if the new dimensions are correct."
+		} else {
+			sev = "error"
+			title = "Visual comparison error for " + to_string(r["viewport"])
+			desc = to_string(r["error"])
+			repair = "Check that both current and baseline screenshots exist and are valid PNG files."
+		}
+		
+		mut f := {}
+		f["id"] = to_string(r["id"])
+		f["check_name"] = "VISUAL"
+		f["severity"] = sev
+		f["title"] = title
+		f["description"] = desc
+		f["evidence"] = to_string(r["diff_path"])
+		f["suggested_repair_task"] = repair
+		
+		findings = append(findings, f)
+		ri = ri + 1
+	}
+	
+	return findings
+}

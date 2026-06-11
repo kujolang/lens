@@ -1,0 +1,75 @@
+# src/config_file.kujo — Lens project config file (.lens.toml) support.
+#
+# Loads project-level defaults from a TOML file so teams don't repeat flags
+# on every invocation. Precedence is: built-in defaults < config file < CLI
+# flags. The merge itself lives in src/config.kujo (merge_file_config) so it
+# can be unit-tested without touching the filesystem; this module only handles
+# locating and parsing the file.
+
+from src.common import is_trueish, is_falseish, str_starts_with
+
+# Default config file name, looked up in the current working directory.
+DEFAULT_CONFIG_FILENAME := ".lens.toml"
+
+# Resolve the config file path from CLI args.
+# Returns a dict: { "path": <string>, "explicit": <bool> }.
+# When --config <path> is given, explicit is true (a missing file is an error).
+# Otherwise the implicit .lens.toml is used (a missing file is fine).
+export func resolve_config_path(argv) {
+	mut idx := 0
+	while idx < len(argv) {
+		if to_string(argv[idx]) == "--config" {
+			if idx + 1 < len(argv) {
+				next := to_string(argv[idx + 1])
+				if is_falseish(str_starts_with(next, "--")) {
+					return { "path": next, "explicit": true }
+				}
+			}
+			# --config with no value: treat as explicit but empty (an error).
+			return { "path": "", "explicit": true }
+		}
+		idx = idx + 1
+	}
+	return { "path": DEFAULT_CONFIG_FILENAME, "explicit": false }
+}
+
+# Load and parse a config file.
+# Returns: { "valid": bool, "present": bool, "data": dict, "error": string }.
+#   - implicit file missing      → valid=true,  present=false, data={}
+#   - explicit file missing      → valid=false, present=false, error set
+#   - parse error / non-table    → valid=false, present=true,  error set
+#   - ok                         → valid=true,  present=true,  data=<table>
+export func load_config_file(path, explicit) {
+	if path == "" {
+		if is_trueish(explicit) {
+			return { "valid": false, "present": false, "data": {}, "error": "--config requires a file path" }
+		}
+		return { "valid": true, "present": false, "data": {} }
+	}
+
+	if is_falseish(file_exists(path)) {
+		if is_trueish(explicit) {
+			return { "valid": false, "present": false, "data": {}, "error": "config file not found: " + path }
+		}
+		# Implicit .lens.toml absence is not an error.
+		return { "valid": true, "present": false, "data": {} }
+	}
+
+	raw := read_file(path)
+
+	# parse_toml throws an (otherwise uncatchable) VM error on malformed input,
+	# so we wrap it in try/except to fail gracefully with exit code 2 upstream.
+	mut parsed := {}
+	mut ok := false
+	try {
+		parsed = parse_toml(raw)
+		ok = true
+	} except e {
+		return { "valid": false, "present": true, "data": {}, "error": "invalid TOML in " + path + ": " + to_string(e) }
+	}
+
+	if is_falseish(ok) {
+		return { "valid": false, "present": true, "data": {}, "error": "could not parse config file: " + path }
+	}
+	return { "valid": true, "present": true, "data": parsed }
+}

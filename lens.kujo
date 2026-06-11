@@ -1,0 +1,24 @@
+# lens.kujo — Lens entry point.
+#
+# Deterministic browser/visual QA tool for AI-built software.
+# Gives agents eyes by opening a local app or URL, collecting evidence,
+# and producing agent-ready repair reports.
+#
+# Usage:
+#   lens check <url> [flags]
+#
+# Run via the `lens` shell wrapper:
+#   lens check http://localhost:3000
+#
+# Or directly via kujo:
+#   kujo run lens.kujo -- check http://localhost:3000
+
+from src.runner import run
+
+# Main entry point.
+# args() returns CLI arguments passed after `--` by the shell wrapper.
+argv := args()
+
+exit_code := run(argv)
+
+exit(exit_code)

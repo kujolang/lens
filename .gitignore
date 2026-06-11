@@ -1,0 +1,15 @@
+# Lens — build artifacts and output
+.lens/
+runs/
+
+# Node bridge dependencies (Phase 2)
+bridge/node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~

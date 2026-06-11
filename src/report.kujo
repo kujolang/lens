@@ -1,0 +1,959 @@
+# src/report.kujo — Lens report generation (Markdown and JSON).
+#
+# Generates human-readable Markdown reports and machine-readable
+# JSON reports from check results and run metadata.
+
+from src.common import str_join, is_trueish, is_falseish, str_starts_with
+from src.redact import redact_url
+
+# Lifecycle phase emitted in metadata/JSON reports. All MVP phases (1-10)
+# are complete; the tool now reports a stable lifecycle marker.
+LENS_PHASE := "stable"
+
+# Generate a Markdown report string.
+export func generate_markdown_report(config, meta, check_results) {
+	mut lines := array()
+	
+	# Header
+	lines = append(lines, "# Lens Report")
+	lines = append(lines, "")
+	
+	# Status
+	status := to_string(meta["status"])
+	lines = append(lines, "Status: " + status)
+	lines = append(lines, "URL: " + redact_url(to_string(config["url"])))
+	lines = append(lines, "Started: " + to_string(meta["started_at"]))
+	lines = append(lines, "Finished: " + to_string(meta["finished_at"]))
+	lines = append(lines, "Duration: " + to_string(meta["duration_ms"]) + "ms")
+	lines = append(lines, "Viewports: " + str_join(config["viewports"], ", "))
+	lines = append(lines, "Output Directory: " + to_string(meta["out_dir"]))
+	lines = append(lines, "")
+	
+	# Summary
+	lines = append(lines, "## Summary")
+	lines = append(lines, "")
+	
+	critical_count := count_severity_findings(check_results, "critical")
+	error_count := count_severity_findings(check_results, "error")
+	warning_count := count_severity_findings(check_results, "warning")
+	info_count := count_severity_findings(check_results, "info")
+	total_findings := critical_count + error_count + warning_count + info_count
+	
+	fail_threshold := ""
+	if is_trueish(has_key(config, "fail_on")) {
+		fail_threshold = to_string(config["fail_on"])
+	} else {
+		fail_threshold = "error"
+	}
+	
+	lines = append(lines, "Status: " + status)
+	lines = append(lines, "Total findings: " + to_string(total_findings))
+	lines = append(lines, "Critical: " + to_string(critical_count))
+	lines = append(lines, "Errors: " + to_string(error_count))
+	lines = append(lines, "Warnings: " + to_string(warning_count))
+	lines = append(lines, "Info: " + to_string(info_count))
+	lines = append(lines, "Fail threshold: " + fail_threshold)
+	lines = append(lines, "Exit code: " + to_string(meta["exit_code"]))
+	lines = append(lines, "Checks run: " + to_string(count_checks_run(check_results)))
+	lines = append(lines, "Checks skipped: " + to_string(count_checks_skipped(check_results)))
+	lines = append(lines, "Artifacts written: " + to_string(len(meta["artifacts"])))
+	
+	# Phase 7: Spec/Eval summary
+	if is_trueish(has_key(config, "spec_path")) {
+		spec_path := to_string(config["spec_path"])
+		if spec_path != "" {
+			lines = append(lines, "Spec file: " + spec_path)
+			lines = append(lines, "Spec checks run: " + to_string(count_spec_checks_run(check_results)))
+			lines = append(lines, "Spec checks skipped: " + to_string(count_spec_checks_skipped(check_results)))
+			lines = append(lines, "Spec checks failed: " + to_string(count_spec_checks_failed(check_results)))
+		}
+	}
+	if is_trueish(has_key(config, "eval_out")) {
+		eval_out := to_string(config["eval_out"])
+		if eval_out != "" {
+			lines = append(lines, "Eval output: " + eval_out)
+		}
+	}
+	lines = append(lines, "")
+	
+	# One-paragraph summary
+	if status == "PASS" {
+		lines = append(lines, "Lens completed successfully. No findings met the configured fail threshold of `" + fail_threshold + "`. Runtime artifacts were captured.")
+	} else if total_findings == 0 {
+		lines = append(lines, "Lens reported FAIL because the fail threshold (`" + fail_threshold + "`) matches the base severity of checks, but no actual findings were detected. All checks passed cleanly. Consider raising the fail threshold to `warning` or `error`.")
+	} else {
+		above_threshold := critical_count + error_count
+		if fail_threshold == "warning" {
+			above_threshold = critical_count + error_count + warning_count
+		}
+		if fail_threshold == "info" {
+			above_threshold = critical_count + error_count + warning_count + info_count
+		}
+		lines = append(lines, "Lens found " + to_string(total_findings) + " finding(s). " + to_string(above_threshold) + " at or above the fail threshold of `" + fail_threshold + "`. Start with critical issues, then errors, then warnings.")
+	}
+	lines = append(lines, "")
+	
+	# Critical Issues
+	lines = append(lines, "## Critical Issues")
+	lines = append(lines, "")
+	if critical_count == 0 {
+		lines = append(lines, "No critical issues found.")
+	} else {
+		lines = append_severity_findings(lines, check_results, "critical")
+	}
+	lines = append(lines, "")
+	
+	# Errors
+	lines = append(lines, "## Errors")
+	lines = append(lines, "")
+	if error_count == 0 {
+		lines = append(lines, "No errors found.")
+	} else {
+		lines = append_severity_findings(lines, check_results, "error")
+	}
+	lines = append(lines, "")
+	
+	# Warnings
+	lines = append(lines, "## Warnings")
+	lines = append(lines, "")
+	if warning_count == 0 {
+		lines = append(lines, "No warnings found.")
+	} else {
+		lines = append_severity_findings(lines, check_results, "warning")
+	}
+	lines = append(lines, "")
+	
+	# Evidence
+	lines = append(lines, "## Evidence")
+	lines = append(lines, "")
+	lines = append(lines, "Runtime evidence collected:")
+	lines = append(lines, "")
+	lines = append(lines, "- Screenshots: `screenshots/desktop.png`, `screenshots/mobile.png`")
+	lines = append(lines, "- Console log: `console.json`")
+	lines = append(lines, "- Network log: `network.json`")
+	lines = append(lines, "- DOM summaries: `dom-summary.json`")
+	if is_trueish(has_key(config, "check_links")) {
+		if is_trueish(config["check_links"]) {
+			lines = append(lines, "- Link check results: `links.json`")
+		}
+	}
+	lines = append(lines, "")
+	if is_trueish(has_key(config, "check_links")) {
+		if is_falseish(config["check_links"]) {
+			lines = append(lines, "Link checking was not enabled. Use --check-links to check same-origin links.")
+			lines = append(lines, "")
+		}
+	}
+	
+	# Phase 10: Accessibility evidence
+	if is_trueish(has_key(config, "accessibility")) {
+		if is_trueish(config["accessibility"]) {
+			lines = append(lines, "- Accessibility results: `accessibility.json`")
+		} else {
+			lines = append(lines, "Accessibility checks were not enabled. Use --accessibility or --a11y to enable.")
+		}
+		lines = append(lines, "")
+	}
+	
+	# Phase 7: Spec/Eval evidence
+	if is_trueish(has_key(config, "spec_path")) {
+		spec_path := to_string(config["spec_path"])
+		if spec_path != "" {
+			lines = append(lines, "- Spec file: `" + spec_path + "`")
+		}
+	}
+	if is_trueish(has_key(config, "eval_out")) {
+		eval_out := to_string(config["eval_out"])
+		if eval_out != "" {
+			lines = append(lines, "- Eval output: `" + eval_out + "`")
+		}
+	}
+	
+	# ── Phase 10: Accessibility summary ──────────────────────────────
+	
+	lines = append(lines, "## Accessibility")
+	lines = append(lines, "")
+	
+	mut a11y_enabled := false
+	if is_trueish(has_key(config, "accessibility")) {
+		a11y_enabled = is_trueish(config["accessibility"])
+	}
+	
+	if is_falseish(a11y_enabled) {
+		lines = append(lines, "Accessibility checks were not enabled for this run.")
+		lines = append(lines, "")
+		lines = append(lines, "Use `--accessibility` (or `--a11y`) to enable automated accessibility scans.")
+		lines = append(lines, "Accessibility checks use axe-core rules to detect common violations.")
+		lines = append(lines, "")
+		lines = append(lines, "Automated checks do not replace manual accessibility review, screen reader")
+		lines = append(lines, "testing, or WCAG compliance audits. They provide conservative, repeatable")
+		lines = append(lines, "scan data for your review.")
+	} else {
+		# Find a11y check result for summary.
+		mut a11y_scan_count := 0
+		mut a11y_violation_count := 0
+		mut a11y_engine_available := false
+		mut a11y_engine_note := ""
+		mut a11y_engine_version := "unknown"
+		mut ci := 0
+		while ci < len(check_results) {
+			cr := check_results[ci]
+			if cr["id"] == "accessibility" {
+				a11y_violation_count = cr["finding_count"]
+				if is_trueish(has_key(cr, "scans")) {
+					a11y_scan_count = len(cr["scans"])
+				}
+				if is_trueish(has_key(cr, "engine_available")) {
+					a11y_engine_available = is_trueish(cr["engine_available"])
+				}
+				if is_trueish(has_key(cr, "engine_note")) {
+					a11y_engine_note = to_string(cr["engine_note"])
+				}
+				if is_trueish(has_key(cr, "engine_version")) {
+					a11y_engine_version = to_string(cr["engine_version"])
+				}
+			}
+			ci = ci + 1
+		}
+
+		if is_falseish(a11y_engine_available) {
+			# Be explicit: no scan actually ran. Never imply a clean result.
+			lines = append(lines, "Accessibility checks were requested but the scan engine did not run.")
+			lines = append(lines, "")
+			if a11y_engine_note != "" {
+				lines = append(lines, a11y_engine_note)
+			} else {
+				lines = append(lines, "The axe-core engine was unavailable, so no accessibility data was collected.")
+			}
+			lines = append(lines, "")
+			lines = append(lines, "No accessibility conclusions can be drawn from this run. Install axe-core")
+			lines = append(lines, "in the bridge (`cd bridge && npm install axe-core`) and re-run with")
+			lines = append(lines, "`--accessibility` to collect real scan data.")
+		} else {
+			lines = append(lines, "Accessibility checks were enabled for this run.")
+			lines = append(lines, "")
+			lines = append(lines, "- Engine: axe-core " + a11y_engine_version)
+			lines = append(lines, "- Scans completed: " + to_string(a11y_scan_count))
+			lines = append(lines, "- Violations found: " + to_string(a11y_violation_count))
+			lines = append(lines, "- Results: `accessibility.json`")
+			lines = append(lines, "")
+
+			if a11y_violation_count > 0 {
+				lines = append(lines, "Violations are reported as `LENS-A11Y-NNN` findings above. Review the")
+				lines = append(lines, "accessibility.json artifact for full violation details including impacted")
+				lines = append(lines, "element selectors, rule IDs, and remediation guidance.")
+			} else {
+				lines = append(lines, "No accessibility violations were detected by automated scanning.")
+				lines = append(lines, "Automated checks cannot detect all accessibility issues. Manual review")
+				lines = append(lines, "and screen reader testing are still essential.")
+			}
+			lines = append(lines, "")
+			lines = append(lines, "Accessibility checks use axe-core automated rules. They do not guarantee")
+			lines = append(lines, "WCAG compliance and are not a substitute for manual accessibility review.")
+		}
+	}
+	lines = append(lines, "")
+	
+	# Suggested Repair Tasks
+	lines = append(lines, "## Suggested Repair Tasks")
+	lines = append(lines, "")
+	lines = append_repair_tasks(lines, check_results)
+	lines = append(lines, "")
+	
+	# Agent Repair Brief
+	lines = append(lines, "## Agent Repair Brief")
+	lines = append(lines, "")
+	lines = append_repair_brief(lines, status, fail_threshold, critical_count, error_count, warning_count, info_count, check_results, config, meta)
+	lines = append(lines, "")
+	
+	# Artifacts
+	lines = append(lines, "## Artifacts")
+	lines = append(lines, "")
+	mut art_idx := 0
+	artifacts := meta["artifacts"]
+	while art_idx < len(artifacts) {
+		lines = append(lines, "- `" + to_string(artifacts[art_idx]) + "`")
+		art_idx = art_idx + 1
+	}
+	# Note missing links.json
+	if is_trueish(has_key(config, "check_links")) {
+		if is_falseish(config["check_links"]) {
+			lines = append(lines, "- `links.json` — not generated because --check-links was not enabled.")
+		}
+	}
+	lines = append(lines, "")
+	
+	return str_join(lines, "\n")
+}
+
+# Helper: count checks that ran (not skipped).
+func count_checks_run(check_results) {
+	mut count := 0
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		if cr["status"] != "skipped" {
+			count = count + 1
+		}
+		idx = idx + 1
+	}
+	return count
+}
+
+# Helper: count checks that were skipped.
+func count_checks_skipped(check_results) {
+	mut count := 0
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		if cr["status"] == "skipped" {
+			count = count + 1
+		}
+		idx = idx + 1
+	}
+	return count
+}
+
+# Helper: append the Agent Repair Brief.
+func append_repair_brief(lines, status, fail_threshold, critical_count, error_count, warning_count, info_count, check_results, config, meta) {
+	mut out := lines
+	total_bad := critical_count + error_count + warning_count
+	
+	# Page-load trust gate: check if page_load passed.
+	page_loaded := false
+	mut ci := 0
+	while ci < len(check_results) {
+		cr := check_results[ci]
+		if cr["id"] == "page_load" && cr["status"] == "pass" {
+			page_loaded = true
+		}
+		ci = ci + 1
+	}
+	
+	# Use both status and total_bad to determine pass/fail path.
+	# total_bad==0 means no actual findings, but the status may still be FAIL
+	# with --fail-on info (check-level severities match threshold).
+	if total_bad == 0 && status == "PASS" {
+		out = append(out, "Lens passed with no findings at or above the configured fail threshold of `" + fail_threshold + "`.")
+		out = append(out, "")
+		out = append(out, "No repair task is required from this run. Runtime artifacts were captured successfully and can be used as a baseline for future comparisons.")
+		return out
+	}
+	
+	if total_bad == 0 {
+		# Status is FAIL but no findings — severity threshold at check level.
+		out = append(out, "Lens reported FAIL because the fail threshold is set to `" + fail_threshold + "`, which matches the base severity of checks. No actual findings were detected — all checks passed with zero issues.")
+		out = append(out, "")
+		out = append(out, "Consider using a higher fail threshold (e.g., `--fail-on warning` or `--fail-on error`) to avoid false failures from informational check statuses.")
+		out = append(out, "")
+		return out
+	}
+	
+	above_threshold := critical_count + error_count
+	if fail_threshold == "warning" {
+		above_threshold = critical_count + error_count + warning_count
+	}
+	if fail_threshold == "info" {
+		above_threshold = critical_count + error_count + warning_count + info_count
+	}
+	out = append(out, "Lens failed because " + to_string(above_threshold) + " finding(s) met the configured fail threshold of `" + fail_threshold + "`.")
+	out = append(out, "")
+	
+	# Page-load trust gate: tell agents whether secondary findings are trustworthy.
+	if page_loaded {
+		out = append(out, "The page loaded successfully. Secondary findings (console, network, overflow, links) can be trusted.")
+	} else {
+		out = append(out, "The page may not have loaded completely. Treat secondary findings (console, network, overflow, links) with caution — they may reflect partial or error states rather than normal operation.")
+	}
+	out = append(out, "")
+	
+	# Viewport summary.
+	viewports := config["viewports"]
+	out = append(out, "Viewports tested: " + str_join(viewports, ", ") + ".")
+	out = append(out, "")
+	
+	# Link check status summary.
+	if is_trueish(has_key(config, "check_links")) {
+		if is_trueish(config["check_links"]) {
+			mut link_count := 0
+			mut li := 0
+			while li < len(check_results) {
+				cr := check_results[li]
+				if cr["id"] == "link_check" {
+					link_count = cr["finding_count"]
+				}
+				li = li + 1
+			}
+			if link_count == 0 {
+				out = append(out, "Link check enabled: all checked links passed.")
+			} else {
+				out = append(out, "Link check enabled: " + to_string(link_count) + " link finding(s) reported.")
+			}
+		} else {
+			out = append(out, "Link check was not enabled. Use --check-links to verify same-origin links.")
+		}
+		out = append(out, "")
+	}
+	
+	# First artifacts to inspect
+	out = append(out, "First artifacts to inspect:")
+	mut first_artifacts := get_first_artifacts(check_results)
+	mut ai := 0
+	while ai < len(first_artifacts) {
+		out = append(out, "- `" + first_artifacts[ai] + "`")
+		ai = ai + 1
+	}
+	out = append(out, "")
+	
+	# Recommended steps
+	out = append(out, "Suggested first pass:")
+	out = append_ordered_steps(out, check_results)
+	out = append(out, "")
+	
+	# Avoid assumptions
+	out = append(out, "Do not assume the root cause is framework-specific unless the source code or console output proves it. Each finding includes evidence references — inspect those artifacts before drawing conclusions.")
+	
+	return out
+}
+
+# Get the first evidence artifacts to inspect (from critical/error findings).
+func get_first_artifacts(check_results) {
+	mut artifacts := array()
+	mut idx := 0
+	while idx < len(check_results) && len(artifacts) < 3 {
+		cr := check_results[idx]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) && len(artifacts) < 3 {
+			f := findings[j]
+			sev := to_string(f["severity"])
+			if sev == "critical" || sev == "error" {
+				if is_trueish(has_key(f, "evidence")) {
+					ev := to_string(f["evidence"])
+					if ev != "" {
+						artifacts = append(artifacts, ev)
+					}
+				}
+			}
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	return artifacts
+}
+
+# Helper: append findings of a given severity to the report lines.
+func append_severity_findings(lines, check_results, severity) {
+	mut out := lines
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			if to_string(f["severity"]) == severity {
+				title := ""
+				desc := ""
+				evidence := ""
+				finding_id := ""
+				if is_trueish(has_key(f, "id")) {
+					finding_id = to_string(f["id"])
+				}
+				if is_trueish(has_key(f, "title")) {
+					title = to_string(f["title"])
+				}
+				if is_trueish(has_key(f, "description")) {
+					desc = to_string(f["description"])
+				}
+				if is_trueish(has_key(f, "evidence")) {
+					evidence = to_string(f["evidence"])
+				}
+				if finding_id != "" {
+					out = append(out, "- **" + finding_id + "** — " + title)
+				} else {
+					out = append(out, "- **" + title + "**")
+				}
+				out = append(out, "  " + desc)
+				if evidence != "" {
+					out = append(out, "  Evidence: " + evidence)
+				}
+				out = append(out, "")
+			}
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	return out
+}
+
+# Helper: append repair tasks from all findings with error+ severity.
+func append_repair_tasks(lines, check_results) {
+	mut out := lines
+	mut task_count := 0
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			sev := to_string(f["severity"])
+			if sev == "critical" || sev == "error" || sev == "warning" {
+				if is_trueish(has_key(f, "suggested_repair_task")) {
+					repair := to_string(f["suggested_repair_task"])
+					if repair != "" {
+						task_count = task_count + 1
+						out = append(out, to_string(task_count) + ". " + repair)
+						out = append(out, "")
+					}
+				}
+			}
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	if task_count == 0 {
+		out = append(out, "No repair tasks needed.")
+		out = append(out, "")
+	}
+	return out
+}
+
+# Helper: append ordered steps.
+func append_ordered_steps(lines, check_results) {
+	mut out := lines
+	mut step := 0
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			if to_string(f["severity"]) == "critical" {
+				step = step + 1
+				out = append(out, to_string(step) + ". " + to_string(f["suggested_repair_task"]))
+			}
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	mut idx2 := 0
+	while idx2 < len(check_results) {
+		cr := check_results[idx2]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			if to_string(f["severity"]) == "error" {
+				step = step + 1
+				out = append(out, to_string(step) + ". " + to_string(f["suggested_repair_task"]))
+			}
+			j = j + 1
+		}
+		idx2 = idx2 + 1
+	}
+	mut idx3 := 0
+	while idx3 < len(check_results) {
+		cr := check_results[idx3]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			if to_string(f["severity"]) == "warning" {
+				step = step + 1
+				out = append(out, to_string(step) + ". " + to_string(f["suggested_repair_task"]))
+			}
+			j = j + 1
+		}
+		idx3 = idx3 + 1
+	}
+	return out
+}
+
+# Helper: count findings by severity.
+export func generate_json_report(config, meta, check_results, provider_result) {
+	critical_count := count_severity_findings(check_results, "critical")
+	error_count := count_severity_findings(check_results, "error")
+	warning_count := count_severity_findings(check_results, "warning")
+	info_count := count_severity_findings(check_results, "info")
+	total_findings := critical_count + error_count + warning_count + info_count
+	
+	fail_threshold := "error"
+	if is_trueish(has_key(config, "fail_on")) {
+		fail_threshold = to_string(config["fail_on"])
+	}
+	
+	mut final_url := to_string(config["url"])
+	if is_trueish(has_key(provider_result, "final_url")) {
+		final_url = to_string(provider_result["final_url"])
+	}
+	# Defense in depth: scrub secrets from both URLs before emission.
+	safe_url := redact_url(to_string(config["url"]))
+	final_url = redact_url(final_url)
+
+	mut report := {
+		"schema_version": "1",
+		"status": meta["status"],
+		"url": safe_url,
+		"final_url": final_url,
+		"started_at": meta["started_at"],
+		"finished_at": meta["finished_at"],
+		"duration_ms": meta["duration_ms"],
+		"viewports": config["viewports"],
+		"fail_threshold": fail_threshold,
+		"exit_code": meta["exit_code"],
+		"summary": {
+			"total_findings": total_findings,
+			"critical_count": critical_count,
+			"error_count": error_count,
+			"warning_count": warning_count,
+			"info_count": info_count,
+			"checks_run": count_checks_run(check_results),
+			"checks_skipped": count_checks_skipped(check_results),
+			"artifacts_written": len(meta["artifacts"])
+		},
+		"checks": check_results,
+		"findings": flatten_all_findings(check_results),
+		"artifacts": meta["artifacts"],
+		"repair_brief": build_repair_brief_json(meta["status"], fail_threshold, critical_count, error_count, warning_count, info_count, check_results),
+		"spec": build_spec_json(config, check_results),
+		"eval": build_eval_json(config),
+		"visual": build_visual_json(config, meta),
+		"accessibility": build_a11y_json(config, check_results),
+		"metadata": {
+			"tool": "lens",
+			"version": config["version"],
+			"phase": LENS_PHASE,
+			"fail_on": fail_threshold,
+			"allow_external": config["allow_external"],
+			"check_links": config["check_links"],
+			"timeout": config["timeout"],
+			"out_dir": meta["out_dir"]
+		}
+	}
+	
+	return to_json(report)
+}
+
+# Build the repair_brief object for JSON report.
+func build_repair_brief_json(status, fail_threshold, critical_count, error_count, warning_count, info_count, check_results) {
+	total_bad := critical_count + error_count + warning_count
+	if fail_threshold == "info" {
+		total_bad = critical_count + error_count + warning_count + info_count
+	}
+	if fail_threshold == "warning" {
+		total_bad = critical_count + error_count + warning_count
+	}
+	
+	if total_bad == 0 && status == "PASS" {
+		return {
+			"status": "pass",
+			"summary": "No findings at or above fail threshold.",
+			"first_artifacts_to_inspect": array(),
+			"recommended_steps": array(),
+			"avoid_assumptions": "No repair needed."
+		}
+	}
+	
+	if total_bad == 0 {
+		return {
+			"status": "fail",
+			"summary": "Fail threshold (" + fail_threshold + ") matches check base severity; no actual findings detected.",
+			"first_artifacts_to_inspect": array(),
+			"recommended_steps": array("Consider raising --fail-on to warning or error to avoid false failures."),
+			"avoid_assumptions": "No findings to act on — the failure is from check-level severity matching."
+		}
+	}
+	
+	mut steps := array()
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			sev := to_string(f["severity"])
+			if sev == "critical" || sev == "error" || sev == "warning" {
+				if is_trueish(has_key(f, "suggested_repair_task")) {
+					steps = append(steps, f["suggested_repair_task"])
+				}
+			}
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	
+	mut above := critical_count + error_count
+	if fail_threshold == "warning" {
+		above = critical_count + error_count + warning_count
+	}
+	if fail_threshold == "info" {
+		above = critical_count + error_count + warning_count + info_count
+	}
+	
+	return {
+		"status": "fail",
+		"summary": to_string(above) + " finding(s) at or above fail threshold of '" + fail_threshold + "'.",
+		"first_artifacts_to_inspect": get_first_artifacts(check_results),
+		"recommended_steps": steps,
+		"avoid_assumptions": "Do not assume root cause is framework-specific unless proven by evidence."
+	}
+}
+
+# Phase 7: Build spec metadata for JSON report.
+func build_spec_json(config, check_results) {
+	spec_path := ""
+	if is_trueish(has_key(config, "spec_path")) {
+		spec_path = to_string(config["spec_path"])
+	}
+	
+	if spec_path == "" {
+		return {
+			"enabled": false,
+			"path": ""
+		}
+	}
+	
+	return {
+		"enabled": true,
+		"path": spec_path,
+		"supported_assertions": count_spec_checks_run(check_results) + count_spec_checks_skipped(check_results),
+		"unsupported_assertions": 0,
+		"checks_run": count_spec_checks_run(check_results),
+		"checks_skipped": count_spec_checks_skipped(check_results)
+	}
+}
+
+# Phase 7: Build eval metadata for JSON report.
+func build_eval_json(config) {
+	eval_out := ""
+	if is_trueish(has_key(config, "eval_out")) {
+		eval_out = to_string(config["eval_out"])
+	}
+	
+	if eval_out == "" {
+		return {
+			"enabled": false,
+			"path": ""
+		}
+	}
+	
+	return {
+		"enabled": true,
+		"path": eval_out
+	}
+}
+
+# Phase 9: Build visual metadata for JSON report.
+func build_visual_json(config, meta) {
+	baseline_enabled := false
+	if is_trueish(has_key(config, "baseline")) {
+		baseline_enabled = is_trueish(config["baseline"])
+	}
+	
+	compare_enabled := false
+	if is_trueish(has_key(config, "compare_baseline")) {
+		compare_enabled = is_trueish(config["compare_baseline"])
+	}
+	
+	baseline_dir := ".lens/baselines"
+	if is_trueish(has_key(config, "baseline_dir")) {
+		baseline_dir = to_string(config["baseline_dir"])
+	}
+	
+	threshold := 0.01
+	if is_trueish(has_key(config, "diff_threshold")) {
+		threshold = config["diff_threshold"]
+	}
+	
+	mut results := array()
+	if is_trueish(has_key(meta, "visual_results")) {
+		results = meta["visual_results"]
+	}
+	
+	return {
+		"baseline_enabled": baseline_enabled,
+		"compare_enabled": compare_enabled,
+		"baseline_dir": baseline_dir,
+		"diff_threshold": threshold,
+		"results": results
+	}
+}
+
+# Phase 10: Build accessibility metadata for JSON report.
+func build_a11y_json(config, check_results) {
+	enabled := false
+	if is_trueish(has_key(config, "accessibility")) {
+		enabled = is_trueish(config["accessibility"])
+	}
+	
+	mut tags := array()
+	if is_trueish(has_key(config, "a11y_tags")) {
+		tags = config["a11y_tags"]
+	}
+	
+	include := ""
+	if is_trueish(has_key(config, "a11y_include")) {
+		include = to_string(config["a11y_include"])
+	}
+	
+	exclude := ""
+	if is_trueish(has_key(config, "a11y_exclude")) {
+		exclude = to_string(config["a11y_exclude"])
+	}
+	
+	# Find a11y check result
+	mut scan_count := 0
+	mut violation_count := 0
+	mut engine_available := false
+	mut engine_version := "unknown"
+	mut ci := 0
+	while ci < len(check_results) {
+		cr := check_results[ci]
+		if cr["id"] == "accessibility" {
+			violation_count = cr["finding_count"]
+			if is_trueish(has_key(cr, "scans")) {
+				scan_count = len(cr["scans"])
+			}
+			if is_trueish(has_key(cr, "engine_available")) {
+				engine_available = is_trueish(cr["engine_available"])
+			}
+			if is_trueish(has_key(cr, "engine_version")) {
+				engine_version = to_string(cr["engine_version"])
+			}
+		}
+		ci = ci + 1
+	}
+
+	return {
+		"enabled": enabled,
+		"engine": {
+			"name": "axe-core",
+			"version": engine_version,
+			"available": engine_available
+		},
+		"tags": tags,
+		"include": include,
+		"exclude": exclude,
+		"scan_count": scan_count,
+		"violation_count": violation_count,
+		"artifact": "accessibility.json"
+	}
+}
+
+# Generate metadata.json content.
+export func generate_metadata_json(config, meta, check_results, provider_meta) {
+	mut md := {
+		"tool": "lens",
+		"version": config["version"],
+		"phase": LENS_PHASE,
+		"url": redact_url(to_string(config["url"])),
+		"started_at": meta["started_at"],
+		"finished_at": meta["finished_at"],
+		"duration_ms": meta["duration_ms"],
+		"viewports": config["viewports"],
+		"status": meta["status"],
+		"exit_code": meta["exit_code"],
+		"fail_on": config["fail_on"],
+		"allow_external": config["allow_external"],
+		"check_links": config["check_links"],
+		"timeout": config["timeout"],
+		"out_dir": meta["out_dir"],
+		"hostname": "",
+		"os": "",
+		"provider": provider_meta
+	}
+	
+	return to_json(md)
+}
+
+# Helper: count findings of a given severity across all checks.
+func count_severity_findings(check_results, severity) {
+	mut count := 0
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			if to_string(f["severity"]) == severity {
+				count = count + 1
+			}
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	return count
+}
+
+# Helper: flatten all findings across all checks into a single array.
+func flatten_all_findings(check_results) {
+	mut flat := array()
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			flat = append(flat, findings[j])
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	return flat
+}
+
+# Phase 7: Count spec-backed checks that ran (not skipped).
+func count_spec_checks_run(check_results) {
+	mut count := 0
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		cid := to_string(cr["id"])
+		if is_trueish(str_starts_with(cid, "spec_")) {
+			if cr["status"] != "skipped" {
+				count = count + 1
+			}
+		}
+		idx = idx + 1
+	}
+	return count
+}
+
+# Phase 7: Count spec-backed checks that were skipped.
+func count_spec_checks_skipped(check_results) {
+	mut count := 0
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		cid := to_string(cr["id"])
+		if is_trueish(str_starts_with(cid, "spec_")) {
+			if cr["status"] == "skipped" {
+				count = count + 1
+			}
+		}
+		idx = idx + 1
+	}
+	return count
+}
+
+# Phase 7: Count spec-backed checks that failed.
+func count_spec_checks_failed(check_results) {
+	mut count := 0
+	mut idx := 0
+	while idx < len(check_results) {
+		cr := check_results[idx]
+		cid := to_string(cr["id"])
+		if is_trueish(str_starts_with(cid, "spec_")) {
+			if cr["status"] == "fail" {
+				count = count + 1
+			}
+		}
+		idx = idx + 1
+	}
+	return count
+}

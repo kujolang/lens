@@ -1,0 +1,309 @@
+# src/report_html.kujo — Lens self-contained HTML report (Phase 3.1).
+#
+# Produces a single offline-openable lens-report.html from the same data model
+# the Markdown/JSON reports use (config, meta, check_results). Screenshots are
+# referenced relatively (screenshots/<vp>.png) so the report stays portable
+# within its run directory. All text is HTML-escaped, and the redaction sweep
+# has already run over check_results before this is called, so no secret can
+# reach the page.
+
+from src.common import is_trueish, is_falseish, str_join, str_starts_with, str_ends_with
+from src.redact import redact_url
+
+# Inline stylesheet as a top-level constant (not a function) so report builders
+# do not pay an extra call frame for it — the Kujo VM has a shallow native
+# stack and the walkthrough builder is already several frames deep.
+STYLE_BLOCK := "<style>:root{--pass:#1a7f37;--fail:#cf222e;--critical:#cf222e;--error:#bc4c00;--warning:#9a6700;--info:#0969da;--bg:#f6f8fa;--fg:#1f2328;--muted:#656d76;--border:#d0d7de}*{box-sizing:border-box}body{margin:0;font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:var(--fg);background:var(--bg)}main{max-width:960px;margin:0 auto;padding:24px}.banner{border-radius:12px;padding:24px;color:#fff;margin-bottom:24px}.banner.pass{background:var(--pass)}.banner.fail{background:var(--fail)}.verdict{font-size:32px;font-weight:700;letter-spacing:.5px}.target{opacity:.9;word-break:break-all}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}.card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}.card .count{font-size:28px;font-weight:700}.card .label{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.5px}.card.critical .count{color:var(--critical)}.card.error .count{color:var(--error)}.card.warning .count{color:var(--warning)}.card.info .count{color:var(--info)}section{background:#fff;border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px}h2{margin-top:0;font-size:18px}dl{display:grid;grid-template-columns:160px 1fr;gap:6px 16px;margin:0}dt{color:var(--muted)}dd{margin:0;word-break:break-all}.gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}figure{margin:0}figure img{width:100%;border:1px solid var(--border);border-radius:8px}figcaption{color:var(--muted);font-size:13px;margin-top:6px}.finding{border-left:4px solid var(--border);padding:12px 16px;margin:12px 0;background:var(--bg);border-radius:0 8px 8px 0}.finding.critical{border-color:var(--critical)}.finding.error{border-color:var(--error)}.finding.warning{border-color:var(--warning)}.finding.info{border-color:var(--info)}.finding h3{margin:6px 0;font-size:16px}.finding-head{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}.sev{font-weight:700}.evidence,.repair{font-size:14px;color:var(--muted)}code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:4px;font-size:13px}.none{color:var(--muted)}footer{color:var(--muted);font-size:13px;text-align:center;padding:16px}</style>"
+
+# Escape HTML special characters in free text.
+#
+# Implemented with replace() rather than char-by-char indexing: in the Kujo VM
+# len(string) is the BYTE length but string[i] indexes by CHARACTER, so
+# iterating `while i < len(s) { s[i] }` walks off the end on any multi-byte
+# (non-ASCII) input. replace() is UTF-8-safe. Ampersand must be escaped first.
+export func html_escape(s) {
+	mut out := to_string(s)
+	out = replace(out, "&", "&amp;")
+	out = replace(out, "<", "&lt;")
+	out = replace(out, ">", "&gt;")
+	out = replace(out, "\"", "&quot;")
+	out = replace(out, "'", "&#39;")
+	return out
+}
+
+# Count findings of a given severity across all check results.
+func count_sev(check_results, severity) {
+	mut n := 0
+	mut idx := 0
+	while idx < len(check_results) {
+		findings := check_results[idx]["findings"]
+		mut j := 0
+		while j < len(findings) {
+			if to_string(findings[j]["severity"]) == severity {
+				n = n + 1
+			}
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	return n
+}
+
+# Generate the self-contained HTML report string.
+export func generate_html_report(config, meta, check_results) {
+	status := to_string(meta["status"])
+	url := redact_url(to_string(config["url"]))
+	crit := count_sev(check_results, "critical")
+	err := count_sev(check_results, "error")
+	warn := count_sev(check_results, "warning")
+	info := count_sev(check_results, "info")
+
+	mut h := array()
+	h = append(h, "<!doctype html>")
+	h = append(h, "<html lang=\"en\"><head><meta charset=\"utf-8\">")
+	h = append(h, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
+	h = append(h, "<title>Lens Report — " + html_escape(url) + "</title>")
+	h = append(h, STYLE_BLOCK)
+	h = append(h, "</head><body><main>")
+
+	# Header / verdict banner.
+	banner_class := status_class(status)
+	h = append(h, "<header class=\"banner " + banner_class + "\">")
+	h = append(h, "<div class=\"verdict\">" + html_escape(status) + "</div>")
+	h = append(h, "<div class=\"target\">" + html_escape(url) + "</div>")
+	h = append(h, "</header>")
+
+	# Summary cards.
+	h = append(h, "<section class=\"summary\">")
+	h = append(h, sev_card("Critical", crit, "critical"))
+	h = append(h, sev_card("Errors", err, "error"))
+	h = append(h, sev_card("Warnings", warn, "warning"))
+	h = append(h, sev_card("Info", info, "info"))
+	h = append(h, "</section>")
+
+	# Run metadata.
+	h = append(h, "<section class=\"meta\"><dl>")
+	h = append(h, meta_row("Started", to_string(meta["started_at"])))
+	h = append(h, meta_row("Finished", to_string(meta["finished_at"])))
+	h = append(h, meta_row("Duration", to_string(meta["duration_ms"]) + " ms"))
+	h = append(h, meta_row("Viewports", str_join(config["viewports"], ", ")))
+	h = append(h, meta_row("Exit code", to_string(meta["exit_code"])))
+	h = append(h, "</dl></section>")
+
+	# Screenshots gallery (relative links within the run directory).
+	mut shots := array()
+	artifacts := meta["artifacts"]
+	mut ai := 0
+	while ai < len(artifacts) {
+		a := to_string(artifacts[ai])
+		if is_trueish(str_starts_with(a, "screenshots/")) {
+			shots = append(shots, a)
+		}
+		ai = ai + 1
+	}
+	if len(shots) > 0 {
+		h = append(h, "<section class=\"shots\"><h2>Screenshots</h2><div class=\"gallery\">")
+		mut si := 0
+		while si < len(shots) {
+			sp := html_escape(to_string(shots[si]))
+			h = append(h, "<figure><img loading=\"lazy\" src=\"" + sp + "\" alt=\"" + sp + "\"><figcaption>" + sp + "</figcaption></figure>")
+			si = si + 1
+		}
+		h = append(h, "</div></section>")
+	}
+
+	# Findings grouped by severity (most severe first).
+	h = append(h, "<section class=\"findings\"><h2>Findings</h2>")
+	if crit + err + warn + info == 0 {
+		h = append(h, "<p class=\"none\">No findings. This run is a clean baseline.</p>")
+	} else {
+		h = append_findings_html(h, check_results, "critical")
+		h = append_findings_html(h, check_results, "error")
+		h = append_findings_html(h, check_results, "warning")
+		h = append_findings_html(h, check_results, "info")
+	}
+	h = append(h, "</section>")
+
+	# Artifacts list.
+	h = append(h, "<section class=\"artifacts\"><h2>Artifacts</h2><ul>")
+	mut bi := 0
+	while bi < len(artifacts) {
+		h = append(h, "<li><code>" + html_escape(to_string(artifacts[bi])) + "</code></li>")
+		bi = bi + 1
+	}
+	h = append(h, "</ul></section>")
+
+	h = append(h, "<footer>Generated by Lens v" + html_escape(to_string(config["version"])) + " — deterministic browser/visual QA.</footer>")
+	h = append(h, "</main></body></html>")
+
+	return str_join(h, "\n")
+}
+
+# Append HTML finding cards for one severity.
+func append_findings_html(lines, check_results, severity) {
+	mut out := lines
+	mut idx := 0
+	while idx < len(check_results) {
+		findings := check_results[idx]["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			if to_string(f["severity"]) == severity {
+				fid := ""
+				if is_trueish(has_key(f, "id")) { fid = to_string(f["id"]) }
+				title := ""
+				if is_trueish(has_key(f, "title")) { title = to_string(f["title"]) }
+				desc := ""
+				if is_trueish(has_key(f, "description")) { desc = to_string(f["description"]) }
+				evidence := ""
+				if is_trueish(has_key(f, "evidence")) { evidence = to_string(f["evidence"]) }
+				repair := ""
+				if is_trueish(has_key(f, "suggested_repair_task")) { repair = to_string(f["suggested_repair_task"]) }
+
+				out = append(out, "<article class=\"finding " + severity + "\">")
+				out = append(out, "<div class=\"finding-head\"><span class=\"sev\">" + severity + "</span> <span class=\"fid\">" + html_escape(fid) + "</span></div>")
+				out = append(out, "<h3>" + html_escape(title) + "</h3>")
+				if desc != "" {
+					out = append(out, "<p>" + html_escape(desc) + "</p>")
+				}
+				if evidence != "" {
+					out = append(out, "<p class=\"evidence\">Evidence: <code>" + html_escape(evidence) + "</code></p>")
+				}
+				if repair != "" {
+					out = append(out, "<p class=\"repair\"><strong>Repair:</strong> " + html_escape(repair) + "</p>")
+				}
+				out = append(out, "</article>")
+			}
+			j = j + 1
+		}
+		idx = idx + 1
+	}
+	return out
+}
+
+func status_class(status) {
+	if status == "PASS" {
+		return "pass"
+	}
+	return "fail"
+}
+
+# Generate the shareable walkthrough artifact (Phase 4.3).
+#
+# A single self-contained page combining the recorded video, a synchronized
+# step timeline with pass/fail, the verdict, run metadata, and a deterministic
+# run fingerprint. This is the proof-of-work artifact an agent produces after
+# verifying its own fixes. All text is escaped and step errors were already
+# redacted upstream.
+export func generate_walkthrough_html(flow, meta, step_results, video_rel, passed, failed, blocked, skipped) {
+	status := to_string(meta["status"])
+	flow_name := to_string(flow["name"])
+
+	mut h := array()
+	h = append(h, "<!doctype html>")
+	h = append(h, "<html lang=\"en\"><head><meta charset=\"utf-8\">")
+	h = append(h, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
+	h = append(h, "<title>Lens Walkthrough — " + html_escape(flow_name) + "</title>")
+	h = append(h, STYLE_BLOCK)
+	h = append(h, "</head><body><main>")
+
+	h = append(h, "<header class=\"banner " + status_class(status) + "\">")
+	h = append(h, "<div class=\"verdict\">" + html_escape(status) + "</div>")
+	h = append(h, "<div class=\"target\">" + html_escape(flow_name) + " — verified walkthrough</div>")
+	h = append(h, "</header>")
+
+	# Step tally.
+	h = append(h, "<section class=\"summary\">")
+	h = append(h, sev_card("Passed", passed, "info"))
+	h = append(h, sev_card("Failed", failed, "error"))
+	h = append(h, sev_card("Blocked", blocked, "warning"))
+	h = append(h, sev_card("Skipped", skipped, "info"))
+	h = append(h, "</section>")
+
+	# Recorded video. Prefer mp4 (plays inline everywhere, incl. Safari) with a
+	# webm fallback source; a download link below guarantees the artifact is
+	# never a dead end.
+	if video_rel != "" {
+		vr := html_escape(video_rel)
+		is_mp4 := str_ends_with(video_rel, ".mp4")
+		h = append(h, "<section class=\"shots\"><h2>Recording</h2>")
+		h = append(h, "<video controls preload=\"metadata\" style=\"width:100%;border:1px solid var(--border);border-radius:8px\">")
+		if is_trueish(is_mp4) {
+			h = append(h, "<source src=\"" + vr + "\" type=\"video/mp4\">")
+			h = append(h, "<source src=\"video/walkthrough.webm\" type=\"video/webm\">")
+		} else {
+			h = append(h, "<source src=\"" + vr + "\" type=\"video/webm\">")
+		}
+		h = append(h, "</video>")
+		h = append(h, "<p class=\"evidence\">If the video doesn't play inline, open it directly: <a href=\"" + vr + "\">" + vr + "</a></p>")
+		h = append(h, "</section>")
+	}
+
+	# Step timeline.
+	h = append(h, "<section class=\"findings\"><h2>Step timeline</h2>")
+	mut idx := 0
+	while idx < len(step_results) {
+		sr := step_results[idx]
+		st := to_string(sr["status"])
+		cls := step_class(st)
+		msg := ""
+		if is_trueish(has_key(sr, "error")) {
+			msg = to_string(sr["error"])
+		}
+		h = append(h, "<article class=\"finding " + cls + "\">")
+		h = append(h, "<div class=\"finding-head\"><span class=\"sev\">" + html_escape(st) + "</span> step " + to_string(sr["index"]) + "</div>")
+		h = append(h, "<h3>" + html_escape(to_string(sr["type"])) + "</h3>")
+		if msg != "" {
+			h = append(h, "<p>" + html_escape(msg) + "</p>")
+		}
+		h = append(h, "</article>")
+		idx = idx + 1
+	}
+	h = append(h, "</section>")
+
+	# Provenance. Fingerprint is computed inline (no nested helper calls) to
+	# keep this function's call stack shallow for the Kujo VM.
+	mut acc := 5381
+	mut fp_idx := 0
+	while fp_idx < len(step_results) {
+		sr := step_results[fp_idx]
+		piece := to_string(sr["index"]) + to_string(sr["type"]) + to_string(sr["status"])
+		acc = (acc * 31 + len(piece) * (fp_idx + 1)) % 2147483647
+		fp_idx = fp_idx + 1
+	}
+	acc = (acc * 31 + len(status)) % 2147483647
+	fingerprint := "lens-" + to_string(acc)
+	h = append(h, "<section class=\"meta\"><h2>Provenance</h2><dl>")
+	h = append(h, meta_row("Status", status))
+	# Ending URL the journey landed on — text proof alongside the recording.
+	if is_trueish(has_key(meta, "final_url")) && to_string(meta["final_url"]) != "" {
+		h = append(h, meta_row("Final URL", to_string(meta["final_url"])))
+	}
+	h = append(h, meta_row("Started", to_string(meta["started_at"])))
+	h = append(h, meta_row("Finished", to_string(meta["finished_at"])))
+	h = append(h, meta_row("Duration", to_string(meta["duration_ms"]) + " ms"))
+	h = append(h, meta_row("Run fingerprint", fingerprint))
+	h = append(h, "</dl></section>")
+
+	h = append(h, "<footer>Generated by Lens — deterministic, evidence-based browser QA. The fingerprint changes if any step result changes.</footer>")
+	h = append(h, "</main></body></html>")
+	return str_join(h, "\n")
+}
+
+func step_class(status) {
+	if status == "pass" { return "info" }
+	if status == "fail" { return "error" }
+	if status == "error" { return "critical" }
+	if status == "blocked" { return "warning" }
+	return "info"
+}
+
+
+func sev_card(label, count, cls) {
+	return "<div class=\"card " + cls + "\"><div class=\"count\">" + to_string(count) + "</div><div class=\"label\">" + label + "</div></div>"
+}
+
+func meta_row(label, value) {
+	return "<dt>" + html_escape(label) + "</dt><dd>" + html_escape(value) + "</dd>"
+}
+

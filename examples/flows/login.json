@@ -1,0 +1,20 @@
+{
+  "name": "Login walkthrough",
+  "description": "Interactive flow for `lens flow --execute --record --walkthrough`. Every step is still safety-checked before it runs.",
+  "url": "http://localhost:3000/login",
+  "viewports": ["desktop"],
+  "timeout_seconds": 20,
+  "allow_external": false,
+  "allow_destructive": false,
+  "steps": [
+    { "visit": "http://localhost:3000/login" },
+    { "assert_selector": "form" },
+    { "type": { "selector": "#email", "value": "demo@example.com" } },
+    { "type": { "selector": "#password", "value": "changeme", "secret": true } },
+    { "click": { "selector": "button[type=submit]", "safe": true } },
+    { "wait_for_selector": "main" },
+    { "assert_text": "Welcome" },
+    { "screenshot": { "name": "logged-in" } },
+    { "assert_no_console_errors": true }
+  ]
+}

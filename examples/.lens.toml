@@ -1,0 +1,11 @@
+# Example Lens project config. Copy to your project root as `.lens.toml`.
+# Precedence: built-in defaults < this file < CLI flags.
+
+fail_on         = "warning"               # info | warning | error | critical
+timeout         = 30                      # seconds
+viewports       = ["desktop", "mobile"]   # presets or custom "WxH" tokens
+check_links     = true
+max_links       = 25
+settle_ms       = 400                      # post network-idle settle window
+accessibility   = true
+a11y_tags       = ["wcag2a", "wcag2aa"]

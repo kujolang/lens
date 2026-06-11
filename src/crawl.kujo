@@ -1,0 +1,268 @@
+# src/crawl.kujo — Lens bounded same-origin crawl (Phase 2.5).
+#
+# Opt-in (`--crawl`). Starting from the validated URL, Lens discovers visible
+# same-origin links and visits them breadth-first, bounded by --max-depth and
+# --max-pages. Every existing safety guard is preserved: same-origin only,
+# unsafe schemes skipped, destructive-looking paths skipped, external URLs
+# never followed. This is NOT a general web crawler — it is a bounded sweep of
+# a local app's own pages.
+#
+# Each crawled page is captured with the same provider and given a lightweight,
+# self-contained health assessment (page load, console errors, network
+# failures, blank content). We deliberately do NOT route crawled pages through
+# the full run_all_checks pipeline: doing so from this depth would stack the VM
+# call frames of run() + run_crawl + every check, and the Kujo runtime gives
+# large functions large frames. A shallow assessment is both safe and exactly
+# what a crawl sweep cares about.
+
+from src.common import is_trueish, is_falseish, str_join
+from src.checks import normalize_url, is_same_origin, has_unsafe_scheme, is_destructive_path
+from src.provider import run_provider, provider_failed, extract_console_messages, extract_network_events, extract_dom_summaries, extract_all_links
+from src.validate import validate_url
+
+# Collect normalized, safe, same-origin candidate links from a provider result.
+# Returns an array of absolute URL strings (deduplicated by the caller).
+export func collect_crawl_candidates(provider_result, base_url) {
+	raw_links := extract_all_links(provider_result)
+	mut out := array()
+	mut idx := 0
+	while idx < len(raw_links) {
+		link := raw_links[idx]
+		href := ""
+		if is_trueish(has_key(link, "href")) {
+			href = to_string(link["href"])
+		}
+		# Check the unsafe scheme on the RAW href: normalization would rewrite
+		# e.g. "mailto:" into a same-origin path and hide the scheme.
+		if is_falseish(has_unsafe_scheme(href)) {
+			normalized := normalize_url(href, base_url)
+			if normalized != "" {
+				if is_falseish(is_destructive_path(normalized)) {
+					if is_trueish(is_same_origin(normalized, base_url)) {
+						out = append(out, normalized)
+					}
+				}
+			}
+		}
+		idx = idx + 1
+	}
+	return out
+}
+
+# Lightweight, shallow per-page health assessment from a provider result.
+# Returns { status, critical, error, warning, info, worst }.
+export func assess_page(provider_result) {
+	mut errors := 0
+	mut warnings := 0
+
+	# Console errors across viewports.
+	console_messages := extract_console_messages(provider_result)
+	mut ci := 0
+	while ci < len(console_messages) {
+		msg := console_messages[ci]
+		if is_trueish(has_key(msg, "type")) && to_string(msg["type"]) == "error" {
+			errors = errors + 1
+		}
+		ci = ci + 1
+	}
+
+	# Network failures (the bridge only records 4xx/5xx and request failures).
+	network_events := extract_network_events(provider_result)
+	errors = errors + len(network_events)
+
+	# Blank content: every captured viewport rendered essentially no text.
+	dom_summaries := extract_dom_summaries(provider_result)
+	if len(dom_summaries) > 0 {
+		mut blank_all := true
+		mut di := 0
+		while di < len(dom_summaries) {
+			s := dom_summaries[di]
+			mut tlen := 0
+			if is_trueish(has_key(s, "body_text_length")) && s["body_text_length"] != null {
+				tlen = to_int(to_string(s["body_text_length"]))
+			}
+			if tlen > 50 {
+				blank_all = false
+			}
+			di = di + 1
+		}
+		if is_trueish(blank_all) {
+			warnings = warnings + 1
+		}
+	}
+
+	mut worst := "info"
+	if errors > 0 {
+		worst = "error"
+	} else if warnings > 0 {
+		worst = "warning"
+	}
+
+	return {
+		"status": "ok",
+		"critical": 0,
+		"error": errors,
+		"warning": warnings,
+		"info": 0,
+		"worst": worst
+	}
+}
+
+# Whether a value is already present in an array (linear; crawl sets are small).
+func contains_url(arr, url) {
+	mut idx := 0
+	while idx < len(arr) {
+		if to_string(arr[idx]) == url {
+			return true
+		}
+		idx = idx + 1
+	}
+	return false
+}
+
+# Whether a frontier (array of {url, depth}) already contains a URL.
+func frontier_has(frontier, url) {
+	mut idx := 0
+	while idx < len(frontier) {
+		if to_string(frontier[idx]["url"]) == url {
+			return true
+		}
+		idx = idx + 1
+	}
+	return false
+}
+
+# Append candidate URLs to the frontier at the given depth, skipping any that
+# are already visited or already queued, and respecting the depth bound.
+func enqueue_candidates(frontier, candidates, depth, visited, max_depth) {
+	mut out := frontier
+	if depth > max_depth {
+		return out
+	}
+	mut idx := 0
+	while idx < len(candidates) {
+		url := to_string(candidates[idx])
+		if is_falseish(contains_url(visited, url)) && is_falseish(frontier_has(out, url)) {
+			out = append(out, { "url": url, "depth": depth })
+		}
+		idx = idx + 1
+	}
+	return out
+}
+
+# Return the more severe of two severity strings.
+func worse_of(a, b) {
+	order := array("info", "warning", "error", "critical")
+	mut ai := 0
+	mut bi := 0
+	mut i := 0
+	while i < len(order) {
+		if order[i] == a { ai = i }
+		if order[i] == b { bi = i }
+		i = i + 1
+	}
+	if bi > ai {
+		return b
+	}
+	return a
+}
+
+# Build a compact per-page summary from an assessment.
+func page_summary(url, depth, status, assessment) {
+	return {
+		"url": url,
+		"depth": depth,
+		"status": status,
+		"critical": assessment["critical"],
+		"error": assessment["error"],
+		"warning": assessment["warning"],
+		"info": assessment["info"]
+	}
+}
+
+# Run a bounded same-origin crawl.
+#
+# start_url:    the validated entry point (already captured by the caller)
+# start_result: the provider result for start_url (reused; not re-fetched)
+# config:       run config (uses max_depth, max_pages, allow_external, etc.)
+# out_dir:      run output directory (per-page screenshots go in subdirs)
+#
+# Returns: { "pages": [...], "worst_severity": str, "visited_count": int }.
+export func run_crawl(start_url, start_result, config, out_dir) {
+	max_depth := to_int(to_string(config["max_depth"]))
+	max_pages := to_int(to_string(config["max_pages"]))
+
+	mut pages := array()
+	mut visited := array()
+	mut worst := "info"
+
+	# Record the start page (depth 0) from the already-captured result.
+	visited = append(visited, start_url)
+	start_assess := assess_page(start_result)
+	pages = append(pages, page_summary(start_url, 0, "ok", start_assess))
+	worst = worse_of(worst, to_string(start_assess["worst"]))
+
+	# Ensure the per-page output parent exists once.
+	pages_dir := out_dir + "/pages"
+	if is_falseish(path_exists(pages_dir)) {
+		create_dir(pages_dir)
+	}
+
+	# BFS frontier: arrays of {url, depth}.
+	mut frontier := enqueue_candidates(array(), collect_crawl_candidates(start_result, start_url), 1, visited, max_depth)
+
+	mut fi := 0
+	while fi < len(frontier) {
+		if len(visited) >= max_pages {
+			fi = len(frontier) + 1
+		} else {
+			item := frontier[fi]
+			page_url := to_string(item["url"])
+			depth := to_int(to_string(item["depth"]))
+			fi = fi + 1
+
+			if is_falseish(contains_url(visited, page_url)) {
+				visited = append(visited, page_url)
+				result := crawl_capture_page(page_url, depth, config, out_dir, len(visited))
+				pages = append(pages, result["summary"])
+				worst = worse_of(worst, to_string(result["worst"]))
+				if is_trueish(result["ok"]) && depth < max_depth {
+					cands := collect_crawl_candidates(result["provider_result"], start_url)
+					frontier = enqueue_candidates(frontier, cands, depth + 1, visited, max_depth)
+				}
+			}
+		}
+	}
+
+	return { "pages": pages, "worst_severity": worst, "visited_count": len(visited) }
+}
+
+# Capture and assess a single crawl page. Kept as its own function so the
+# per-page work stays shallow. Returns { summary, worst, ok, provider_result }.
+func crawl_capture_page(page_url, depth, config, out_dir, seq) {
+	# Safety re-check before every navigation.
+	vd := validate_url(page_url, config["allow_external"])
+	if is_falseish(vd["valid"]) {
+		return { "summary": page_summary(page_url, depth, "blocked", assess_page({"viewports": array()})), "worst": "warning", "ok": false, "provider_result": {} }
+	}
+
+	page_out := out_dir + "/pages/" + to_string(seq)
+	if is_falseish(path_exists(page_out)) {
+		create_dir(page_out)
+		create_dir(page_out + "/screenshots")
+	}
+
+	presult := run_provider(page_url, config, page_out)
+	if is_trueish(provider_failed(presult)) {
+		blocked_assess := { "critical": 0, "error": 1, "warning": 0, "info": 0 }
+		return { "summary": page_summary(page_url, depth, "error", blocked_assess), "worst": "error", "ok": false, "provider_result": presult }
+	}
+
+	assessment := assess_page(presult)
+	return {
+		"summary": page_summary(page_url, depth, "ok", assessment),
+		"worst": assessment["worst"],
+		"ok": true,
+		"provider_result": presult
+	}
+}

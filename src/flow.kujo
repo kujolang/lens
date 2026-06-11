@@ -1,0 +1,300 @@
+# src/flow.kujo — Lens flow file parsing, validation, and execution.
+#
+# Supports a deterministic subset of browser flow steps.
+# Safety rules block destructive actions by default.
+
+from src.common import is_trueish, is_falseish, str_starts_with, str_contains, str_lower
+
+# Return a copy of a flow safe to persist to flow.json: typed-input values are
+# replaced with [REDACTED] so credentials/secrets entered via `type` steps
+# never reach an artifact. The flow's structure is otherwise preserved.
+export func redact_flow_for_output(flow) {
+	mut out := flow
+	if is_falseish(has_key(flow, "steps")) {
+		return out
+	}
+	mut red_steps := array()
+	steps := flow["steps"]
+	mut idx := 0
+	while idx < len(steps) {
+		mut step := steps[idx]
+		if is_trueish(has_key(step, "type")) {
+			mut td := step["type"]
+			if is_trueish(has_key(td, "value")) {
+				td["value"] = "[REDACTED]"
+			}
+			step["type"] = td
+		}
+		red_steps = append(red_steps, step)
+		idx = idx + 1
+	}
+	out["steps"] = red_steps
+	return out
+}
+
+# Known flow step types.
+STEP_TYPES := array(
+	"visit",
+	"wait_for_text",
+	"wait_for_selector",
+	"assert_text",
+	"assert_selector",
+	"assert_not_selector",
+	"click",
+	"type",
+	"screenshot",
+	"assert_no_console_errors",
+	"assert_no_failed_requests",
+	"wait",
+	"scroll"
+)
+
+# Maximum number of steps a flow file may declare (robustness bound).
+MAX_FLOW_STEPS := 200
+
+# Destructive keywords for safety blocking.
+DESTRUCTIVE_KEYWORDS := array(
+	"delete", "destroy", "remove", "logout", "signout", "sign-out",
+	"cancel subscription", "unsubscribe", "payment", "purchase", "buy",
+	"checkout", "submit payment", "confirm", "archive", "disable",
+	"deactivate", "revoke", "reset", "drop", "truncate"
+)
+
+# ── Flow file loading ────────────────────────────────────────────────
+
+# Load and parse a flow file (JSON format).
+export func load_flow_file(flow_path) {
+	if flow_path == "" {
+		return {
+			"valid": false,
+			"error": "No flow file path provided.",
+			"flow": {}
+		}
+	}
+	
+	if is_falseish(file_exists(flow_path)) {
+		return {
+			"valid": false,
+			"error": "Flow file not found: " + flow_path,
+			"flow": {}
+		}
+	}
+	
+	raw := read_file(flow_path)
+	if raw == "" {
+		return {
+			"valid": false,
+			"error": "Flow file is empty: " + flow_path,
+			"flow": {}
+		}
+	}
+	
+	parsed := parse_json(raw)
+	if is_falseish(has_key(parsed, "steps")) && is_falseish(has_key(parsed, "name")) {
+		return {
+			"valid": false,
+			"error": "Failed to parse flow file as JSON or missing required fields: " + flow_path,
+			"flow": {}
+		}
+	}
+	
+	return validate_flow(parsed, flow_path)
+}
+
+# Validate flow structure and defaults.
+func validate_flow(flow_data, flow_path) {
+	mut flow := {}
+	
+	# Name
+	flow["name"] = ""
+	if is_trueish(has_key(flow_data, "name")) {
+		flow["name"] = to_string(flow_data["name"])
+	}
+	
+	# Description
+	flow["description"] = ""
+	if is_trueish(has_key(flow_data, "description")) {
+		flow["description"] = to_string(flow_data["description"])
+	}
+	
+	# URL
+	flow["url"] = ""
+	if is_trueish(has_key(flow_data, "url")) {
+		flow["url"] = to_string(flow_data["url"])
+	}
+	
+	# Viewports
+	flow["viewports"] = array("desktop", "mobile")
+	if is_trueish(has_key(flow_data, "viewports")) {
+		flow["viewports"] = flow_data["viewports"]
+	}
+	
+	# Timeout
+	flow["timeout_seconds"] = 20
+	if is_trueish(has_key(flow_data, "timeout_seconds")) {
+		flow["timeout_seconds"] = to_int(to_string(flow_data["timeout_seconds"]))
+	}
+	
+	# Safety flags
+	flow["allow_external"] = false
+	if is_trueish(has_key(flow_data, "allow_external")) {
+		flow["allow_external"] = is_trueish(flow_data["allow_external"])
+	}
+	
+	flow["allow_destructive"] = false
+	if is_trueish(has_key(flow_data, "allow_destructive")) {
+		flow["allow_destructive"] = is_trueish(flow_data["allow_destructive"])
+	}
+	
+	# Steps
+	mut steps := array()
+	if is_trueish(has_key(flow_data, "steps")) {
+		raw_steps := flow_data["steps"]
+		mut si := 0
+		while si < len(raw_steps) {
+			steps = append(steps, raw_steps[si])
+			si = si + 1
+		}
+	}
+	flow["steps"] = steps
+
+	if len(steps) == 0 {
+		return {
+			"valid": false,
+			"error": "Flow file has no steps: " + flow_path,
+			"flow": flow
+		}
+	}
+
+	# Bound the step count. The Kujo VM has a shallow native stack and can
+	# abort (uncatchably) on pathological input; capping flows keeps untrusted
+	# files from threading huge step lists through the execution pipeline.
+	if len(steps) > MAX_FLOW_STEPS {
+		return {
+			"valid": false,
+			"error": "Flow has too many steps (" + to_string(len(steps)) + " > " + to_string(MAX_FLOW_STEPS) + "): " + flow_path,
+			"flow": flow
+		}
+	}
+	
+	return {
+		"valid": true,
+		"error": "",
+		"flow": flow
+	}
+}
+
+# ── Safety checks ───────────────────────────────────────────────────
+
+# Check if a selector or text value looks destructive.
+export func is_destructive(value) {
+	lower := str_lower(to_string(value))
+	mut ki := 0
+	while ki < len(DESTRUCTIVE_KEYWORDS) {
+		kw := str_lower(DESTRUCTIVE_KEYWORDS[ki])
+		if is_trueish(str_contains(lower, kw)) {
+			return true
+		}
+		ki = ki + 1
+	}
+	return false
+}
+
+# Check if a click step is allowed under safety rules.
+export func check_click_safety(step, flow) {
+	# Must have safe: true
+	if is_falseish(has_key(step, "safe")) {
+		return {
+			"allowed": false,
+			"reason": "Click step requires 'safe: true' to proceed."
+		}
+	}
+	
+	if is_falseish(is_trueish(step["safe"])) {
+		return {
+			"allowed": false,
+			"reason": "Click step requires 'safe: true' to proceed."
+		}
+	}
+	
+	# Check for destructive selectors
+	mut selector := ""
+	if is_trueish(has_key(step, "selector")) {
+		selector = to_string(step["selector"])
+	}
+	
+	if is_trueish(is_destructive(selector)) {
+		flow_allow := is_trueish(flow["allow_destructive"])
+		step_destructive := false
+		if is_trueish(has_key(step, "destructive")) {
+			step_destructive = is_trueish(step["destructive"])
+		}
+		
+		if is_falseish(flow_allow) || is_falseish(step_destructive) {
+			return {
+				"allowed": false,
+				"reason": "Click target '" + selector + "' appears destructive. Requires flow-level allow_destructive: true and step-level destructive: true."
+			}
+		}
+	}
+	
+	return {
+		"allowed": true,
+		"reason": ""
+	}
+}
+
+# Check if a type step is safe.
+export func check_type_safety(step) {
+	if is_trueish(has_key(step, "selector")) {
+		sel := str_lower(to_string(step["selector"]))
+		if is_trueish(str_contains(sel, "password")) || is_trueish(str_contains(sel, "token")) || is_trueish(str_contains(sel, "secret")) {
+			if is_falseish(has_key(step, "secret")) || is_falseish(is_trueish(step["secret"])) {
+				return {
+					"allowed": false,
+					"reason": "Type target looks like a secret field. Requires step-level 'secret: true' to proceed."
+				}
+			}
+		}
+	}
+	return {
+		"allowed": true,
+		"reason": ""
+	}
+}
+
+# ── Step type detection ──────────────────────────────────────────────
+
+# Get the step type from a step dict (single-key object like {visit: url}).
+export func get_step_type(step) {
+	if is_trueish(has_key(step, "visit")) { return "visit" }
+	if is_trueish(has_key(step, "wait_for_text")) { return "wait_for_text" }
+	if is_trueish(has_key(step, "wait_for_selector")) { return "wait_for_selector" }
+	if is_trueish(has_key(step, "assert_text")) { return "assert_text" }
+	if is_trueish(has_key(step, "assert_selector")) { return "assert_selector" }
+	if is_trueish(has_key(step, "assert_not_selector")) { return "assert_not_selector" }
+	if is_trueish(has_key(step, "click")) { return "click" }
+	if is_trueish(has_key(step, "type")) { return "type" }
+	if is_trueish(has_key(step, "screenshot")) { return "screenshot" }
+	if is_trueish(has_key(step, "assert_no_console_errors")) { return "assert_no_console_errors" }
+	if is_trueish(has_key(step, "assert_no_failed_requests")) { return "assert_no_failed_requests" }
+	if is_trueish(has_key(step, "wait")) { return "wait" }
+	if is_trueish(has_key(step, "scroll")) { return "scroll" }
+	return "unknown"
+}
+
+# Get the value for a simple step (string value like {visit: "url"}).
+export func get_step_value(step, key) {
+	if is_trueish(has_key(step, key)) {
+		return to_string(step[key])
+	}
+	return ""
+}
+
+# Get a dict value for a complex step (object value like {click: {selector: "...", safe: true}}).
+export func get_step_dict(step, key) {
+	if is_trueish(has_key(step, key)) {
+		return step[key]
+	}
+	return {}
+}

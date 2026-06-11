@@ -1,0 +1,145 @@
+# src/eval.kujo — Lens Eval-compatible output generation.
+#
+# Produces a stable JSON result file that Eval (or other grading tools)
+# can consume. Includes normal Lens check results and Spec-backed results
+# when --spec is used.
+
+from src.common import is_trueish, is_falseish
+from src.redact import redact_url, redact_text
+
+# Generate Eval-compatible JSON output.
+# check_results: array of check result dicts (from run_all_checks)
+# spec_results: array of spec-backed check result dicts (empty if no --spec)
+# config: the run config dict
+# meta: the run metadata dict
+export func generate_eval_output(config, meta, check_results, spec_results) {
+	# Collect all findings from check_results
+	mut all_results := array()
+	
+	# Add normal check results
+	mut ci := 0
+	while ci < len(check_results) {
+		cr := check_results[ci]
+		findings := cr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			all_results = append(all_results, finding_to_eval_result(f))
+			j = j + 1
+		}
+		ci = ci + 1
+	}
+	
+	# Add spec-backed results
+	mut si := 0
+	while si < len(spec_results) {
+		sr := spec_results[si]
+		findings := sr["findings"]
+		mut j := 0
+		while j < len(findings) {
+			f := findings[j]
+			all_results = append(all_results, finding_to_eval_result(f))
+			j = j + 1
+		}
+		si = si + 1
+	}
+	
+	# Count by status
+	mut passed := 0
+	mut failed := 0
+	mut skipped := 0
+	mut ri := 0
+	while ri < len(all_results) {
+		r := all_results[ri]
+		if r["status"] == "pass" {
+			passed = passed + 1
+		} else if r["status"] == "fail" {
+			failed = failed + 1
+		} else {
+			skipped = skipped + 1
+		}
+		ri = ri + 1
+	}
+	
+	fail_threshold := "error"
+	if is_trueish(has_key(config, "fail_on")) {
+		fail_threshold = to_string(config["fail_on"])
+	}
+	
+	mut eval_doc := {
+		"schema_version": 1,
+		"tool": "lens",
+		"status": meta["status"],
+		"url": redact_url(to_string(config["url"])),
+		"started_at": meta["started_at"],
+		"finished_at": meta["finished_at"],
+		"duration_ms": meta["duration_ms"],
+		"summary": {
+			"total": len(all_results),
+			"passed": passed,
+			"failed": failed,
+			"skipped": skipped
+		},
+		"results": all_results,
+		"artifacts": meta["artifacts"]
+	}
+	
+	# Add spec metadata if used
+	if is_trueish(has_key(config, "spec_path")) {
+		spec_path := to_string(config["spec_path"])
+		if spec_path != "" {
+			eval_doc["spec"] = {
+				"path": spec_path,
+				"enabled": true
+			}
+		}
+	}
+	
+	return to_json(eval_doc)
+}
+
+# Convert a Lens finding to an Eval-compatible result entry.
+func finding_to_eval_result(finding) {
+	mut status := "fail"
+	sev := to_string(finding["severity"])
+	if sev == "info" {
+		status = "pass"
+	}
+	
+	mut fid := ""
+	if is_trueish(has_key(finding, "id")) {
+		fid = to_string(finding["id"])
+	}
+	
+	mut title := ""
+	if is_trueish(has_key(finding, "title")) {
+		title = to_string(finding["title"])
+	}
+	
+	mut desc := ""
+	if is_trueish(has_key(finding, "description")) {
+		desc = to_string(finding["description"])
+	}
+	
+	mut evidence := ""
+	if is_trueish(has_key(finding, "evidence")) {
+		evidence = to_string(finding["evidence"])
+	}
+	
+	mut repair := ""
+	if is_trueish(has_key(finding, "suggested_repair_task")) {
+		repair = to_string(finding["suggested_repair_task"])
+	}
+	
+	# Defense in depth: scrub any secrets that may appear in free-text
+	# fields, in case an upstream finding was not already redacted.
+	return {
+		"id": fid,
+		"name": redact_text(title),
+		"status": status,
+		"severity": sev,
+		"evidence": array(redact_text(evidence)),
+		"message": redact_text(desc),
+		"suggested_repair_task": redact_text(repair)
+	}
+}

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Lens — deterministic browser/visual QA tool for AI-built software.
+#
+# Usage: lens check <url> [flags]
+#
+# This is a thin shell wrapper that delegates to the Kujo runtime.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+KUJO_BIN="${KUJO_BIN:-${SCRIPT_DIR}/../kujo/target/debug/kujo}"
+
+exec "${KUJO_BIN}" run "${SCRIPT_DIR}/lens.kujo" -- "$@"

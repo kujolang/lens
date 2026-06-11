@@ -1,0 +1,126 @@
+# src/validate.kujo — Lens URL validation and safety checks.
+#
+# Lens is local-first. By default, only localhost, 127.0.0.1, and ::1
+# are allowed. External URLs require the --allow-external flag.
+
+from src.common import str_starts_with, str_contains, str_lower, is_trueish, is_falseish, str_trim
+
+# Extract the host portion from a URL string.
+# Handles: http://host, https://host, http://host:port, https://host:port,
+# and bracketed IPv6 like http://[::1]:port.
+# Returns empty string on parse failure.
+export func extract_host(raw_url) {
+	mut url := str_lower(to_string(raw_url))
+	
+	# Strip scheme
+	mut host_part := ""
+	if is_trueish(str_starts_with(url, "https://")) {
+		host_part = substring(url, 8, len(url))
+	} else if is_trueish(str_starts_with(url, "http://")) {
+		host_part = substring(url, 7, len(url))
+	} else {
+		return ""
+	}
+	
+	# Strip path and query
+	mut idx := 0
+	while idx < len(host_part) {
+		ch := host_part[idx]
+		if ch == "/" || ch == "?" || ch == "#" {
+			host_part = substring(host_part, 0, idx)
+			idx = len(host_part) + 1
+		}
+		idx = idx + 1
+	}
+	
+	# Handle IPv6 bracket notation: [::1]:port → [::1]
+	if is_trueish(str_starts_with(host_part, "[")) {
+		mut bracket_idx := index_of(host_part, "]")
+		if bracket_idx >= 0 {
+			return substring(host_part, 0, bracket_idx + 1)
+		}
+		return host_part
+	}
+	
+	# Strip port (colon followed by digits).
+	# For bare IPv6 addresses like ::1, skip stripping since
+	# the colons are part of the address, not port separators.
+	# We detect this by checking if the first colon is at position 0.
+	mut colon_idx := index_of(host_part, ":")
+	if colon_idx > 0 {
+		host_part = substring(host_part, 0, colon_idx)
+	}
+	
+	return host_part
+}
+
+# Check if a URL has a valid http/https scheme.
+export func has_valid_scheme(raw_url) {
+	mut url := str_lower(to_string(raw_url))
+	return is_trueish(str_starts_with(url, "http://")) || is_trueish(str_starts_with(url, "https://"))
+}
+
+# Check if a host is a localhost-equivalent value.
+export func is_localhost_host(host) {
+	mut h := str_lower(to_string(host))
+	return h == "localhost" || h == "127.0.0.1" || h == "::1" || h == "[::1]"
+}
+
+# Check if a URL points to localhost.
+export func is_localhost_url(raw_url) {
+	if is_falseish(has_valid_scheme(raw_url)) {
+		return false
+	}
+	host := extract_host(raw_url)
+	if host == "" {
+		return false
+	}
+	return is_localhost_host(host)
+}
+
+# Validate a URL and return a result dict.
+# Returns:
+#   { valid: bool, error: string } — error is empty when valid.
+export func validate_url(raw_url, allow_external) {
+	mut result := {
+		"valid": true,
+		"error": ""
+	}
+	
+	# Check for empty URL
+	mut url := to_string(raw_url)
+	if is_trueish(str_trim(url) == "") {
+		result["valid"] = false
+		result["error"] = "URL is required."
+		return result
+	}
+	
+	# Check scheme
+	if is_falseish(has_valid_scheme(url)) {
+		result["valid"] = false
+		result["error"] = "URL must start with http:// or https://."
+		return result
+	}
+	
+	# Extract and validate host
+	host := extract_host(url)
+	if host == "" {
+		result["valid"] = false
+		result["error"] = "Could not parse host from URL."
+		return result
+	}
+	
+	# Localhost check
+	if is_trueish(is_localhost_host(host)) {
+		return result
+	}
+	
+	# External URL check
+	if is_falseish(allow_external) {
+		result["valid"] = false
+		result["error"] = "External URLs are blocked by default. Use --allow-external to check public URLs."
+		return result
+	}
+	
+	return result
+}

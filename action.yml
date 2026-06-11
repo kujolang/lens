@@ -1,0 +1,67 @@
+name: "Lens Browser QA"
+description: "Run deterministic browser/visual QA with Lens and upload the report."
+author: "Robert DeVore"
+branding:
+  icon: "eye"
+  color: "blue"
+
+inputs:
+  url:
+    description: "URL to check (localhost-first; use allow-external for public URLs)."
+    required: true
+  fail-on:
+    description: "Severity threshold: info | warning | error | critical."
+    required: false
+    default: "error"
+  args:
+    description: "Extra Lens flags (e.g. '--html --accessibility --check-links')."
+    required: false
+    default: "--html"
+  lens-dir:
+    description: "Path to the lens checkout."
+    required: false
+    default: "."
+  kujo-bin:
+    description: "Path to the built kujo binary."
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: "Lens exit code (0 ok, 1 findings, 2-4 setup/runtime)."
+    value: ${{ steps.run.outputs.exit-code }}
+  report-dir:
+    description: "Directory containing the generated report and artifacts."
+    value: ${{ steps.run.outputs.report-dir }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install bridge dependencies
+      shell: bash
+      working-directory: ${{ inputs.lens-dir }}/bridge
+      run: |
+        npm ci
+        npx playwright install chromium
+
+    - name: Run Lens
+      id: run
+      shell: bash
+      working-directory: ${{ inputs.lens-dir }}
+      run: |
+        if [ -n "${{ inputs.kujo-bin }}" ]; then export KUJO_BIN="${{ inputs.kujo-bin }}"; fi
+        OUT=".lens/runs/ci"
+        set +e
+        ./lens check "${{ inputs.url }}" --fail-on "${{ inputs.fail-on }}" --out "$OUT" ${{ inputs.args }}
+        code=$?
+        set -e
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        echo "report-dir=$OUT" >> "$GITHUB_OUTPUT"
+        exit $code
+
+    - name: Upload Lens report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: lens-report
+        path: ${{ inputs.lens-dir }}/.lens/runs/ci

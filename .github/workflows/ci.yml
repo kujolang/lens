@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Lens runs on the Kujo runtime, which lives in a sibling repo (kujolang/kujo).
+# CI checks it out next to this repo, builds the `kujo` binary, and points the
+# test suite at it via KUJO_BIN. If your fork keeps Kujo elsewhere, adjust the
+# checkout `repository`/`ref` below.
+jobs:
+  test:
+    name: Tests + checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Lens
+        uses: actions/checkout@v4
+        with:
+          path: lens
+
+      - name: Checkout Kujo runtime
+        uses: actions/checkout@v4
+        with:
+          repository: kujolang/kujo
+          path: kujo
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            kujo/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('kujo/Cargo.lock') }}
+
+      - name: Build Kujo
+        working-directory: kujo
+        run: cargo build
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: lens/bridge/package-lock.json
+
+      - name: Install bridge deps
+        working-directory: lens/bridge
+        run: npm ci
+
+      - name: Bridge syntax check
+        working-directory: lens
+        run: |
+          node --check bridge/browser-bridge.js
+          node --check bridge/flow-bridge.js
+
+      - name: Bridge unit tests
+        working-directory: lens/bridge
+        run: node --test
+
+      - name: Run test suite
+        working-directory: lens
+        env:
+          KUJO_BIN: ${{ github.workspace }}/kujo/target/debug/kujo
+        run: ${{ env.KUJO_BIN }} run tests/lens_tests.kujo
+
+  e2e:
+    name: End-to-end (real Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Lens
+        uses: actions/checkout@v4
+        with:
+          path: lens
+
+      - name: Checkout Kujo runtime
+        uses: actions/checkout@v4
+        with:
+          repository: kujolang/kujo
+          path: kujo
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            kujo/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('kujo/Cargo.lock') }}
+
+      - name: Build Kujo
+        working-directory: kujo
+        run: cargo build
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install bridge + Chromium
+        working-directory: lens/bridge
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run Lens against a real server
+        working-directory: lens
+        env:
+          KUJO_BIN: ${{ github.workspace }}/kujo/target/debug/kujo
+        run: |
+          set -euo pipefail
+          # Serve a fixture page with a known overflow element.
+          mkdir -p /tmp/site
+          printf '<!doctype html><title>CI Fixture</title><h1>Hello</h1><main>ok</main><a href="/">self</a>' > /tmp/site/index.html
+          ( cd /tmp/site && python3 -m http.server 8099 --bind 127.0.0.1 & echo $! > /tmp/srv.pid )
+          sleep 1
+
+          echo "::group::lens check (--html --check-links --accessibility)"
+          ./lens check http://127.0.0.1:8099 --html --check-links --accessibility --out /tmp/run
+          echo "::endgroup::"
+
+          # Assert the core artifacts were produced.
+          for f in lens-report.md lens-report.json metadata.json console.json network.json lens-report.html screenshots/desktop.png screenshots/mobile.png; do
+            test -s "/tmp/run/$f" || { echo "MISSING artifact: $f"; exit 1; }
+          done
+          grep -q '"status"' /tmp/run/lens-report.json
+
+          echo "::group::lens flow --execute --record --walkthrough"
+          printf '{"name":"ci","url":"http://127.0.0.1:8099/","viewports":["desktop"],"timeout_seconds":20,"steps":[{"visit":"http://127.0.0.1:8099/"},{"assert_selector":"h1"},{"assert_text":"Hello"},{"screenshot":{"name":"home"}},{"assert_no_console_errors":true}]}' > /tmp/flow.json
+          ./lens flow /tmp/flow.json --execute --record --walkthrough --out /tmp/flow-run
+          echo "::endgroup::"
+          test -s /tmp/flow-run/walkthrough.html || { echo "MISSING walkthrough.html"; exit 1; }
+          test -s /tmp/flow-run/video/walkthrough.webm || { echo "MISSING recording"; exit 1; }
+
+          # External URL must be blocked with exit code 2.
+          set +e
+          ./lens check https://example.com --out /tmp/ext >/dev/null 2>&1
+          test $? -eq 2 || { echo "external URL not blocked with exit 2"; exit 1; }
+          set -e
+
+          kill "$(cat /tmp/srv.pid)" 2>/dev/null || true
+          echo "e2e OK"
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            /tmp/run
+            /tmp/flow-run

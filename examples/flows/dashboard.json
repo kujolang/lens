@@ -1,0 +1,17 @@
+{
+  "name": "Dashboard smoke flow",
+  "description": "Verify the dashboard renders key UI safely (read-only).",
+  "url": "http://localhost:3000/dashboard",
+  "viewports": ["desktop", "mobile"],
+  "timeout_seconds": 20,
+  "allow_external": false,
+  "allow_destructive": false,
+  "steps": [
+    { "visit": "http://localhost:3000/dashboard" },
+    { "screenshot": { "name": "initial" } },
+    { "assert_selector": "main" },
+    { "assert_text": "Recent Activity" },
+    { "assert_no_console_errors": true },
+    { "assert_no_failed_requests": true }
+  ]
+}

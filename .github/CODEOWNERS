@@ -1,0 +1,6 @@
+# Default owner for everything in this repo.
+*       @robertdevore
+
+# Security-sensitive areas warrant extra scrutiny.
+/src/redact.kujo      @robertdevore
+/bridge/              @robertdevore

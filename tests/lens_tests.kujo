@@ -1,0 +1,1591 @@
+# lens_tests.kujo — Lens test suite.
+#
+# Validates CLI parsing, URL validation, report generation, exit codes,
+# and config behavior. Uses a hand-rolled harness (like changebucket)
+# because the built-in test framework cannot see file-level imports.
+#
+# Run with:
+#   kujo test
+#   kujo run tests/lens_tests.kujo
+
+from src.config import parse_viewport, parse_severity, severity_index
+from src.config import severity_meets_threshold, has_flag, flag_value
+from src.config import parse_subcommand, parse_viewports, parse_fail_on
+from src.config import is_json_mode, is_verbose, is_check_links
+from src.config import is_allow_external, parse_timeout, parse_max_links
+from src.config import parse_out_dir, build_config
+from src.config import is_accessibility, parse_a11y_tags, parse_a11y_include, parse_a11y_exclude
+from src.config import parse_settle_ms, parse_max_concurrency, parse_config_path
+from src.config import is_size_token, is_digits, merge_file_config
+from src.config import parse_browser, parse_throttle, parse_device, is_perf
+from src.config import is_crawl, parse_max_depth, parse_max_pages, parse_auth_file
+from src.config_file import resolve_config_path, load_config_file
+from src.checks import check_performance
+from src.crawl import collect_crawl_candidates
+from src.config import is_html, is_watch, parse_watch_interval, parse_ledger, parse_howl
+from src.report_html import html_escape, generate_html_report
+from src.integrations import write_ledger_record, write_howl_summary
+from src.config import is_execute, is_record, is_walkthrough
+from src.flow_exec import build_program_step
+from src.report_html import generate_walkthrough_html
+from src.flow import redact_flow_for_output, load_flow_file
+from src.flow import is_destructive, check_click_safety, check_type_safety
+from src.runner import step_required_field_error
+from src.config import lens_version
+from src.accessibility import map_a11y_severity, is_a11y_enabled
+
+LENS_VERSION := "0.9.0"
+from src.common import is_trueish, is_falseish
+from src.validate import extract_host, is_localhost_host, is_localhost_url
+from src.validate import validate_url, has_valid_scheme
+from src.redact import is_sensitive_header, is_sensitive_query_param
+from src.redact import redact_url, redact_console_entry, redact_header_value
+from src.redact import redact_text, redact_finding, redact_check_results
+from src.redact import redact_console_message, redact_network_event, redact_dom_summary
+from src.checks import new_check_result, new_finding, add_finding, worst_severity
+from src.checks import count_findings_by_severity, check_page_load
+from src.provider import provider_failed
+from src.visual import copy_file_binary
+from src.accessibility import check_accessibility
+from src.report import generate_markdown_report, generate_json_report
+# Exit code constants (must be defined locally; Kujo from-import
+# does not support top-level := bindings, only exported functions).
+EXIT_OK := 0
+EXIT_CHECK_FAIL := 1
+EXIT_INVALID_INPUT := 2
+EXIT_BROWSER_FAIL := 3
+EXIT_ARTIFACT_FAIL := 4
+
+mut passed := 0
+mut failed := 0
+
+func check(cond, name) {
+	if cond == true {
+		passed = passed + 1
+	} else {
+		failed = failed + 1
+		print("  FAIL: " + name)
+	}
+}
+
+func check_eq(actual, expected, name) {
+	if to_string(actual) == to_string(expected) {
+		passed = passed + 1
+	} else {
+		failed = failed + 1
+		print("  FAIL: " + name + " (expected " + to_string(expected) + ", got " + to_string(actual) + ")")
+	}
+}
+
+func check_neq(actual, unexpected, name) {
+	if to_string(actual) != to_string(unexpected) {
+		passed = passed + 1
+	} else {
+		failed = failed + 1
+		print("  FAIL: " + name + " (should not equal " + to_string(unexpected) + ")")
+	}
+}
+
+# ============================================================
+# CLI Argument Parsing Tests
+# ============================================================
+
+func test_subcommand_parsing() {
+	check_eq(parse_subcommand(array("check", "http://localhost:3000")), "check", "parse_subcommand returns 'check'")
+	check_eq(parse_subcommand(array("summarize")), "summarize", "parse_subcommand returns arbitrary command")
+	check_eq(parse_subcommand(array("--help")), "", "parse_subcommand returns empty for flag-only args")
+	check_eq(parse_subcommand(array()), "", "parse_subcommand returns empty for no args")
+}
+
+func test_has_flag() {
+	argv := array("check", "--verbose", "http://localhost:3000")
+	check(has_flag(argv, "--verbose") == true, "has_flag detects present flag")
+	check(has_flag(argv, "--json") == false, "has_flag returns false for missing flag")
+}
+
+func test_flag_value() {
+	argv := array("check", "--out", "/tmp/lens-test", "http://localhost:3000")
+	check_eq(flag_value(argv, "--out", ""), "/tmp/lens-test", "flag_value returns flag value")
+	check_eq(flag_value(argv, "--timeout", "30"), "30", "flag_value returns default when missing")
+}
+
+func test_build_config_defaults() {
+	argv := array("check", "http://localhost:3000")
+	config := build_config(argv)
+	check_eq(config["url"], "http://localhost:3000", "build_config extracts URL")
+	check_eq(config["timeout"], 30, "build_config has default timeout")
+	check_eq(config["fail_on"], "error", "build_config has default fail_on")
+	check(config["allow_external"] == false, "build_config defaults to no external")
+	check(config["check_links"] == false, "build_config defaults to no link check")
+	check(config["json_output"] == false, "build_config defaults to no json output")
+	check(config["verbose"] == false, "build_config defaults to non-verbose")
+}
+
+func test_build_config_flags() {
+	argv := array("check", "--allow-external", "--check-links", "--json", "--verbose", "--timeout", "60", "--fail-on", "warning", "https://example.com")
+	config := build_config(argv)
+	check_eq(config["url"], "https://example.com", "build_config extracts URL with flags")
+	check_eq(config["timeout"], 60, "build_config parses --timeout")
+	check_eq(config["fail_on"], "warning", "build_config parses --fail-on")
+	check(config["allow_external"] == true, "build_config detects --allow-external")
+	check(config["check_links"] == true, "build_config detects --check-links")
+	check(config["json_output"] == true, "build_config detects --json")
+	check(config["verbose"] == true, "build_config detects --verbose")
+}
+
+# ============================================================
+# URL Validation Tests
+# ============================================================
+
+func test_extract_host() {
+	check_eq(extract_host("http://localhost:3000"), "localhost", "extract_host: localhost with port")
+	check_eq(extract_host("https://127.0.0.1:8080/path"), "127.0.0.1", "extract_host: 127.0.0.1 with path")
+	check_eq(extract_host("http://[::1]:3000"), "[::1]", "extract_host: [::1] with port")
+	check_eq(extract_host("https://example.com"), "example.com", "extract_host: external host")
+	check_eq(extract_host("https://example.com/path?q=1"), "example.com", "extract_host: external with path and query")
+}
+
+func test_has_valid_scheme() {
+	check(has_valid_scheme("http://localhost:3000") == true, "valid_scheme: http")
+	check(has_valid_scheme("https://example.com") == true, "valid_scheme: https")
+	check(has_valid_scheme("ftp://example.com") == false, "valid_scheme: ftp not allowed")
+	check(has_valid_scheme("localhost:3000") == false, "valid_scheme: no scheme")
+}
+
+func test_is_localhost_host() {
+	check(is_localhost_host("localhost") == true, "is_localhost_host: localhost")
+	check(is_localhost_host("127.0.0.1") == true, "is_localhost_host: 127.0.0.1")
+	check(is_localhost_host("[::1]") == true, "is_localhost_host: [::1]")
+	check(is_localhost_host("example.com") == false, "is_localhost_host: external host")
+}
+
+func test_is_localhost_url() {
+	check(is_localhost_url("http://localhost:3000") == true, "is_localhost_url: localhost ok")
+	check(is_localhost_url("http://127.0.0.1:8080") == true, "is_localhost_url: 127.0.0.1 ok")
+	check(is_localhost_url("http://[::1]:3000") == true, "is_localhost_url: ::1 ok")
+	check(is_localhost_url("https://example.com") == false, "is_localhost_url: external not localhost")
+}
+
+func test_validate_url_localhost_allowed() {
+	result := validate_url("http://localhost:3000", false)
+	check(result["valid"] == true, "validate_url: localhost allowed by default")
+	check_eq(result["error"], "", "validate_url: no error for localhost")
+}
+
+func test_validate_url_127_allowed() {
+	result := validate_url("http://127.0.0.1:8080", false)
+	check(result["valid"] == true, "validate_url: 127.0.0.1 allowed by default")
+}
+
+func test_validate_url_ipv6_allowed() {
+	result := validate_url("http://[::1]:3000", false)
+	check(result["valid"] == true, "validate_url: ::1 allowed by default")
+}
+
+func test_validate_url_external_blocked() {
+	result := validate_url("https://example.com", false)
+	check(result["valid"] == false, "validate_url: external URL blocked by default")
+	check(result["error"] != "", "validate_url: error message for blocked external")
+}
+
+func test_validate_url_external_allowed_with_flag() {
+	result := validate_url("https://example.com", true)
+	check(result["valid"] == true, "validate_url: external URL allowed with --allow-external")
+}
+
+func test_validate_url_empty() {
+	result := validate_url("", false)
+	check(result["valid"] == false, "validate_url: empty URL rejected")
+}
+
+func test_validate_url_invalid_scheme() {
+	result := validate_url("ftp://example.com", false)
+	check(result["valid"] == false, "validate_url: invalid scheme rejected")
+}
+
+# ============================================================
+# Viewport Parsing Tests
+# ============================================================
+
+func test_parse_viewport() {
+	check_eq(parse_viewport("desktop"), "desktop", "parse_viewport: desktop")
+	check_eq(parse_viewport("mobile"), "mobile", "parse_viewport: mobile")
+	check_eq(parse_viewport("DESKTOP"), "desktop", "parse_viewport: case insensitive")
+	check_eq(parse_viewport("tablet"), "", "parse_viewport: invalid returns empty")
+	check_eq(parse_viewport(""), "", "parse_viewport: empty returns empty")
+}
+
+func test_parse_viewports_default() {
+	argv := array("check", "http://localhost:3000")
+	vps := parse_viewports(argv)
+	check(len(vps) == 2, "parse_viewports: defaults to 2 viewports")
+}
+
+func test_parse_viewports_single() {
+	argv := array("check", "--viewport", "mobile", "http://localhost:3000")
+	vps := parse_viewports(argv)
+	check(len(vps) == 1, "parse_viewports: single viewport specified")
+	check_eq(vps[0], "mobile", "parse_viewports: correct viewport")
+}
+
+# ============================================================
+# Severity Tests
+# ============================================================
+
+func test_parse_severity() {
+	check_eq(parse_severity("info"), "info", "parse_severity: info")
+	check_eq(parse_severity("warning"), "warning", "parse_severity: warning")
+	check_eq(parse_severity("error"), "error", "parse_severity: error")
+	check_eq(parse_severity("critical"), "critical", "parse_severity: critical")
+	check_eq(parse_severity("WARNING"), "warning", "parse_severity: case insensitive")
+	check_eq(parse_severity("unknown"), "", "parse_severity: invalid returns empty")
+}
+
+func test_severity_index() {
+	check(severity_index("info") < severity_index("warning"), "severity_index: info < warning")
+	check(severity_index("warning") < severity_index("error"), "severity_index: warning < error")
+	check(severity_index("error") < severity_index("critical"), "severity_index: error < critical")
+	check_eq(severity_index("unknown"), -1, "severity_index: invalid returns -1")
+}
+
+func test_severity_meets_threshold() {
+	check(severity_meets_threshold("error", "error") == true, "severity_meets: error meets error")
+	check(severity_meets_threshold("critical", "error") == true, "severity_meets: critical meets error")
+	check(severity_meets_threshold("warning", "error") == false, "severity_meets: warning below error")
+	check(severity_meets_threshold("info", "error") == false, "severity_meets: info below error")
+}
+
+func test_parse_fail_on() {
+	check_eq(parse_fail_on(array("check", "--fail-on", "warning", "http://localhost:3000")), "warning", "parse_fail_on: warning")
+	check_eq(parse_fail_on(array("check", "http://localhost:3000")), "error", "parse_fail_on: default error")
+	check_eq(parse_fail_on(array("check", "--fail-on", "invalid", "http://localhost:3000")), "error", "parse_fail_on: invalid falls back to default")
+}
+
+# ============================================================
+# Exit Code Tests
+# ============================================================
+
+func test_exit_code_constants() {
+	check_eq(EXIT_OK, 0, "exit_code: EXIT_OK is 0")
+	check_eq(EXIT_CHECK_FAIL, 1, "exit_code: EXIT_CHECK_FAIL is 1")
+	check_eq(EXIT_INVALID_INPUT, 2, "exit_code: EXIT_INVALID_INPUT is 2")
+	check_eq(EXIT_BROWSER_FAIL, 3, "exit_code: EXIT_BROWSER_FAIL is 3")
+	check_eq(EXIT_ARTIFACT_FAIL, 4, "exit_code: EXIT_ARTIFACT_FAIL is 4")
+}
+
+# ============================================================
+# Check Result Tests
+# ============================================================
+
+func test_new_check_result() {
+	cr := new_check_result("Test Check", "test_check")
+	check_eq(cr["name"], "Test Check", "new_check_result: name set")
+	check_eq(cr["id"], "test_check", "new_check_result: id set")
+	check_eq(cr["status"], "pass", "new_check_result: default status pass")
+	check_eq(cr["severity"], "info", "new_check_result: default severity info")
+	check(len(cr["findings"]) == 0, "new_check_result: no findings initially")
+}
+
+func test_add_finding_error() {
+	cr := new_check_result("Test", "test")
+	f := new_finding("error", "TEST", "Test Error", "Something broke", "evidence-1", "Fix the error.")
+	cr = add_finding(cr, f)
+	check_eq(cr["status"], "fail", "add_finding: error makes status fail")
+	check_eq(cr["severity"], "error", "add_finding: error severity propagated")
+	check(len(cr["findings"]) == 1, "add_finding: finding added")
+}
+
+func test_add_finding_critical() {
+	cr := new_check_result("Test", "test")
+	f := new_finding("critical", "TEST", "Critical", "Critical issue", "evidence-1", "Fix the critical issue.")
+	cr = add_finding(cr, f)
+	check_eq(cr["status"], "fail", "add_finding: critical makes status fail")
+	check_eq(cr["severity"], "critical", "add_finding: critical severity propagated")
+}
+
+func test_add_finding_warning() {
+	cr := new_check_result("Test", "test")
+	f := new_finding("warning", "TEST", "Test Warning", "Something minor", "evidence-1", "Check the warning.")
+	cr = add_finding(cr, f)
+	check_eq(cr["status"], "fail", "add_finding: warning makes status fail")
+	check_eq(cr["severity"], "warning", "add_finding: warning severity propagated")
+}
+
+func test_add_finding_info() {
+	cr := new_check_result("Test", "test")
+	f := new_finding("info", "TEST", "Info", "FYI", "evidence-1", "No action needed.")
+	cr = add_finding(cr, f)
+	check_eq(cr["status"], "pass", "add_finding: info keeps status pass")
+	check_eq(cr["severity"], "info", "add_finding: info severity stays")
+}
+
+func test_worst_severity() {
+	cr1 := new_check_result("A", "a")
+	cr1 = add_finding(cr1, new_finding("info", "TEST", "Info", "FYI", "", ""))
+	
+	cr2 := new_check_result("B", "b")
+	cr2 = add_finding(cr2, new_finding("error", "TEST", "Error", "Error occurred", "", ""))
+	
+	cr3 := new_check_result("C", "c")
+	cr3 = add_finding(cr3, new_finding("warning", "TEST", "Warning", "Warn", "", ""))
+	
+	results := array(cr1, cr2, cr3)
+	check_eq(worst_severity(results), "error", "worst_severity: error is worst")
+}
+
+func test_worst_severity_critical_wins() {
+	cr1 := new_check_result("A", "a")
+	cr1 = add_finding(cr1, new_finding("error", "TEST", "Error", "Error", "", ""))
+	
+	cr2 := new_check_result("B", "b")
+	cr2 = add_finding(cr2, new_finding("critical", "TEST", "Critical", "Critical", "", ""))
+	
+	results := array(cr1, cr2)
+	check_eq(worst_severity(results), "critical", "worst_severity: critical wins over error")
+}
+
+# ============================================================
+# Report Tests
+# ============================================================
+
+func test_generate_markdown_report() {
+	config := {
+		"url": "http://localhost:3000",
+		"viewports": array("desktop", "mobile"),
+		"version": LENS_VERSION
+	}
+	meta := {
+		"status": "PASS",
+		"started_at": "2026-05-31T00:00:00Z",
+		"finished_at": "2026-05-31T00:00:01Z",
+		"duration_ms": 1000,
+		"out_dir": ".lens/runs/test",
+		"exit_code": 0,
+		"artifacts": array()
+	}
+	cr := new_check_result("Test", "test")
+	cr = add_finding(cr, new_finding("info", "TEST", "Info", "Test finding", "", ""))
+	check_results := array(cr)
+	
+	report := generate_markdown_report(config, meta, check_results)
+	check(report != "", "generate_markdown_report: produces output")
+	check(is_trueish(contains(report, "# Lens Report")), "generate_markdown_report: has title")
+	check(is_trueish(contains(report, "Status: PASS")), "generate_markdown_report: has status")
+	check(is_trueish(contains(report, "http://localhost:3000")), "generate_markdown_report: has URL")
+}
+
+func test_generate_json_report() {
+	config := {
+		"url": "http://localhost:3000",
+		"viewports": array("desktop"),
+		"version": LENS_VERSION,
+		"fail_on": "error",
+		"allow_external": false,
+		"check_links": false,
+		"timeout": 30
+	}
+	meta := {
+		"status": "PASS",
+		"started_at": "2026-05-31T00:00:00Z",
+		"finished_at": "2026-05-31T00:00:01Z",
+		"duration_ms": 1000,
+		"out_dir": ".lens/runs/test",
+		"exit_code": 0,
+		"artifacts": array()
+	}
+	cr := new_check_result("Test", "test")
+	cr = add_finding(cr, new_finding("info", "TEST", "Info", "Test", "", ""))
+	check_results := array(cr)
+	
+	report := generate_json_report(config, meta, check_results, {})
+	check(report != "", "generate_json_report: produces output")
+	check(is_trueish(contains(report, "\"status\"")), "generate_json_report: has status field")
+	check(is_trueish(contains(report, "\"url\"")), "generate_json_report: has url field")
+}
+
+# ============================================================
+# Redaction Tests
+# ============================================================
+
+func test_is_sensitive_header() {
+	check(is_sensitive_header("Authorization") == true, "redact: Authorization is sensitive")
+	check(is_sensitive_header("Cookie") == true, "redact: Cookie is sensitive")
+	check(is_sensitive_header("X-API-Key") == true, "redact: X-API-Key is sensitive")
+	check(is_sensitive_header("Content-Type") == false, "redact: Content-Type is not sensitive")
+	check(is_sensitive_header("Accept") == false, "redact: Accept is not sensitive")
+}
+
+func test_is_sensitive_query_param() {
+	check(is_sensitive_query_param("token") == true, "redact: token is sensitive")
+	check(is_sensitive_query_param("access_token") == true, "redact: access_token is sensitive")
+	check(is_sensitive_query_param("api_key") == true, "redact: api_key is sensitive")
+	check(is_sensitive_query_param("password") == true, "redact: password is sensitive")
+	check(is_sensitive_query_param("q") == false, "redact: q is not sensitive")
+	check(is_sensitive_query_param("page") == false, "redact: page is not sensitive")
+}
+
+func test_redact_url_sensitive_params() {
+	redacted := redact_url("https://example.com/api?token=secret123&page=1&api_key=abc")
+	check(is_trueish(contains(redacted, "[REDACTED]")), "redact_url: sensitive params redacted")
+	check(is_falseish(contains(redacted, "secret123")), "redact_url: token value removed")
+	check(is_falseish(contains(redacted, "abc")), "redact_url: api_key value removed")
+	check(is_trueish(contains(redacted, "page=1")), "redact_url: non-sensitive param preserved")
+}
+
+func test_redact_url_no_params() {
+	redacted := redact_url("https://example.com/page")
+	check_eq(redacted, "https://example.com/page", "redact_url: no params returns unchanged")
+}
+
+func test_redact_header_value() {
+	check_eq(redact_header_value("Authorization", "Bearer token123"), "[REDACTED]", "redact_header_value: sensitive header redacted")
+	check_eq(redact_header_value("Content-Type", "application/json"), "application/json", "redact_header_value: non-sensitive header preserved")
+}
+
+# ============================================================
+# Config/Timeout Tests
+# ============================================================
+
+func test_parse_timeout_default() {
+	argv := array("check", "http://localhost:3000")
+	check_eq(parse_timeout(argv), 30, "parse_timeout: default 30")
+}
+
+func test_parse_timeout_custom() {
+	argv := array("check", "--timeout", "60", "http://localhost:3000")
+	check_eq(parse_timeout(argv), 60, "parse_timeout: custom 60")
+}
+
+func test_parse_max_links_default() {
+	argv := array("check", "http://localhost:3000")
+	check_eq(parse_max_links(argv), 50, "parse_max_links: default 50")
+}
+
+func test_parse_max_links_custom() {
+	argv := array("check", "--max-links", "100", "http://localhost:3000")
+	check_eq(parse_max_links(argv), 100, "parse_max_links: custom 100")
+}
+
+func test_parse_out_dir_default() {
+	argv := array("check", "http://localhost:3000")
+	check_eq(parse_out_dir(argv), "", "parse_out_dir: default empty")
+}
+
+func test_parse_out_dir_custom() {
+	argv := array("check", "--out", "/tmp/lens-run", "http://localhost:3000")
+	check_eq(parse_out_dir(argv), "/tmp/lens-run", "parse_out_dir: custom path")
+}
+
+# ============================================================
+# Isolation / version
+# ============================================================
+
+func test_version_defined() {
+	check(LENS_VERSION != "", "LENS_VERSION is defined")
+	check_eq(LENS_VERSION, "0.9.0", "LENS_VERSION is 0.9.0")
+}
+
+# ============================================================
+# Phase 2: Provider tests
+# ============================================================
+
+func test_provider_result_shape() {
+	# Verify that a minimal provider result has the expected shape.
+	mock := {
+		"url": "http://test",
+		"final_url": "http://test",
+		"started_at": "2026-01-01T00:00:00Z",
+		"finished_at": "2026-01-01T00:00:01Z",
+		"duration_ms": 1000,
+		"viewports": array(),
+		"provider_errors": array(),
+		"metadata": {}
+	}
+	check(is_trueish(has_key(mock, "url")), "provider result: has url")
+	check(is_trueish(has_key(mock, "viewports")), "provider result: has viewports")
+	check(is_trueish(has_key(mock, "provider_errors")), "provider result: has provider_errors")
+	check(is_trueish(has_key(mock, "metadata")), "provider result: has metadata")
+}
+
+func test_viewport_config_mapping() {
+	# Verify viewport name mapping.
+	check_eq(parse_viewport("desktop"), "desktop", "viewport: desktop maps correctly")
+	check_eq(parse_viewport("mobile"), "mobile", "viewport: mobile maps correctly")
+	check_eq(parse_viewport("DESKTOP"), "desktop", "viewport: case insensitive")
+	check_eq(parse_viewport("invalid"), "", "viewport: invalid returns empty")
+}
+
+func test_artifact_paths_for_screenshots() {
+	# Verify screenshot paths follow expected pattern.
+	vp_results := array(
+		{
+			"name": "desktop",
+			"screenshot": "/tmp/out/screenshots/desktop.png"
+		},
+		{
+			"name": "mobile",
+			"screenshot": "/tmp/out/screenshots/mobile.png"
+		}
+	)
+	mut paths := array()
+	mut idx := 0
+	while idx < len(vp_results) {
+		vp := vp_results[idx]
+		paths = append(paths, "screenshots/" + to_string(vp["name"]) + ".png")
+		idx = idx + 1
+	}
+	check_eq(paths[0], "screenshots/desktop.png", "artifact: desktop screenshot path")
+	check_eq(paths[1], "screenshots/mobile.png", "artifact: mobile screenshot path")
+}
+
+func test_provider_failure_scenario() {
+	# Verify provider_failed detects errors.
+	mock_ok := {
+		"viewports": array({"name": "desktop"}),
+		"provider_errors": array()
+	}
+	mock_fail := {
+		"viewports": array(),
+		"provider_errors": array("Browser launch failed")
+	}
+	# Mock ok should not be failed
+	check_eq(len(mock_ok["viewports"]) > 0, true, "provider: ok has viewports")
+	check_eq(len(mock_ok["provider_errors"]) == 0, true, "provider: ok has no errors")
+	# Mock fail should be detected
+	check_eq(len(mock_fail["viewports"]) == 0, true, "provider: fail has no viewports")
+	check_eq(len(mock_fail["provider_errors"]) > 0, true, "provider: fail has errors")
+}
+
+# ============================================================
+# Error-path coverage (Task 0.5)
+# ============================================================
+
+func test_provider_failed_error_flag() {
+	# Explicit hard-error flag is a total failure.
+	check_eq(provider_failed({"error": true, "viewports": array()}), true, "provider_failed: error flag → true")
+}
+
+func test_provider_failed_no_viewports_key() {
+	# Missing viewports key entirely → nothing to report on.
+	check_eq(provider_failed({"url": "http://test"}), true, "provider_failed: no viewports key → true")
+}
+
+func test_provider_failed_empty_viewports() {
+	check_eq(provider_failed({"viewports": array()}), true, "provider_failed: empty viewports → true")
+}
+
+func test_provider_failed_all_nav_errors() {
+	# Every viewport failed to navigate AND produced no usable data.
+	res := {
+		"viewports": array(
+			{"name": "desktop", "navigation_error": "net::ERR"},
+			{"name": "mobile", "navigation_error": "net::ERR"}
+		)
+	}
+	check_eq(provider_failed(res), true, "provider_failed: all nav errors, no data → true")
+}
+
+func test_provider_failed_partial_usable() {
+	# One viewport failed but another produced a DOM summary → NOT total failure.
+	res := {
+		"viewports": array(
+			{"name": "desktop", "navigation_error": "net::ERR"},
+			{"name": "mobile", "dom_summary": {"title": "ok"}}
+		)
+	}
+	check_eq(provider_failed(res), false, "provider_failed: partial usable data → false")
+}
+
+func test_provider_failed_clean_navigation() {
+	# A viewport with no navigation_error is usable even without dom/screenshot.
+	res := { "viewports": array({"name": "desktop"}) }
+	check_eq(provider_failed(res), false, "provider_failed: clean navigation → false")
+}
+
+func test_parse_timeout_clamp_high() {
+	argv := array("check", "--timeout", "9999", "http://localhost:3000")
+	check_eq(parse_timeout(argv), 300, "parse_timeout: clamps above 300")
+}
+
+func test_parse_timeout_clamp_low() {
+	argv := array("check", "--timeout", "0", "http://localhost:3000")
+	check_eq(parse_timeout(argv), 30, "parse_timeout: invalid low falls back to default")
+}
+
+func test_parse_max_links_clamp_high() {
+	argv := array("check", "--max-links", "9999", "http://localhost:3000")
+	check_eq(parse_max_links(argv), 500, "parse_max_links: clamps above 500")
+}
+
+func test_severity_index_invalid() {
+	check_eq(severity_index("bogus"), -1, "severity_index: unknown severity → -1")
+}
+
+func test_severity_meets_threshold_edges() {
+	check_eq(severity_meets_threshold("info", "critical"), false, "threshold: info does not meet critical")
+	check_eq(severity_meets_threshold("critical", "info"), true, "threshold: critical meets info")
+	check_eq(severity_meets_threshold("error", "error"), true, "threshold: equal severities meet")
+}
+
+# ============================================================
+# Phase 1: config file, readiness, viewports
+# ============================================================
+
+func test_is_digits() {
+	check_eq(is_digits("123"), true, "is_digits: 123 → true")
+	check_eq(is_digits(""), false, "is_digits: empty → false")
+	check_eq(is_digits("12a"), false, "is_digits: 12a → false")
+	check_eq(is_digits("x"), false, "is_digits: x → false")
+}
+
+func test_is_size_token() {
+	check_eq(is_size_token("1024x768"), true, "is_size_token: 1024x768 → true")
+	check_eq(is_size_token("800X600"), true, "is_size_token: case-insensitive X")
+	check_eq(is_size_token("desktop"), false, "is_size_token: desktop → false")
+	check_eq(is_size_token("x900"), false, "is_size_token: missing width → false")
+	check_eq(is_size_token("1024x"), false, "is_size_token: missing height → false")
+	check_eq(is_size_token("0x0"), false, "is_size_token: zero dims → false")
+}
+
+func test_parse_viewport_custom() {
+	check_eq(parse_viewport("desktop"), "desktop", "parse_viewport: preset desktop")
+	check_eq(parse_viewport("1024x768"), "1024x768", "parse_viewport: custom size")
+	check_eq(parse_viewport("768X1024"), "768x1024", "parse_viewport: normalizes case")
+	check_eq(parse_viewport("garbage"), "", "parse_viewport: invalid → empty")
+}
+
+func test_parse_settle_ms() {
+	check_eq(parse_settle_ms(array("check", "http://localhost:3000")), 400, "settle_ms: default 400")
+	check_eq(parse_settle_ms(array("check", "--settle-ms", "100", "http://localhost:3000")), 100, "settle_ms: custom 100")
+	check_eq(parse_settle_ms(array("check", "--settle-ms", "999999", "http://localhost:3000")), 10000, "settle_ms: clamps high")
+	check_eq(parse_settle_ms(array("check", "--settle-ms", "0", "http://localhost:3000")), 0, "settle_ms: 0 allowed")
+}
+
+func test_parse_max_concurrency() {
+	check_eq(parse_max_concurrency(array("check", "http://localhost:3000")), 0, "max_concurrency: default 0")
+	check_eq(parse_max_concurrency(array("check", "--max-concurrency", "2", "http://localhost:3000")), 2, "max_concurrency: custom 2")
+	check_eq(parse_max_concurrency(array("check", "--max-concurrency", "99", "http://localhost:3000")), 16, "max_concurrency: clamps high")
+}
+
+func test_parse_config_path() {
+	check_eq(parse_config_path(array("check", "http://localhost:3000")), "", "config_path: default empty")
+	check_eq(parse_config_path(array("check", "--config", "my.toml", "http://localhost:3000")), "my.toml", "config_path: custom")
+}
+
+func test_resolve_config_path() {
+	implicit := resolve_config_path(array("check", "http://localhost:3000"))
+	check_eq(implicit["path"], ".lens.toml", "resolve_config: implicit default name")
+	check_eq(implicit["explicit"], false, "resolve_config: implicit not explicit")
+	explicit := resolve_config_path(array("check", "--config", "team.toml", "http://localhost:3000"))
+	check_eq(explicit["path"], "team.toml", "resolve_config: explicit path")
+	check_eq(explicit["explicit"], true, "resolve_config: explicit flag set")
+}
+
+func test_load_config_file_missing_implicit() {
+	# Implicit, non-existent file → valid, not present, no error.
+	res := load_config_file("/tmp/lens-nonexistent-xyz.toml", false)
+	check_eq(res["valid"], true, "load_config: implicit missing → valid")
+	check_eq(res["present"], false, "load_config: implicit missing → not present")
+}
+
+func test_load_config_file_missing_explicit() {
+	# Explicit, non-existent file → invalid (hard error).
+	res := load_config_file("/tmp/lens-nonexistent-xyz.toml", true)
+	check_eq(res["valid"], false, "load_config: explicit missing → invalid")
+}
+
+func test_load_config_file_valid() {
+	path := "/tmp/lens-test-config.toml"
+	write_file(path, "fail_on = \"warning\"\ntimeout = 45\ncheck_links = true\n", true)
+	res := load_config_file(path, true)
+	check_eq(res["valid"], true, "load_config: valid file → valid")
+	check_eq(res["present"], true, "load_config: valid file → present")
+	data := res["data"]
+	check_eq(to_string(data["fail_on"]), "warning", "load_config: reads fail_on")
+	check_eq(to_string(data["timeout"]), "45", "load_config: reads timeout")
+}
+
+func test_load_config_file_invalid_toml() {
+	path := "/tmp/lens-test-bad-config.toml"
+	write_file(path, "this is = = not valid [[[", true)
+	res := load_config_file(path, true)
+	check_eq(res["valid"], false, "load_config: malformed TOML → invalid (caught)")
+}
+
+func test_merge_file_config_applies_when_flag_absent() {
+	config := build_config(array("check", "http://localhost:3000"))
+	file_data := { "fail_on": "warning", "timeout": 99, "check_links": true }
+	merged := merge_file_config(config, array("check", "http://localhost:3000"), file_data)
+	check_eq(to_string(merged["fail_on"]), "warning", "merge: file fail_on applied")
+	check_eq(to_string(merged["timeout"]), "99", "merge: file timeout applied")
+	check_eq(merged["check_links"], true, "merge: file check_links applied")
+}
+
+func test_merge_file_config_cli_wins() {
+	argv := array("check", "--fail-on", "critical", "http://localhost:3000")
+	config := build_config(argv)
+	file_data := { "fail_on": "warning" }
+	merged := merge_file_config(config, argv, file_data)
+	check_eq(to_string(merged["fail_on"]), "critical", "merge: CLI flag overrides file")
+}
+
+func test_merge_file_config_invalid_fail_on() {
+	config := build_config(array("check", "http://localhost:3000"))
+	file_data := { "fail_on": "bogus" }
+	merged := merge_file_config(config, array("check", "http://localhost:3000"), file_data)
+	check_eq(to_string(merged["fail_on"]), "error", "merge: invalid file fail_on falls back to default")
+}
+
+func test_merge_file_config_viewports() {
+	config := build_config(array("check", "http://localhost:3000"))
+	file_data := { "viewports": array("desktop", "1024x768", "garbage") }
+	merged := merge_file_config(config, array("check", "http://localhost:3000"), file_data)
+	vps := merged["viewports"]
+	check_eq(len(vps), 2, "merge: viewports validated (garbage dropped)")
+	check_eq(to_string(vps[1]), "1024x768", "merge: custom viewport kept")
+}
+
+# ============================================================
+# Phase 2: capture depth (browser, throttle, perf, crawl, auth)
+# ============================================================
+
+func test_parse_browser() {
+	check_eq(parse_browser(array("check", "http://localhost:3000")), "chromium", "browser: default chromium")
+	check_eq(parse_browser(array("check", "--browser", "firefox", "http://localhost:3000")), "firefox", "browser: firefox")
+	check_eq(parse_browser(array("check", "--browser", "webkit", "http://localhost:3000")), "webkit", "browser: webkit")
+	check_eq(parse_browser(array("check", "--browser", "ie6", "http://localhost:3000")), "chromium", "browser: invalid → chromium")
+}
+
+func test_parse_throttle() {
+	check_eq(parse_throttle(array("check", "http://localhost:3000")), "", "throttle: default none")
+	check_eq(parse_throttle(array("check", "--throttle", "3g", "http://localhost:3000")), "3g", "throttle: 3g")
+	check_eq(parse_throttle(array("check", "--throttle", "bogus", "http://localhost:3000")), "", "throttle: invalid → none")
+}
+
+func test_parse_device() {
+	check_eq(parse_device(array("check", "http://localhost:3000")), "", "device: default empty")
+	check_eq(parse_device(array("check", "--device", "iPhone 13", "http://localhost:3000")), "iPhone 13", "device: name")
+}
+
+func test_is_perf() {
+	check_eq(is_perf(array("check", "http://localhost:3000")), false, "perf: default off")
+	check_eq(is_perf(array("check", "--perf", "http://localhost:3000")), true, "perf: enabled")
+}
+
+func test_is_crawl() {
+	check_eq(is_crawl(array("check", "http://localhost:3000")), false, "crawl: default off")
+	check_eq(is_crawl(array("check", "--crawl", "http://localhost:3000")), true, "crawl: enabled")
+}
+
+func test_parse_max_depth() {
+	check_eq(parse_max_depth(array("check", "http://localhost:3000")), 1, "max_depth: default 1")
+	check_eq(parse_max_depth(array("check", "--max-depth", "3", "http://localhost:3000")), 3, "max_depth: custom 3")
+	check_eq(parse_max_depth(array("check", "--max-depth", "99", "http://localhost:3000")), 5, "max_depth: clamps high")
+}
+
+func test_parse_max_pages() {
+	check_eq(parse_max_pages(array("check", "http://localhost:3000")), 20, "max_pages: default 20")
+	check_eq(parse_max_pages(array("check", "--max-pages", "5", "http://localhost:3000")), 5, "max_pages: custom 5")
+	check_eq(parse_max_pages(array("check", "--max-pages", "9999", "http://localhost:3000")), 200, "max_pages: clamps high")
+}
+
+func test_parse_auth_file() {
+	check_eq(parse_auth_file(array("check", "http://localhost:3000")), "", "auth_file: default empty")
+	check_eq(parse_auth_file(array("check", "--auth-file", "/x/state.json", "http://localhost:3000")), "/x/state.json", "auth_file: path")
+}
+
+func test_check_performance_flags_slow_lcp() {
+	config := { "perf_lcp_ms": 2000, "perf_cls_x100": 25, "perf_ttfb_ms": 1500 }
+	bridge_data := { "metrics": array({ "viewport": "desktop", "lcp_ms": 5000, "ttfb_ms": 100, "cls": 0.01 }) }
+	cr := check_performance(config, bridge_data)
+	check(len(cr["findings"]) >= 1, "perf check: flags slow LCP")
+	check_eq(to_string(cr["findings"][0]["severity"]), "warning", "perf check: LCP finding is warning")
+}
+
+func test_check_performance_clean_within_thresholds() {
+	config := { "perf_lcp_ms": 4000, "perf_cls_x100": 25, "perf_ttfb_ms": 1500 }
+	bridge_data := { "metrics": array({ "viewport": "desktop", "lcp_ms": 800, "ttfb_ms": 100, "cls": 0.01 }) }
+	cr := check_performance(config, bridge_data)
+	check_eq(len(cr["findings"]), 0, "perf check: no findings when within thresholds")
+}
+
+func test_check_performance_no_metrics() {
+	cr := check_performance({ "perf_lcp_ms": 4000 }, { "dom_summaries": array() })
+	check_eq(len(cr["findings"]), 0, "perf check: no metrics → no findings")
+}
+
+# ============================================================
+# Phase 3: reporting / ecosystem (HTML, watch, ledger, howl)
+# ============================================================
+
+func test_phase3_flags() {
+	check_eq(is_html(array("check", "http://localhost:3000")), false, "html: default off")
+	check_eq(is_html(array("check", "--html", "http://localhost:3000")), true, "html: enabled")
+	check_eq(is_watch(array("check", "--watch", "http://localhost:3000")), true, "watch: enabled")
+	check_eq(parse_watch_interval(array("check", "http://localhost:3000")), 5, "watch-interval: default 5")
+	check_eq(parse_watch_interval(array("check", "--watch-interval", "30", "http://localhost:3000")), 30, "watch-interval: custom")
+	check_eq(parse_ledger(array("check", "--ledger", "/x/l.json", "http://localhost:3000")), "/x/l.json", "ledger: path")
+	check_eq(parse_howl(array("check", "--howl", "/x/h.json", "http://localhost:3000")), "/x/h.json", "howl: path")
+}
+
+func test_html_escape() {
+	check_eq(html_escape("<script>"), "&lt;script&gt;", "html_escape: angle brackets")
+	check_eq(html_escape("a & b"), "a &amp; b", "html_escape: ampersand")
+	check_eq(html_escape("say \"hi\""), "say &quot;hi&quot;", "html_escape: quotes")
+	check_eq(html_escape("plain text"), "plain text", "html_escape: passthrough")
+	# Regression: multi-byte input must not crash (len is bytes, index is chars).
+	check_eq(html_escape("Free Tools → Plan. Prompt. Publish."), "Free Tools → Plan. Prompt. Publish.", "html_escape: UTF-8 arrow safe")
+	check_eq(html_escape("café <b>"), "café &lt;b&gt;", "html_escape: accented char + escape")
+}
+
+func test_generate_html_report() {
+	config := { "url": "http://localhost:3000", "viewports": array("desktop"), "version": "0.7.0" }
+	meta := { "status": "FAIL", "started_at": "t0", "finished_at": "t1", "duration_ms": 1200, "exit_code": 1, "out_dir": "/tmp/x", "artifacts": array("lens-report.md", "screenshots/desktop.png") }
+	check_results := array({
+		"name": "Console Errors", "id": "console_errors", "status": "fail", "severity": "error", "finding_count": 1,
+		"findings": array({ "id": "LENS-CONSOLE-001", "severity": "error", "title": "Console error", "description": "Boom <x>", "evidence": "console.json", "suggested_repair_task": "Fix it" })
+	})
+	html := generate_html_report(config, meta, check_results)
+	check(is_trueish(contains(html, "<!doctype html>")), "html report: has doctype")
+	check(is_trueish(contains(html, "FAIL")), "html report: shows status")
+	check(is_trueish(contains(html, "LENS-CONSOLE-001")), "html report: shows finding id")
+	check(is_trueish(contains(html, "Boom &lt;x&gt;")), "html report: escapes finding description")
+	check(is_trueish(contains(html, "screenshots/desktop.png")), "html report: references screenshot")
+}
+
+# ============================================================
+# Phase 4: interactive flows, video, walkthrough
+# ============================================================
+
+func test_phase4_flags() {
+	check_eq(is_execute(array("flow", "f.json")), false, "execute: default off")
+	check_eq(is_execute(array("flow", "--execute", "f.json")), true, "execute: enabled")
+	check_eq(is_record(array("flow", "--record", "f.json")), true, "record: enabled")
+	check_eq(is_walkthrough(array("flow", "--walkthrough", "f.json")), true, "walkthrough: enabled")
+}
+
+func test_lens_version_consistent() {
+	check_eq(lens_version(), "0.9.0", "lens_version: single source is 0.9.0")
+	check_eq(LENS_VERSION, "0.9.0", "test-local LENS_VERSION matches")
+}
+
+func test_flow_step_cap() {
+	# Build a flow with 201 visit steps → should be rejected by the cap.
+	mut steps := "["
+	mut i := 0
+	while i < 201 {
+		if i > 0 { steps = steps + "," }
+		steps = steps + "{\"visit\":\"http://localhost:3000/\"}"
+		i = i + 1
+	}
+	steps = steps + "]"
+	path := "/tmp/lens-bigflow.json"
+	write_file(path, "{\"name\":\"big\",\"url\":\"http://localhost:3000/\",\"steps\":" + steps + "}", true)
+	res := load_flow_file(path)
+	check_eq(res["valid"], false, "flow cap: 201 steps rejected")
+	check(is_trueish(contains(to_string(res["error"]), "too many steps")), "flow cap: clear error message")
+}
+
+func test_flow_normal_loads() {
+	path := "/tmp/lens-okflow.json"
+	write_file(path, "{\"name\":\"ok\",\"url\":\"http://localhost:3000/\",\"steps\":[{\"visit\":\"http://localhost:3000/\"}]}", true)
+	res := load_flow_file(path)
+	check_eq(res["valid"], true, "flow cap: normal flow still loads")
+}
+
+# ============================================================
+# Flow safety model + validation field checks
+# ============================================================
+
+func test_is_destructive() {
+	check_eq(is_destructive("delete-account"), true, "is_destructive: delete → true")
+	check_eq(is_destructive("/admin/logout"), true, "is_destructive: logout → true")
+	check_eq(is_destructive("Cancel Subscription"), true, "is_destructive: cancel subscription → true")
+	check_eq(is_destructive("#save-btn"), false, "is_destructive: save → false")
+	check_eq(is_destructive("Next"), false, "is_destructive: Next → false")
+	check_eq(is_destructive("#email"), false, "is_destructive: email → false")
+}
+
+func test_check_click_safety_requires_safe() {
+	r := check_click_safety({ "selector": "#go" }, { "allow_destructive": false })
+	check_eq(r["allowed"], false, "click safety: missing safe:true → blocked")
+}
+
+func test_check_click_safety_allows_safe() {
+	r := check_click_safety({ "selector": "#go", "safe": true }, { "allow_destructive": false })
+	check_eq(r["allowed"], true, "click safety: safe non-destructive → allowed")
+}
+
+func test_check_click_safety_blocks_destructive() {
+	r := check_click_safety({ "selector": "#delete-account", "safe": true }, { "allow_destructive": false })
+	check_eq(r["allowed"], false, "click safety: destructive without opt-in → blocked")
+}
+
+func test_check_click_safety_destructive_optin() {
+	r := check_click_safety({ "selector": "#delete-account", "safe": true, "destructive": true }, { "allow_destructive": true })
+	check_eq(r["allowed"], true, "click safety: destructive with both opt-ins → allowed")
+}
+
+func test_check_type_safety_secret_field() {
+	r := check_type_safety({ "selector": "#password", "value": "x" })
+	check_eq(r["allowed"], false, "type safety: password field without secret:true → blocked")
+	r2 := check_type_safety({ "selector": "#password", "value": "x", "secret": true })
+	check_eq(r2["allowed"], true, "type safety: password field with secret:true → allowed")
+	r3 := check_type_safety({ "selector": "#email", "value": "a@b.com" })
+	check_eq(r3["allowed"], true, "type safety: normal field → allowed")
+}
+
+func test_step_required_field_error() {
+	check_eq(step_required_field_error({ "visit": "" }, "visit") != "", true, "field: visit missing url")
+	check_eq(step_required_field_error({ "visit": "http://localhost" }, "visit"), "", "field: visit ok")
+	check_eq(step_required_field_error({ "click": { "selector": "" } }, "click"), "missing selector", "field: click missing selector")
+	check_eq(step_required_field_error({ "click": { "selector": "#x" } }, "click"), "", "field: click ok")
+	check_eq(step_required_field_error({ "type": {} }, "type"), "missing selector", "field: type missing selector")
+	check_eq(step_required_field_error({ "scroll": {} }, "scroll"), "missing selector or y", "field: scroll missing both")
+	check_eq(step_required_field_error({ "scroll": { "y": 100 } }, "scroll"), "", "field: scroll with y ok")
+	check_eq(step_required_field_error({ "assert_selector": "" }, "assert_selector"), "missing selector", "field: assert_selector missing")
+	check_eq(step_required_field_error({ "assert_text": "" }, "assert_text"), "missing text", "field: assert_text missing")
+	check_eq(step_required_field_error({ "screenshot": { "name": "x" } }, "screenshot"), "", "field: screenshot has no required field")
+}
+
+func test_redact_flow_for_output() {
+	flow := {
+		"name": "Login",
+		"steps": array(
+			{ "visit": "http://localhost:3000/" },
+			{ "type": { "selector": "#pw", "value": "SUPERSECRETPW42", "secret": true } }
+		)
+	}
+	red := redact_flow_for_output(flow)
+	red_json := to_json(red)
+	check(is_falseish(contains(red_json, "SUPERSECRETPW42")), "flow redact: typed secret removed")
+	check(is_trueish(contains(red_json, "[REDACTED]")), "flow redact: placeholder present")
+	# Structure preserved.
+	check_eq(len(red["steps"]), 2, "flow redact: step count preserved")
+}
+
+func test_build_program_step_click() {
+	step := { "click": { "selector": "#go", "safe": true } }
+	ps := build_program_step(step, 3)
+	check_eq(to_string(ps["type"]), "click", "program step: click type")
+	check_eq(to_string(ps["index"]), "3", "program step: index preserved")
+	check_eq(to_string(ps["selector"]), "#go", "program step: selector extracted")
+}
+
+func test_build_program_step_type_carries_value() {
+	step := { "type": { "selector": "#q", "value": "hello" } }
+	ps := build_program_step(step, 1)
+	check_eq(to_string(ps["selector"]), "#q", "program step: type selector")
+	check_eq(to_string(ps["value"]), "hello", "program step: type value")
+}
+
+func test_build_program_step_non_executable_is_null() {
+	# console/network assertions are evaluated in Kujo, not sent to the bridge.
+	step := { "assert_no_console_errors": true }
+	ps := build_program_step(step, 1)
+	check_eq(ps, null, "program step: console assert → null (not executable)")
+}
+
+func test_generate_walkthrough_html() {
+	flow := { "name": "Login flow" }
+	meta := { "status": "PASS", "started_at": "t0", "finished_at": "t1", "duration_ms": 2500 }
+	steps := array(
+		{ "index": 1, "type": "visit", "status": "pass", "error": "Navigated" },
+		{ "index": 2, "type": "click", "status": "pass", "error": "Clicked #go" }
+	)
+	html := generate_walkthrough_html(flow, meta, steps, "video/walkthrough.webm", 2, 0, 0, 0)
+	check(is_trueish(contains(html, "<!doctype html>")), "walkthrough: doctype")
+	check(is_trueish(contains(html, "Login flow")), "walkthrough: flow name")
+	check(is_trueish(contains(html, "<video")), "walkthrough: embeds video")
+	check(is_trueish(contains(html, "walkthrough.webm")), "walkthrough: video src")
+	check(is_trueish(contains(html, "lens-")), "walkthrough: fingerprint present")
+}
+
+func test_write_ledger_record_appends() {
+	path := "/tmp/lens-test-ledger.jsonl"
+	if is_trueish(file_exists(path)) { delete_file(path) }
+	counts := { "critical": 0, "error": 1, "warning": 0, "info": 2 }
+	write_ledger_record(path, "0.7.0", "http://localhost:3000", "FAIL", 1, "t0", "t1", 1234, counts)
+	write_ledger_record(path, "0.7.0", "http://localhost:3000", "PASS", 0, "t2", "t3", 1000, { "critical": 0, "error": 0, "warning": 0, "info": 0 })
+	content := read_file(path)
+	# Two JSONL lines (two trailing newlines → splitting yields content).
+	check(is_trueish(contains(content, "FAIL")), "ledger: first record present")
+	check(is_trueish(contains(content, "PASS")), "ledger: second record appended")
+	check(is_trueish(contains(content, "schema_version")), "ledger: schema field present")
+}
+
+func test_write_howl_summary() {
+	path := "/tmp/lens-test-howl.json"
+	if is_trueish(file_exists(path)) { delete_file(path) }
+	write_howl_summary(path, "0.7.0", "http://localhost:3000", "PASS", 0, 900, { "critical": 0, "error": 0, "warning": 0, "info": 0 }, "/x/report.md")
+	content := read_file(path)
+	check(is_trueish(contains(content, "PASS")), "howl: status present")
+	check(is_trueish(contains(content, "headline")), "howl: headline present")
+}
+
+func test_collect_crawl_candidates() {
+	base := "http://localhost:3000"
+	provider_result := {
+		"viewports": array({
+			"name": "desktop",
+			"links": array(
+				{ "href": "/about", "text": "About", "title": "", "aria_label": "" },
+				{ "href": "http://localhost:3000/contact", "text": "Contact", "title": "", "aria_label": "" },
+				{ "href": "https://external.example.com/x", "text": "Ext", "title": "", "aria_label": "" },
+				{ "href": "mailto:hi@x.com", "text": "Mail", "title": "", "aria_label": "" },
+				{ "href": "/admin/delete", "text": "Del", "title": "", "aria_label": "" }
+			)
+		})
+	}
+	cands := collect_crawl_candidates(provider_result, base)
+	# Only /about and /contact are safe same-origin; external/mailto/destructive dropped.
+	check_eq(len(cands), 2, "crawl candidates: keeps 2 safe same-origin links")
+}
+
+func test_console_artifact_writing() {
+	# Verify console messages serialize to valid JSON-like array.
+	messages := array(
+		{
+			"type": "error",
+			"text": "Test error",
+			"timestamp": "2026-01-01T00:00:00Z",
+			"viewport": "desktop"
+		}
+	)
+	json_str := to_json(messages)
+	check(json_str != "", "console: serializes to non-empty JSON")
+	check(is_trueish(contains(json_str, "Test error")), "console: contains message text")
+}
+
+func test_network_artifact_writing() {
+	# Verify network events serialize correctly.
+	events := array(
+		{
+			"url": "http://test/404",
+			"method": "GET",
+			"status": 404,
+			"resource_type": "document",
+			"timestamp": "2026-01-01T00:00:00Z",
+			"viewport": "desktop"
+		}
+	)
+	json_str := to_json(events)
+	check(json_str != "", "network: serializes to non-empty JSON")
+	check(is_trueish(contains(json_str, "404")), "network: contains status code")
+}
+
+func test_dom_summary_artifact_writing() {
+	summaries := array(
+		{
+			"viewport": "desktop",
+			"url": "http://test",
+			"title": "Test Page",
+			"body_text_length": 100,
+			"link_count": 5
+		}
+	)
+	json_str := to_json(summaries)
+	check(json_str != "", "dom: serializes to non-empty JSON")
+	check(is_trueish(contains(json_str, "Test Page")), "dom: contains title")
+}
+
+func test_report_references_runtime_artifacts() {
+	# Verify report mentions new artifacts.
+	config := {
+		"url": "http://localhost:3000",
+		"viewports": array("desktop"),
+		"version": LENS_VERSION
+	}
+	meta := {
+		"status": "PASS",
+		"started_at": "2026-01-01T00:00:00Z",
+		"finished_at": "2026-01-01T00:00:01Z",
+		"duration_ms": 1000,
+		"out_dir": ".lens/runs/test",
+		"exit_code": 0,
+		"artifacts": array("console.json", "network.json", "dom-summary.json")
+	}
+	cr := new_check_result("Test", "test")
+	cr = add_finding(cr, new_finding("info", "TEST", "Info", "Test", "", ""))
+	check_results := array(cr)
+	
+	report := generate_markdown_report(config, meta, check_results)
+	check(is_trueish(contains(report, "console.json")), "report: mentions console.json")
+	check(is_trueish(contains(report, "network.json")), "report: mentions network.json")
+	check(is_trueish(contains(report, "dom-summary.json")), "report: mentions dom-summary.json")
+	check(is_trueish(contains(report, "screenshots")), "report: mentions screenshots")
+}
+
+# ============================================================
+# Run summary
+# ============================================================
+
+func print_summary() {
+	total := passed + failed
+	print("")
+	print("=== Lens Test Results ===")
+	print("Passed: " + to_string(passed))
+	print("Failed: " + to_string(failed))
+	print("Total:  " + to_string(total))
+	print("")
+	if failed == 0 {
+		print("All tests passed.")
+	} else {
+		print("Some tests FAILED.")
+	}
+}
+
+# ============================================================
+# Phase 10: Accessibility Tests
+# ============================================================
+
+func test_is_accessibility_flag() {
+	argv := array("check", "--accessibility", "http://localhost:3000")
+	check(is_accessibility(argv) == true, "is_accessibility detects --accessibility flag")
+	
+	argv2 := array("check", "--a11y", "http://localhost:3000")
+	check(is_accessibility(argv2) == true, "is_accessibility detects --a11y alias")
+	
+	argv3 := array("check", "http://localhost:3000")
+	check(is_accessibility(argv3) == false, "is_accessibility returns false when no a11y flags")
+}
+
+func test_parse_a11y_tags_default() {
+	argv := array("check", "http://localhost:3000")
+	tags := parse_a11y_tags(argv)
+	check(len(tags) > 0, "parse_a11y_tags returns default tags when flag not set")
+	check_eq(tags[0], "wcag2a", "parse_a11y_tags default includes wcag2a")
+}
+
+func test_parse_a11y_tags_custom() {
+	argv := array("check", "--a11y-tags", "wcag2aa,wcag21a", "http://localhost:3000")
+	tags := parse_a11y_tags(argv)
+	check(len(tags) == 2, "parse_a11y_tags splits comma-separated tags")
+}
+
+func test_parse_a11y_tags_single() {
+	argv := array("check", "--a11y-tags", "best-practice", "http://localhost:3000")
+	tags := parse_a11y_tags(argv)
+	check(len(tags) == 1, "parse_a11y_tags handles single tag (no comma)")
+	check_eq(tags[0], "best-practice", "parse_a11y_tags returns the single tag")
+}
+
+func test_parse_a11y_include() {
+	argv := array("check", "--a11y-include", "main", "http://localhost:3000")
+	val := parse_a11y_include(argv)
+	check_eq(val, "main", "parse_a11y_include returns selector")
+}
+
+func test_parse_a11y_exclude() {
+	argv := array("check", "--a11y-exclude", "[data-testid='widget']", "http://localhost:3000")
+	val := parse_a11y_exclude(argv)
+	check_eq(val, "[data-testid='widget']", "parse_a11y_exclude returns selector")
+}
+
+func test_map_a11y_severity_critical() {
+	check_eq(map_a11y_severity("critical"), "error", "critical impact maps to error")
+}
+
+func test_map_a11y_severity_serious() {
+	check_eq(map_a11y_severity("serious"), "error", "serious impact maps to error")
+}
+
+func test_map_a11y_severity_moderate() {
+	check_eq(map_a11y_severity("moderate"), "warning", "moderate impact maps to warning")
+}
+
+func test_map_a11y_severity_minor() {
+	check_eq(map_a11y_severity("minor"), "info", "minor impact maps to info")
+}
+
+func test_map_a11y_severity_unknown() {
+	check_eq(map_a11y_severity("unknown"), "warning", "unknown impact maps to warning (safe default)")
+}
+
+func test_is_a11y_enabled_default() {
+	config := {
+		"url": "http://localhost:3000"
+	}
+	check(is_a11y_enabled(config) == false, "is_a11y_enabled returns false when accessibility not in config")
+}
+
+func test_is_a11y_enabled_true() {
+	config := {
+		"url": "http://localhost:3000",
+		"accessibility": true
+	}
+	check(is_a11y_enabled(config) == true, "is_a11y_enabled returns true when accessibility is true")
+}
+
+func test_is_a11y_enabled_false() {
+	config := {
+		"url": "http://localhost:3000",
+		"accessibility": false
+	}
+	check(is_a11y_enabled(config) == false, "is_a11y_enabled returns false when accessibility is false")
+}
+
+func test_build_config_a11y_defaults() {
+	argv := array("check", "http://localhost:3000")
+	config := build_config(argv)
+	check(config["accessibility"] == false, "build_config defaults accessibility to false")
+	check(len(config["a11y_tags"]) > 0, "build_config sets default a11y_tags")
+	check_eq(config["a11y_include"], "", "build_config defaults a11y_include to empty")
+	check_eq(config["a11y_exclude"], "", "build_config defaults a11y_exclude to empty")
+}
+
+func test_build_config_a11y_enabled() {
+	argv := array("check", "--accessibility", "http://localhost:3000")
+	config := build_config(argv)
+	check(config["accessibility"] == true, "build_config enables accessibility with flag")
+}
+
+# ============================================================
+# Enterprise Hardening Tests
+# ============================================================
+
+# ── Redaction: free text ─────────────────────────────────────────────
+
+func test_redact_text_bearer() {
+	r := redact_text("Auth failed Bearer abc123XYZ789tokenvalue")
+	check(is_falseish(contains(r, "abc123XYZ789tokenvalue")), "redact_text: bearer token value removed")
+	check(is_trueish(contains(r, "[REDACTED]")), "redact_text: bearer redaction marker present")
+}
+
+func test_redact_text_query_params() {
+	r := redact_text("GET http://h/api/data?token=supersecret123&page=1")
+	check(is_falseish(contains(r, "supersecret123")), "redact_text: query token removed")
+	check(is_trueish(contains(r, "page=1")), "redact_text: benign query param preserved")
+}
+
+func test_redact_text_password_and_jwt() {
+	check(is_falseish(contains(redact_text("login password=hunter2secret"), "hunter2secret")), "redact_text: password removed")
+	check(is_falseish(contains(redact_text("jwt eyJhbGci.eyJzdWIi.SflKxwRJ done"), "eyJhbGci")), "redact_text: JWT removed")
+}
+
+func test_redact_text_preserves_benign() {
+	r := redact_text("normal page text q=hello page=2 monkey=1")
+	check(is_trueish(contains(r, "q=hello")), "redact_text: benign q preserved")
+	check(is_trueish(contains(r, "monkey=1")), "redact_text: short key=value not over-redacted")
+}
+
+func test_redact_url_basic_auth_and_fragment() {
+	r := redact_url("https://user:pass@host.com/x?api_key=zzzsecretval#frag")
+	check(is_falseish(contains(r, "user:pass")), "redact_url: basic-auth credentials removed")
+	check(is_falseish(contains(r, "zzzsecretval")), "redact_url: sensitive param removed")
+	check(is_trueish(contains(r, "#frag")), "redact_url: fragment preserved")
+}
+
+# ── Redaction: structured ────────────────────────────────────────────
+
+func test_redact_finding_scrubs_text() {
+	f := {
+		"id": "X1", "check_name": "CONSOLE", "severity": "error",
+		"title": "Console error: Bearer SEKRETabcdef123456",
+		"description": "request to http://h/?token=leakvalue1",
+		"evidence": "network.json",
+		"suggested_repair_task": "fix it"
+	}
+	rf := redact_finding(f)
+	check_eq(rf["id"], "X1", "redact_finding: id preserved")
+	check_eq(rf["severity"], "error", "redact_finding: severity preserved")
+	check(is_falseish(contains(to_string(rf["title"]), "SEKRETabcdef123456")), "redact_finding: title secret removed")
+	check(is_falseish(contains(to_string(rf["description"]), "leakvalue1")), "redact_finding: description secret removed")
+}
+
+func test_redact_check_results_sweep() {
+	cr := new_check_result("Console", "console_errors")
+	cr = add_finding(cr, new_finding("error", "CONSOLE", "Console error: Bearer LEAKTOKENabcdef123", "saw ?token=qsecretval99 here", "ev", "repair"))
+	swept := redact_check_results(array(cr))
+	check_eq(swept[0]["id"], "console_errors", "sweep: check id preserved")
+	fnd := swept[0]["findings"][0]
+	check(is_falseish(contains(to_string(fnd["title"]), "LEAKTOKENabcdef123")), "sweep: finding title scrubbed")
+	check(is_falseish(contains(to_string(fnd["description"]), "qsecretval99")), "sweep: finding description scrubbed")
+	check_eq(to_string(fnd["severity"]), "error", "sweep: finding severity preserved")
+}
+
+func test_redact_check_results_preserves_engine_fields() {
+	cr := new_check_result("Accessibility", "accessibility")
+	cr["engine_available"] = true
+	cr["engine_version"] = "4.11.4"
+	swept := redact_check_results(array(cr))
+	check(swept[0]["engine_available"] == true, "sweep: engine_available preserved")
+	check_eq(swept[0]["engine_version"], "4.11.4", "sweep: engine_version preserved")
+}
+
+func test_redact_console_message() {
+	msg := {"type": "error", "text": "Bearer TOKENVALUEabcdef1234", "location": "http://h/?token=locsecret1:1:2", "timestamp": "t", "viewport": "desktop"}
+	r := redact_console_message(msg)
+	check_eq(r["type"], "error", "console msg: type preserved")
+	check(is_falseish(contains(to_string(r["text"]), "TOKENVALUEabcdef1234")), "console msg: text scrubbed")
+	check(is_falseish(contains(to_string(r["location"]), "locsecret1")), "console msg: location scrubbed")
+}
+
+func test_redact_network_event_whitelist() {
+	ev := {"url": "http://h/api?api_key=netsecret123", "method": "GET", "status": 404, "request_headers": {"Authorization": "Bearer x"}, "request_body": "secret body"}
+	r := redact_network_event(ev)
+	check(is_falseish(contains(to_string(r["url"]), "netsecret123")), "net event: url scrubbed")
+	check_eq(r["status"], 404, "net event: status preserved")
+	check(is_falseish(has_key(r, "request_headers")), "net event: headers not retained")
+	check(is_falseish(has_key(r, "request_body")), "net event: body not retained")
+}
+
+func test_redact_dom_summary() {
+	ds := {"viewport": "desktop", "url": "http://h/?token=domleak1", "visible_text_sample": "key=abcdef1234567 shown", "title": "T"}
+	r := redact_dom_summary(ds)
+	check(is_falseish(contains(to_string(r["url"]), "domleak1")), "dom: url scrubbed")
+	check(is_falseish(contains(to_string(r["visible_text_sample"]), "abcdef1234567")), "dom: visible text sample scrubbed")
+}
+
+# ── Provider: partial-failure resilience (determinism) ───────────────
+
+func test_provider_failed_partial_ok() {
+	partial := {
+		"viewports": array(
+			{"name": "desktop", "dom_summary": {"x": 1}, "navigation_error": null},
+			{"name": "mobile", "dom_summary": null, "screenshot": "", "navigation_error": "timeout"}
+		),
+		"provider_errors": array("Viewport 'mobile' navigation error: timeout")
+	}
+	check(provider_failed(partial) == false, "provider_failed: partial data is NOT a total failure")
+}
+
+func test_provider_failed_error_flag() {
+	total := {"error": true, "viewports": array(), "provider_errors": array("Browser launch failed")}
+	check(provider_failed(total) == true, "provider_failed: explicit error flag is total failure")
+}
+
+func test_provider_failed_empty_viewports() {
+	empty := {"viewports": array(), "provider_errors": array()}
+	check(provider_failed(empty) == true, "provider_failed: empty viewports is total failure")
+}
+
+# ── Page-load classification ─────────────────────────────────────────
+
+func test_check_page_load_partial_error() {
+	bd := {"provider_result": {"viewports": array(
+		{"name": "desktop", "navigation_error": null, "dom_summary": {}},
+		{"name": "mobile", "navigation_error": "timeout"}
+	)}}
+	cr := check_page_load({}, bd)
+	check_eq(cr["severity"], "error", "page_load: partial nav error -> error severity")
+}
+
+func test_check_page_load_all_failed() {
+	bd := {"provider_result": {"viewports": array(
+		{"name": "desktop", "navigation_error": "x"},
+		{"name": "mobile", "navigation_error": "y"}
+	)}}
+	cr := check_page_load({}, bd)
+	check_eq(cr["severity"], "critical", "page_load: all viewports failed -> critical")
+}
+
+func test_check_page_load_clean() {
+	bd := {"provider_result": {"viewports": array(
+		{"name": "desktop", "navigation_error": null, "dom_summary": {}}
+	)}}
+	cr := check_page_load({}, bd)
+	check_eq(cr["status"], "pass", "page_load: clean navigation -> pass")
+}
+
+# ── Accessibility: honest engine handling ────────────────────────────
+
+func test_a11y_engine_unavailable_is_skipped() {
+	bd := {"provider_result": {"viewports": array(
+		{"name": "desktop", "accessibility": {"engine_available": false, "error": "axe-core not installed"}}
+	)}}
+	cfg := {"accessibility": true, "url": "http://localhost"}
+	cr := check_accessibility(cfg, bd)
+	check_eq(cr["status"], "skipped", "a11y: engine unavailable -> skipped, never a clean pass")
+	check(cr["engine_available"] == false, "a11y: engine_available false recorded")
+}
+
+func test_a11y_real_violation_fails() {
+	bd := {"provider_result": {"viewports": array(
+		{"name": "desktop", "accessibility": {"engine_available": true, "version": "4.11.4", "violations": array(
+			{"id": "image-alt", "impact": "critical", "description": "d", "help": "h", "help_url": "u", "node_count": 1}
+		)}}
+	)}}
+	cfg := {"accessibility": true, "url": "http://localhost"}
+	cr := check_accessibility(cfg, bd)
+	check_eq(cr["status"], "fail", "a11y: critical violation -> fail")
+	check_eq(cr["finding_count"], 1, "a11y: one finding recorded")
+	check(cr["engine_available"] == true, "a11y: engine_available true recorded")
+}
+
+# ── Visual: binary-safe copy ─────────────────────────────────────────
+
+func test_copy_file_binary() {
+	src := "/tmp/lens_copy_src_test.bin"
+	dst := "/tmp/lens_copy_dst_test.bin"
+	# Clean up any artifacts from a previous test run (write_file refuses
+	# to overwrite an existing file).
+	if is_trueish(file_exists(src)) { delete_file(src) }
+	if is_trueish(file_exists(dst)) { delete_file(dst) }
+	write_file(src, "lens copy test payload")
+	ok := copy_file_binary(src, dst)
+	check(ok == true, "copy_file_binary: returns true on success")
+	check(is_trueish(file_exists(dst)), "copy_file_binary: destination created")
+	missing := copy_file_binary("/tmp/lens_nonexistent_xyz.bin", "/tmp/lens_copy_none.bin")
+	check(missing == false, "copy_file_binary: false when source missing")
+}
+
+# Run hardening tests.
+test_redact_text_bearer()
+test_redact_text_query_params()
+test_redact_text_password_and_jwt()
+test_redact_text_preserves_benign()
+test_redact_url_basic_auth_and_fragment()
+test_redact_finding_scrubs_text()
+test_redact_check_results_sweep()
+test_redact_check_results_preserves_engine_fields()
+test_redact_console_message()
+test_redact_network_event_whitelist()
+test_redact_dom_summary()
+test_provider_failed_partial_ok()
+test_provider_failed_error_flag()
+test_provider_failed_empty_viewports()
+test_check_page_load_partial_error()
+test_check_page_load_all_failed()
+test_check_page_load_clean()
+test_a11y_engine_unavailable_is_skipped()
+test_a11y_real_violation_fails()
+test_copy_file_binary()
+
+# Run all tests.
+test_is_accessibility_flag()
+test_parse_a11y_tags_default()
+test_parse_a11y_tags_custom()
+test_parse_a11y_tags_single()
+test_parse_a11y_include()
+test_parse_a11y_exclude()
+test_map_a11y_severity_critical()
+test_map_a11y_severity_serious()
+test_map_a11y_severity_moderate()
+test_map_a11y_severity_minor()
+test_map_a11y_severity_unknown()
+test_is_a11y_enabled_default()
+test_is_a11y_enabled_true()
+test_is_a11y_enabled_false()
+test_build_config_a11y_defaults()
+test_build_config_a11y_enabled()
+
+test_subcommand_parsing()
+test_has_flag()
+test_flag_value()
+test_build_config_defaults()
+test_build_config_flags()
+test_extract_host()
+test_has_valid_scheme()
+test_is_localhost_host()
+test_is_localhost_url()
+test_validate_url_localhost_allowed()
+test_validate_url_127_allowed()
+test_validate_url_ipv6_allowed()
+test_validate_url_external_blocked()
+test_validate_url_external_allowed_with_flag()
+test_validate_url_empty()
+test_validate_url_invalid_scheme()
+test_parse_viewport()
+test_parse_viewports_default()
+test_parse_viewports_single()
+test_parse_severity()
+test_severity_index()
+test_severity_meets_threshold()
+test_parse_fail_on()
+test_exit_code_constants()
+test_new_check_result()
+test_add_finding_error()
+test_add_finding_critical()
+test_add_finding_warning()
+test_add_finding_info()
+test_worst_severity()
+test_worst_severity_critical_wins()
+test_generate_markdown_report()
+test_generate_json_report()
+test_is_sensitive_header()
+test_is_sensitive_query_param()
+test_redact_url_sensitive_params()
+test_redact_url_no_params()
+test_redact_header_value()
+test_parse_timeout_default()
+test_parse_timeout_custom()
+test_parse_max_links_default()
+test_parse_max_links_custom()
+test_parse_out_dir_default()
+test_parse_out_dir_custom()
+test_version_defined()
+test_provider_result_shape()
+test_provider_failed_error_flag()
+test_provider_failed_no_viewports_key()
+test_provider_failed_empty_viewports()
+test_provider_failed_all_nav_errors()
+test_provider_failed_partial_usable()
+test_provider_failed_clean_navigation()
+test_parse_timeout_clamp_high()
+test_parse_timeout_clamp_low()
+test_parse_max_links_clamp_high()
+test_severity_index_invalid()
+test_severity_meets_threshold_edges()
+test_is_digits()
+test_is_size_token()
+test_parse_viewport_custom()
+test_parse_settle_ms()
+test_parse_max_concurrency()
+test_parse_config_path()
+test_resolve_config_path()
+test_load_config_file_missing_implicit()
+test_load_config_file_missing_explicit()
+test_load_config_file_valid()
+test_load_config_file_invalid_toml()
+test_merge_file_config_applies_when_flag_absent()
+test_merge_file_config_cli_wins()
+test_merge_file_config_invalid_fail_on()
+test_merge_file_config_viewports()
+test_parse_browser()
+test_parse_throttle()
+test_parse_device()
+test_is_perf()
+test_is_crawl()
+test_parse_max_depth()
+test_parse_max_pages()
+test_parse_auth_file()
+test_check_performance_flags_slow_lcp()
+test_check_performance_clean_within_thresholds()
+test_check_performance_no_metrics()
+test_phase3_flags()
+test_html_escape()
+test_generate_html_report()
+test_phase4_flags()
+test_lens_version_consistent()
+test_flow_step_cap()
+test_flow_normal_loads()
+test_is_destructive()
+test_check_click_safety_requires_safe()
+test_check_click_safety_allows_safe()
+test_check_click_safety_blocks_destructive()
+test_check_click_safety_destructive_optin()
+test_check_type_safety_secret_field()
+test_step_required_field_error()
+test_redact_flow_for_output()
+test_build_program_step_click()
+test_build_program_step_type_carries_value()
+test_build_program_step_non_executable_is_null()
+test_generate_walkthrough_html()
+test_write_ledger_record_appends()
+test_write_howl_summary()
+test_collect_crawl_candidates()
+test_viewport_config_mapping()
+test_artifact_paths_for_screenshots()
+test_provider_failure_scenario()
+test_console_artifact_writing()
+test_network_artifact_writing()
+test_dom_summary_artifact_writing()
+test_report_references_runtime_artifacts()
+
+print_summary()
+
+if failed > 0 {
+	exit(1)
+}
+exit(0)

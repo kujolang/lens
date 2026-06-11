@@ -1,0 +1,255 @@
+# src/accessibility.kujo — Lens automated accessibility checks.
+#
+# Provides the accessibility check interface, finding generation,
+# and artifact writing. Uses axe-core via the browser bridge when
+# available; otherwise produces a documented stub.
+
+from src.common import is_trueish, is_falseish
+
+# Default a11y tags for axe-core.
+DEFAULT_A11Y_TAGS := array("wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice")
+
+# Severity mapping: axe impact → Lens severity.
+# axe impacts: critical, serious, moderate, minor
+export func map_a11y_severity(impact) {
+	if impact == "critical" { return "error" }
+	if impact == "serious" { return "error" }
+	if impact == "moderate" { return "warning" }
+	if impact == "minor" { return "info" }
+	return "warning"
+}
+
+# Per-run violation counter for stable, unique finding IDs.
+mut A11Y_COUNTER := 0
+
+# ── Accessibility check for lens check ───────────────────────────────
+
+# Build a check result for accessibility scanning. Consumes the real
+# axe-core results captured per viewport by the browser bridge. When the
+# engine is unavailable (axe-core not installed or injection failed), the
+# check reports "skipped" with an honest note rather than a clean pass.
+export func check_accessibility(config, bridge_data) {
+	A11Y_COUNTER = 0
+
+	cr := {}
+	cr["name"] = "Accessibility"
+	cr["id"] = "accessibility"
+	cr["status"] = "pass"
+	cr["severity"] = "info"
+	cr["finding_count"] = 0
+	cr["findings"] = array()
+	cr["duration_ms"] = 0
+	cr["engine_available"] = false
+
+	if is_falseish(is_a11y_enabled(config)) {
+		cr["status"] = "skipped"
+		return cr
+	}
+
+	provider_result := bridge_data["provider_result"]
+	viewports := provider_result["viewports"]
+	url := to_string(config["url"])
+
+	mut all_scans := array()
+	mut any_engine := false
+	mut engine_error := ""
+	mut engine_version := "unknown"
+
+	mut vi := 0
+	while vi < len(viewports) {
+		vp := viewports[vi]
+		vp_name := to_string(vp["name"])
+
+		# Pull the bridge's accessibility payload for this viewport.
+		mut a11y_data := {}
+		if is_trueish(has_key(vp, "accessibility")) && vp["accessibility"] != null {
+			a11y_data = vp["accessibility"]
+		}
+
+		mut engine_ok := false
+		if is_trueish(has_key(a11y_data, "engine_available")) {
+			engine_ok = is_trueish(a11y_data["engine_available"])
+		}
+
+		mut violations := array()
+		if is_trueish(engine_ok) {
+			any_engine = true
+			if is_trueish(has_key(a11y_data, "version")) {
+				engine_version = to_string(a11y_data["version"])
+			}
+			if is_trueish(has_key(a11y_data, "violations")) {
+				violations = a11y_data["violations"]
+			}
+		} else if engine_error == "" && is_trueish(has_key(a11y_data, "error")) {
+			engine_error = to_string(a11y_data["error"])
+		}
+
+		# Record a scan entry for the artifact (whether or not engine ran).
+		mut scan := {}
+		scan["viewport"] = vp_name
+		scan["url"] = url
+		scan["engine_available"] = engine_ok
+		scan["violations"] = violations
+		if is_trueish(has_key(a11y_data, "passes_count")) { scan["passes_count"] = a11y_data["passes_count"] }
+		if is_trueish(has_key(a11y_data, "incomplete_count")) { scan["incomplete_count"] = a11y_data["incomplete_count"] }
+		if is_trueish(has_key(a11y_data, "inapplicable_count")) { scan["inapplicable_count"] = a11y_data["inapplicable_count"] }
+		if is_falseish(engine_ok) && is_trueish(has_key(a11y_data, "error")) { scan["error"] = a11y_data["error"] }
+		all_scans = append(all_scans, scan)
+
+		mut vi2 := 0
+		while vi2 < len(violations) {
+			violation := violations[vi2]
+			finding := violation_to_finding(violation, vp_name)
+			cr["findings"] = append(cr["findings"], finding)
+			cr["finding_count"] = cr["finding_count"] + 1
+
+			sev := to_string(finding["severity"])
+			if sev == "error" || sev == "critical" {
+				cr["status"] = "fail"
+				cr["severity"] = sev
+			} else if sev == "warning" && cr["status"] != "fail" {
+				cr["severity"] = "warning"
+			}
+			vi2 = vi2 + 1
+		}
+		vi = vi + 1
+	}
+
+	cr["engine_available"] = any_engine
+	cr["engine_version"] = engine_version
+	cr["scans"] = all_scans
+
+	# If the engine never ran on any viewport, do NOT report a clean pass —
+	# that would imply a real scan found nothing. Report skipped + note.
+	if is_falseish(any_engine) {
+		cr["status"] = "skipped"
+		mut note := "The accessibility engine (axe-core) was not available, so no scan was performed."
+		if engine_error != "" {
+			note = note + " Detail: " + engine_error
+		}
+		cr["engine_note"] = note
+		cr = a11y_add_info_finding(cr, note)
+	}
+
+	return cr
+}
+
+# Add an informational finding (used for the engine-unavailable case).
+func a11y_add_info_finding(cr, note) {
+	mut out := cr
+	A11Y_COUNTER = A11Y_COUNTER + 1
+	mut f := {}
+	f["id"] = "LENS-A11Y-" + pad3_a11y(A11Y_COUNTER)
+	f["check_name"] = "A11Y"
+	f["severity"] = "info"
+	f["title"] = "Accessibility scan not performed"
+	f["description"] = note
+	f["evidence"] = "accessibility.json"
+	f["suggested_repair_task"] = "Install axe-core in the bridge (cd bridge && npm install axe-core) to enable accessibility scanning."
+	out["findings"] = append(out["findings"], f)
+	out["finding_count"] = out["finding_count"] + 1
+	return out
+}
+
+# ── Finding conversion ──────────────────────────────────────────────
+
+# Convert an axe-core violation to a Lens finding.
+func violation_to_finding(violation, viewport) {
+	A11Y_COUNTER = A11Y_COUNTER + 1
+
+	mut f := {}
+	f["id"] = "LENS-A11Y-" + pad3_a11y(A11Y_COUNTER)
+
+	impact := ""
+	if is_trueish(has_key(violation, "impact")) {
+		impact = to_string(violation["impact"])
+	}
+
+	f["check_name"] = "A11Y"
+	f["severity"] = map_a11y_severity(impact)
+
+	vid := ""
+	if is_trueish(has_key(violation, "id")) {
+		vid = to_string(violation["id"])
+	}
+
+	desc := ""
+	if is_trueish(has_key(violation, "description")) {
+		desc = to_string(violation["description"])
+	}
+
+	mut node_count := 0
+	if is_trueish(has_key(violation, "node_count")) {
+		node_count = to_int(to_string(violation["node_count"]))
+	}
+
+	f["title"] = "Accessibility violation: " + vid + " (" + impact + ")"
+	f["description"] = "axe-core reported '" + vid + "' affecting " + to_string(node_count) + " element(s) in the " + viewport + " viewport. " + desc
+
+	f["evidence"] = "accessibility.json (" + viewport + " scan), rule " + vid
+
+	help := ""
+	if is_trueish(has_key(violation, "help")) {
+		help = to_string(violation["help"])
+	}
+	help_url := ""
+	if is_trueish(has_key(violation, "help_url")) {
+		help_url = to_string(violation["help_url"])
+	}
+
+	mut repair := "Resolve the '" + vid + "' accessibility issue in the " + viewport + " viewport. " + help
+	if help_url != "" {
+		repair = repair + " Reference: " + help_url
+	}
+	f["suggested_repair_task"] = repair
+
+	return f
+}
+
+# ── Helpers ──────────────────────────────────────────────────────────
+
+# Check if accessibility checks are enabled.
+export func is_a11y_enabled(config) {
+	if is_trueish(has_key(config, "accessibility")) {
+		return is_trueish(config["accessibility"])
+	}
+	if is_trueish(has_key(config, "a11y")) {
+		return is_trueish(config["a11y"])
+	}
+	return false
+}
+
+# Parse a11y tags from config.
+export func get_a11y_tags(config) {
+	if is_trueish(has_key(config, "a11y_tags")) {
+		return config["a11y_tags"]
+	}
+	return DEFAULT_A11Y_TAGS
+}
+
+# Get a11y include selector.
+export func get_a11y_include(config) {
+	if is_trueish(has_key(config, "a11y_include")) {
+		return to_string(config["a11y_include"])
+	}
+	return ""
+}
+
+# Get a11y exclude selector.
+export func get_a11y_exclude(config) {
+	if is_trueish(has_key(config, "a11y_exclude")) {
+		return to_string(config["a11y_exclude"])
+	}
+	return ""
+}
+
+# Pad helper.
+func pad3_a11y(n) {
+	if n < 10 {
+		return "00" + to_string(n)
+	}
+	if n < 100 {
+		return "0" + to_string(n)
+	}
+	return to_string(n)
+}

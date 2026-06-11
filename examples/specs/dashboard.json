@@ -1,0 +1,13 @@
+{
+  "title": { "contains": "Dashboard" },
+  "url": { "path_contains": "/dashboard" },
+  "text": { "contains": ["Welcome", "Recent Activity"] },
+  "selectors": {
+    "exists": ["main"],
+    "not_exists": [".error-boundary"]
+  },
+  "console": { "no_errors": true },
+  "network": { "no_5xx": true },
+  "layout": { "no_horizontal_overflow": true },
+  "links": { "no_broken_same_origin": true }
+}
