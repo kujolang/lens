@@ -94,7 +94,7 @@ You should see:
 
 ```
 Lens completed: PASS
-Report: .lens/runs/2026-05-31T18-50-05/lens-report.md
+Report: .lens/runs/<timestamp>/lens-report.md
 ```
 
 That's a full pass: the page loaded, rendered, and produced no console or

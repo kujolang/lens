@@ -16,7 +16,7 @@ lens check http://localhost:3000
 ```
 ```
 Lens completed: PASS
-Report: .lens/runs/2026-05-31T18-50-05/lens-report.md
+Report: .lens/runs/<timestamp>/lens-report.md
 ```
 
 That's it. Point Lens at a local dev server and it tells you — with evidence —
@@ -62,13 +62,8 @@ actually work?"* Lens answers it the same way every time:
 ## Quick start
 
 ```bash
-# 1. Build the Kujo runtime (provides the `kujo` binary)
 cd /path/to/kujo && cargo build
-
-# 2. Install the browser bridge (Playwright + Chromium + axe-core)
 cd /path/to/lens/bridge && npm install && npx playwright install chromium
-
-# 3. Run it
 cd /path/to/lens
 ./lens check http://localhost:3000
 ```
@@ -183,7 +178,7 @@ accessibility in depth.
 
 - [Getting started](docs/getting-started.md)
 - [Flow authoring](docs/flow-authoring.md) — task description → flow JSON (with an agent prompt)
-- [Examples](examples/) — runnable `.lens.toml`, flows, and specs
+- [Examples](examples/) — canonical, copyable `.lens.toml`, flows, and specs
 - [Enhancement checklist](docs/enhancements.md) — where Lens is headed next
 - [CLI reference](docs/reference.md#cli-command-reference)
 - [Safe browser flows](docs/reference.md#safe-browser-flows-phase-8)

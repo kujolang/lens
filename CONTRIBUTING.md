@@ -15,6 +15,22 @@ cd /path/to/lens/bridge && npm install && npx playwright install chromium
 cd /path/to/lens && ./lens --version
 ```
 
+## Agent and example hygiene
+
+- Start with `README.md`, this file, `docs/getting-started.md`, and
+  `examples/README.md` before broad source sweeps.
+- Treat `README.md`, `docs/getting-started.md`, `docs/flow-authoring.md`, and
+  `examples/` as canonical copyable surfaces. Examples should model concise
+  idioms an agent can safely imitate.
+- Keep placeholder, opt-in external, generated, or legacy material clearly
+  labeled where it lives. Do not silently copy those patterns into quick starts.
+- Exclude generated/bulk paths from the main sweep unless the task explicitly
+  targets them; document the search exclusions you used. A good default is
+  `.git`, `bridge/node_modules`, `docs/assets`, `.lens`, and other generated
+  run directories.
+- Prefer `rg`/`rg --files` with explicit `--glob` exclusions so search results
+  stay small enough for humans and agents to scan.
+
 ## The verification gauntlet
 
 No change is "done" until all of these pass. The full per-step detail (with
@@ -24,9 +40,10 @@ The short form:
 1. **Baseline green** — record the current test count before you start.
 2. **Branch** — never work on `main` (`git checkout -b <type>/<short-name>`).
 3. **Implement** the change.
-4. **Add tests** — every change raises the test count in `tests/lens_tests.kujo`
-   (happy path + at least one failure/edge + any new redaction surface).
-5. **Full suite passes**, count went up:
+4. **Add tests** — behavior changes raise the test count in
+   `tests/lens_tests.kujo` (happy path + at least one failure/edge + any new
+   redaction surface). Docs/example-only cleanup may keep the count unchanged.
+5. **Full suite passes**; for tested behavior changes, the count went up:
    `kujo run tests/lens_tests.kujo` → `0 failed`.
 6. **Bridge syntax** (if `bridge/*.js` changed): `node --check bridge/browser-bridge.js`.
 7. **Performance** — no silent regressions. Compare medians with
