@@ -62,6 +62,15 @@ export func str_join(arr, sep) {
 	return result
 }
 
+# Print a static list of output lines in order.
+export func print_lines(lines) {
+	mut i := 0
+	while i < len(lines) {
+		print(to_string(lines[i]))
+		i = i + 1
+	}
+}
+
 # Pad a number with leading zeros to a given width.
 export func pad_zero(n, width) {
 	mut s := to_string(n)
