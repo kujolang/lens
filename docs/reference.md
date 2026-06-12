@@ -591,7 +591,7 @@ within a run and appear in both Markdown and JSON reports.
 
 ```bash
 kujo run tests/lens_tests.kujo
-# 338 tests covering CLI parsing, URL validation, checks, findings,
+# 368 tests covering CLI parsing, URL validation, checks, findings,
 # report generation, redaction (free-text, URL, finding, sweep, console,
 # network, DOM), provider partial-failure resilience, error/exit-code
 # paths, page-load classification, accessibility engine handling,
@@ -649,7 +649,7 @@ bridge/
 └── visual-diff.py            — Pixel-level screenshot diff (Pillow + numpy)
 
 tests/
-└── lens_tests.kujo           — 338 unit/integration tests
+└── lens_tests.kujo           — 368 unit/integration tests
 
 docs/
 └── reference.md              — This reference manual

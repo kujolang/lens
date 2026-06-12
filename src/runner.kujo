@@ -3,7 +3,7 @@
 # Ties together config, validation, checks, reports, and artifact
 # writing into a single run pipeline.
 
-from src.common import format_timestamp_dir, is_trueish, is_falseish, str_starts_with, str_join
+from src.common import format_timestamp_dir, is_trueish, is_falseish, str_starts_with, str_join, print_lines
 from src.config import severity_meets_threshold, build_config, print_help, print_version, merge_file_config, lens_version
 from src.config_file import resolve_config_path, load_config_file
 from src.validate import validate_url
@@ -73,10 +73,12 @@ export func run(argv) {
 		} else {
 			print("Lens: unknown command '" + subcommand + "'.")
 		}
-		print("Usage: lens check <url> [flags]")
-		print("Usage: lens flow <flow-file> [flags]")
-		print("Usage: lens inspect <url> [flags]")
-		print("Run 'lens --help' for more information.")
+		print_lines(array(
+			"Usage: lens check <url> [flags]",
+			"Usage: lens flow <flow-file> [flags]",
+			"Usage: lens inspect <url> [flags]",
+			"Run 'lens --help' for more information."
+		))
 		return EXIT_INVALID_INPUT
 	}
 
@@ -763,18 +765,18 @@ export func run(argv) {
 		print(to_json(summary))
 	} else if is_trueish(config["verbose"]) {
 		# Verbose terminal output.
-		print("Lens v" + LENS_VERSION)
-		print("URL: " + url)
-		print("Output: " + out_dir)
-		print("Status: " + status)
-		print("Duration: " + to_string(duration_ms) + "ms")
-		print("Report: " + md_path)
+		print_lines(array(
+			"Lens v" + LENS_VERSION,
+			"URL: " + url,
+			"Output: " + out_dir,
+			"Status: " + status,
+			"Duration: " + to_string(duration_ms) + "ms",
+			"Report: " + md_path
+		))
 	} else {
 		# Default quiet output.
-		if status == "PASS" {
-			print("Lens completed: " + status)
-		} else {
-			print("Lens completed: " + status)
+		print("Lens completed: " + status)
+		if status != "PASS" {
 			crit_count := count_severity(check_results, "critical")
 			err_count := count_severity(check_results, "error")
 			warn_count := count_severity(check_results, "warning")
@@ -1151,10 +1153,8 @@ func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_view
 	}
 	
 	# Terminal output
-	if status == "PASS" {
-		print("Lens flow completed: " + status)
-	} else {
-		print("Lens flow completed: " + status)
+	print("Lens flow completed: " + status)
+	if status != "PASS" {
 		if failed > 0 { print("Failed steps: " + to_string(failed)) }
 		if blocked > 0 { print("Blocked steps: " + to_string(blocked)) }
 	}
