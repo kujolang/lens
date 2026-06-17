@@ -828,6 +828,8 @@ export func print_help() {
 
 # Print version text.
 export func print_version() {
-	print("Lens v" + lens_version())
-	print("Deterministic browser/visual QA for AI-built software.")
+	print_lines(array(
+		"Lens v" + lens_version(),
+		"Deterministic browser/visual QA for AI-built software."
+	))
 }

@@ -95,8 +95,8 @@ export func run_provider(url, config, out_dir) {
 	}
 
 	if is_trueish(config["verbose"]) {
-		print("[lens] Running browser bridge...")
-		print("[lens] " + str_join_args(bridge_args))
+		print_lens_info("Running browser bridge...")
+		print_lens_info(str_join_args(bridge_args))
 	}
 
 	# Run the bridge. Headless Chromium launches can fail transiently
@@ -120,7 +120,7 @@ export func run_provider(url, config, out_dir) {
 				last_detail = "bridge produced no output"
 			}
 			if is_trueish(config["verbose"]) && attempt < PROVIDER_MAX_ATTEMPTS {
-				print("[lens] Bridge produced no output (attempt " + to_string(attempt) + "); retrying...")
+				print_lens_info("Bridge produced no output (attempt " + to_string(attempt) + "); retrying...")
 			}
 			attempt = attempt + 1
 		}
@@ -170,6 +170,11 @@ func str_join_args(args) {
 		idx = idx + 1
 	}
 	return result
+}
+
+# Print a verbose Lens status line.
+func print_lens_info(message) {
+	print("[lens] " + to_string(message))
 }
 
 # Build a comma-separated viewports string from config array.
