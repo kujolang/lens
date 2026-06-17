@@ -55,13 +55,13 @@ export func run(argv) {
 	cfg_loc := resolve_config_path(argv)
 	cfg_file := load_config_file(to_string(cfg_loc["path"]), cfg_loc["explicit"])
 	if is_falseish(cfg_file["valid"]) {
-		print("Lens failed: " + to_string(cfg_file["error"]))
+		print_lens_failed(cfg_file["error"])
 		return EXIT_INVALID_INPUT
 	}
 	if is_trueish(cfg_file["present"]) {
 		config = merge_file_config(config, argv, cfg_file["data"])
 		if is_trueish(config["verbose"]) {
-			print("[lens] Loaded config file: " + to_string(cfg_loc["path"]))
+			print_lens_info("Loaded config file: " + to_string(cfg_loc["path"]))
 		}
 	}
 
@@ -116,14 +116,13 @@ export func run(argv) {
 	# Validate URL.
 	url := to_string(config["url"])
 	if url == "" {
-		print("Lens: URL is required.")
-		print("Usage: lens check <url> [flags]")
+		print_usage_error("Lens: URL is required.", "Usage: lens check <url> [flags]")
 		return EXIT_INVALID_INPUT
 	}
 	
 	validation := validate_url(url, config["allow_external"])
 	if is_falseish(validation["valid"]) {
-		print("Lens failed: " + to_string(validation["error"]))
+		print_lens_failed(validation["error"])
 		return EXIT_INVALID_INPUT
 	}
 
@@ -133,11 +132,11 @@ export func run(argv) {
 	auth_file := to_string(config["auth_file"])
 	if auth_file != "" {
 		if is_falseish(file_exists(auth_file)) {
-			print("Lens failed: auth file not found: " + auth_file)
+			print_lens_failed("auth file not found: " + auth_file)
 			return EXIT_INVALID_INPUT
 		}
 		if is_trueish(config["verbose"]) {
-			print("[lens] Auth storage-state will be injected (contents never logged).")
+			print_lens_info("Auth storage-state will be injected (contents never logged).")
 		}
 	}
 	
@@ -149,7 +148,7 @@ export func run(argv) {
 	if spec_path != "" {
 		spec_data = load_spec_file(spec_path)
 		if is_falseish(spec_data["valid"]) {
-			print("Lens failed: " + to_string(spec_data["error"]))
+			print_lens_failed(spec_data["error"])
 			return EXIT_INVALID_INPUT
 		}
 		spec_warnings = spec_data["warnings"]
@@ -157,10 +156,12 @@ export func run(argv) {
 		config["spec_data"] = spec_data
 		
 		if is_trueish(config["verbose"]) {
-			print("[lens] Spec loaded: " + spec_path)
-			print("[lens] Supported assertions: " + to_string(spec_data["supported_count"]))
+			print_lines(array(
+				"[lens] Spec loaded: " + spec_path,
+				"[lens] Supported assertions: " + to_string(spec_data["supported_count"])
+			))
 			if spec_data["unsupported_count"] > 0 {
-				print("[lens] Unsupported assertions (skipped): " + to_string(spec_data["unsupported_count"]))
+				print_lens_info("Unsupported assertions (skipped): " + to_string(spec_data["unsupported_count"]))
 			}
 		}
 	}
@@ -182,7 +183,7 @@ export func run(argv) {
 		create_dir(out_dir)
 	}
 	if is_falseish(path_exists(out_dir)) {
-		print("Lens error: failed to create output directory: " + out_dir)
+		print_lens_error("failed to create output directory: " + out_dir)
 		return EXIT_ARTIFACT_FAIL
 	}
 	
@@ -195,7 +196,7 @@ export func run(argv) {
 	# ── Phase 2: Run browser provider ──────────────────────────────
 	
 	if is_trueish(config["verbose"]) {
-		print("[lens] Launching browser provider...")
+		print_lens_info("Launching browser provider...")
 	}
 	
 	# Pre-check: verify Node.js is available.
@@ -203,8 +204,7 @@ export func run(argv) {
 	# missing, so we check first for a better error message.
 	node_check := spawn_process(array("node", "--version"))
 	if is_falseish(node_check.success) {
-		print("Lens error: Node.js is required for browser automation.")
-		print("Install Node.js from https://nodejs.org")
+		print_browser_node_error()
 		meta := {
 			"status": "FAIL",
 			"started_at": now_utc(),
@@ -229,7 +229,7 @@ export func run(argv) {
 			# Redact sensitive values from error message before printing.
 			err_msg = redact_console_entry(to_string(provider_errors[0]))
 		}
-		print("Lens error: " + err_msg)
+		print_lens_error(err_msg)
 		
 		# Write what we can before exiting.
 		meta := {
@@ -264,7 +264,7 @@ export func run(argv) {
 	}
 	write_file(console_path, console_json)
 	if is_falseish(file_exists(console_path)) {
-		print("Lens error: failed to write console.json")
+		print_lens_error("failed to write console.json")
 		return EXIT_ARTIFACT_FAIL
 	}
 	
@@ -284,7 +284,7 @@ export func run(argv) {
 	}
 	write_file(network_path, network_json)
 	if is_falseish(file_exists(network_path)) {
-		print("Lens error: failed to write network.json")
+		print_lens_error("failed to write network.json")
 		return EXIT_ARTIFACT_FAIL
 	}
 	
@@ -304,7 +304,7 @@ export func run(argv) {
 	}
 	write_file(dom_path, dom_json)
 	if is_falseish(file_exists(dom_path)) {
-		print("Lens error: failed to write dom-summary.json")
+		print_lens_error("failed to write dom-summary.json")
 		return EXIT_ARTIFACT_FAIL
 	}
 	
@@ -404,7 +404,7 @@ export func run(argv) {
 		}
 		write_file(links_path, links_json)
 		if is_falseish(file_exists(links_path)) {
-			print("Lens error: failed to write links.json")
+			print_lens_error("failed to write links.json")
 			return EXIT_ARTIFACT_FAIL
 		}
 		meta["artifacts"] = append(meta["artifacts"], "links.json")
@@ -422,7 +422,7 @@ export func run(argv) {
 		baseline_dir := baseline_dir_for_check(config)
 		saved := save_baselines(config, out_dir, provider_viewports, baseline_dir)
 		if is_trueish(config["verbose"]) {
-			print("[lens] Baselines saved: " + to_string(len(saved)))
+			print_lens_info("Baselines saved: " + to_string(len(saved)))
 		}
 	}
 	
@@ -486,8 +486,10 @@ export func run(argv) {
 		}
 		
 		if is_trueish(config["verbose"]) {
-			print("[lens] Visual comparisons: " + to_string(len(visual_results)))
-			print("[lens] Visual findings: " + to_string(len(visual_findings)))
+			print_lines(array(
+				"[lens] Visual comparisons: " + to_string(len(visual_results)),
+				"[lens] Visual findings: " + to_string(len(visual_findings))
+			))
 		}
 	}
 	
@@ -524,14 +526,14 @@ export func run(argv) {
 		}
 		
 		if is_trueish(config["verbose"]) {
-			print("[lens] Accessibility check complete")
+			print_lens_info("Accessibility check complete")
 		}
 	}
 
 	# ── Phase 2.5: bounded same-origin crawl (opt-in) ──────────────────
 	if is_trueish(config["crawl"]) {
 		if is_trueish(config["verbose"]) {
-			print("[lens] Crawling (max-depth " + to_string(config["max_depth"]) + ", max-pages " + to_string(config["max_pages"]) + ")...")
+			print_lens_info("Crawling (max-depth " + to_string(config["max_depth"]) + ", max-pages " + to_string(config["max_pages"]) + ")...")
 		}
 		crawl_result := run_crawl(url, provider_result, config, out_dir)
 		crawl_pages := crawl_result["pages"]
@@ -610,7 +612,7 @@ export func run(argv) {
 		meta["artifacts"] = append(meta["artifacts"], "crawl.json")
 
 		if is_trueish(config["verbose"]) {
-			print("[lens] Crawled " + to_string(crawl_result["visited_count"]) + " page(s)")
+			print_lens_info("Crawled " + to_string(crawl_result["visited_count"]) + " page(s)")
 		}
 	}
 
@@ -641,7 +643,7 @@ export func run(argv) {
 	}
 	write_file(md_path, md_report)
 	if is_falseish(file_exists(md_path)) {
-		print("Lens error: failed to write Markdown report to " + md_path)
+		print_lens_error("failed to write Markdown report to " + md_path)
 		return EXIT_ARTIFACT_FAIL
 	}
 	
@@ -653,7 +655,7 @@ export func run(argv) {
 	}
 	write_file(json_path, json_report)
 	if is_falseish(file_exists(json_path)) {
-		print("Lens error: failed to write JSON report to " + json_path)
+		print_lens_error("failed to write JSON report to " + json_path)
 		return EXIT_ARTIFACT_FAIL
 	}
 
@@ -666,7 +668,7 @@ export func run(argv) {
 		}
 		write_file(html_path, html_report)
 		if is_falseish(file_exists(html_path)) {
-			print("Lens error: failed to write HTML report to " + html_path)
+			print_lens_error("failed to write HTML report to " + html_path)
 			return EXIT_ARTIFACT_FAIL
 		}
 		meta["artifacts"] = append(meta["artifacts"], "lens-report.html")
@@ -684,7 +686,7 @@ export func run(argv) {
 	}
 	write_file(meta_path, metadata_json)
 	if is_falseish(file_exists(meta_path)) {
-		print("Lens error: failed to write metadata to " + meta_path)
+		print_lens_error("failed to write metadata to " + meta_path)
 		return EXIT_ARTIFACT_FAIL
 	}
 	
@@ -718,7 +720,7 @@ export func run(argv) {
 		}
 		write_file(eval_out_path, eval_json)
 		if is_falseish(file_exists(eval_out_path)) {
-			print("Lens error: failed to write Eval output to " + eval_out_path)
+			print_lens_error("failed to write Eval output to " + eval_out_path)
 			return EXIT_ARTIFACT_FAIL
 		}
 	}
@@ -735,14 +737,14 @@ export func run(argv) {
 	if ledger_path != "" {
 		write_ledger_record(ledger_path, LENS_VERSION, to_string(config["url"]), status, exit_code, started_at, finished_at, duration_ms, counts)
 		if is_trueish(config["verbose"]) {
-			print("[lens] RunLedger record appended: " + ledger_path)
+			print_lens_info("RunLedger record appended: " + ledger_path)
 		}
 	}
 	howl_path := to_string(config["howl"])
 	if howl_path != "" {
 		write_howl_summary(howl_path, LENS_VERSION, to_string(config["url"]), status, exit_code, duration_ms, counts, md_path)
 		if is_trueish(config["verbose"]) {
-			print("[lens] Howl summary written: " + howl_path)
+			print_lens_info("Howl summary written: " + howl_path)
 		}
 	}
 
@@ -780,15 +782,9 @@ export func run(argv) {
 			crit_count := count_severity(check_results, "critical")
 			err_count := count_severity(check_results, "error")
 			warn_count := count_severity(check_results, "warning")
-			if crit_count > 0 {
-				print("Critical: " + to_string(crit_count))
-			}
-			if err_count > 0 {
-				print("Errors: " + to_string(err_count))
-			}
-			if warn_count > 0 {
-				print("Warnings: " + to_string(warn_count))
-			}
+			print_count_if_positive("Critical", crit_count)
+			print_count_if_positive("Errors", err_count)
+			print_count_if_positive("Warnings", warn_count)
 		}
 		print("Report: " + md_path)
 	}
@@ -803,15 +799,14 @@ export func run_flow(config) {
 	# Get flow file path from URL field (reused for flow file path in flow mode)
 	flow_path := to_string(config["url"])
 	if flow_path == "" {
-		print("Lens: flow file path is required.")
-		print("Usage: lens flow <flow-file> [flags]")
+		print_usage_error("Lens: flow file path is required.", "Usage: lens flow <flow-file> [flags]")
 		return EXIT_INVALID_INPUT
 	}
 	
 	# Load and validate flow file
 	flow_result := load_flow_file(flow_path)
 	if is_falseish(flow_result["valid"]) {
-		print("Lens failed: " + to_string(flow_result["error"]))
+		print_lens_failed(flow_result["error"])
 		return EXIT_INVALID_INPUT
 	}
 	
@@ -821,8 +816,7 @@ export func run_flow(config) {
 	flow_steps := flow["steps"]
 	
 	if is_trueish(config["verbose"]) {
-		print("[lens] Flow loaded: " + flow_name)
-		print("[lens] Steps: " + to_string(len(flow_steps)))
+		print_flow_loaded("[lens] Flow loaded: " + flow_name, len(flow_steps))
 	}
 	
 	# Override flow defaults with CLI flags
@@ -834,7 +828,7 @@ export func run_flow(config) {
 	if flow_url != "" {
 		validation := validate_url(flow_url, flow["allow_external"])
 		if is_falseish(validation["valid"]) {
-			print("Lens failed: " + to_string(validation["error"]))
+			print_lens_failed(validation["error"])
 			return EXIT_INVALID_INPUT
 		}
 	}
@@ -854,7 +848,7 @@ export func run_flow(config) {
 		create_dir(out_dir)
 	}
 	if is_falseish(path_exists(out_dir)) {
-		print("Lens error: failed to create output directory: " + out_dir)
+		print_lens_error("failed to create output directory: " + out_dir)
 		return EXIT_ARTIFACT_FAIL
 	}
 	
@@ -913,7 +907,7 @@ export func run_flow(config) {
 					provider_meta = provider_result["metadata"]
 				}
 			} else if is_trueish(config["verbose"]) {
-				print("[lens] Flow navigation provider did not produce usable data; assertions will be skipped.")
+				print_lens_info("Flow navigation provider did not produce usable data; assertions will be skipped.")
 			}
 		}
 	}
@@ -1155,8 +1149,8 @@ func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_view
 	# Terminal output
 	print("Lens flow completed: " + status)
 	if status != "PASS" {
-		if failed > 0 { print("Failed steps: " + to_string(failed)) }
-		if blocked > 0 { print("Blocked steps: " + to_string(blocked)) }
+		print_count_if_positive("Failed steps", failed)
+		print_count_if_positive("Blocked steps", blocked)
 	}
 	print("Report: " + out_dir + "/lens-report.md")
 	
@@ -1175,14 +1169,13 @@ func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_view
 export func run_flow_exec(config) {
 	flow_path := to_string(config["url"])
 	if flow_path == "" {
-		print("Lens: flow file path is required.")
-		print("Usage: lens flow <flow-file> [flags]")
+		print_usage_error("Lens: flow file path is required.", "Usage: lens flow <flow-file> [flags]")
 		return EXIT_INVALID_INPUT
 	}
 
 	flow_result := load_flow_file(flow_path)
 	if is_falseish(flow_result["valid"]) {
-		print("Lens failed: " + to_string(flow_result["error"]))
+		print_lens_failed(flow_result["error"])
 		return EXIT_INVALID_INPUT
 	}
 
@@ -1195,8 +1188,7 @@ export func run_flow_exec(config) {
 	}
 
 	if is_trueish(config["verbose"]) {
-		print("[lens] Flow loaded (execute mode): " + to_string(flow["name"]))
-		print("[lens] Steps: " + to_string(len(flow_steps)))
+		print_flow_loaded("[lens] Flow loaded (execute mode): " + to_string(flow["name"]), len(flow_steps))
 	}
 
 	started_at := now_utc()
@@ -1211,7 +1203,7 @@ export func run_flow_exec(config) {
 		create_dir(out_dir)
 	}
 	if is_falseish(path_exists(out_dir)) {
-		print("Lens error: failed to create output directory: " + out_dir)
+		print_lens_error("failed to create output directory: " + out_dir)
 		return EXIT_ARTIFACT_FAIL
 	}
 	if is_falseish(path_exists(out_dir + "/screenshots")) {
@@ -1233,16 +1225,16 @@ export func run_flow_exec(config) {
 	}
 
 	if nav_url == "" {
-		print("Lens failed: flow has no navigation target (url or a visit step).")
+		print_lens_failed("flow has no navigation target (url or a visit step).")
 		return EXIT_INVALID_INPUT
 	}
 	nav_validation := validate_url(nav_url, flow["allow_external"])
 	if is_falseish(nav_validation["valid"]) {
-		print("Lens failed: " + to_string(nav_validation["error"]))
+		print_lens_failed(nav_validation["error"])
 		return EXIT_INVALID_INPUT
 	}
 	if is_falseish(node_available()) {
-		print("Lens error: Node.js is required for --execute flows.")
+		print_lens_error("Node.js is required for --execute flows.")
 		return EXIT_BROWSER_FAIL
 	}
 
@@ -1258,7 +1250,7 @@ export func run_flow_exec(config) {
 	}
 	bridge_res := run_flow_bridge(program, out_dir)
 	if is_trueish(has_key(bridge_res, "error")) {
-		print("Lens error: " + to_string(bridge_res["message"]))
+		print_lens_error(bridge_res["message"])
 		return EXIT_BROWSER_FAIL
 	}
 
@@ -1354,18 +1346,16 @@ export func run_flow_exec(config) {
 export func run_inspect(config) {
 	url := to_string(config["url"])
 	if url == "" {
-		print("Lens: URL is required.")
-		print("Usage: lens inspect <url> [flags]")
+		print_usage_error("Lens: URL is required.", "Usage: lens inspect <url> [flags]")
 		return EXIT_INVALID_INPUT
 	}
 	validation := validate_url(url, config["allow_external"])
 	if is_falseish(validation["valid"]) {
-		print("Lens failed: " + to_string(validation["error"]))
+		print_lens_failed(validation["error"])
 		return EXIT_INVALID_INPUT
 	}
 	if is_falseish(node_available()) {
-		print("Lens error: Node.js is required for browser automation.")
-		print("Install Node.js from https://nodejs.org")
+		print_browser_node_error()
 		return EXIT_BROWSER_FAIL
 	}
 
@@ -1374,7 +1364,7 @@ export func run_inspect(config) {
 	res := spawn_process(args, { "timeout_ms": 120000 })
 	out := trim(to_string(res.stdout))
 	if out == "" {
-		print("Lens error: inspect bridge produced no output. " + trim(to_string(res.stderr)))
+		print_lens_error("inspect bridge produced no output. " + trim(to_string(res.stderr)))
 		return EXIT_BROWSER_FAIL
 	}
 
@@ -1424,10 +1414,12 @@ export func run_inspect(config) {
 	}
 
 	# Readable summary.
-	print("Lens inspect — " + redact_text(to_string(parsed["title"])))
-	print("URL: " + redact_url(to_string(parsed["final_url"])))
-	print("Found " + to_string(len(clean)) + " interactive element(s):")
-	print("")
+	print_lines(array(
+		"Lens inspect — " + redact_text(to_string(parsed["title"])),
+		"URL: " + redact_url(to_string(parsed["final_url"])),
+		"Found " + to_string(len(clean)) + " interactive element(s):",
+		""
+	))
 	mut ci := 0
 	while ci < len(clean) {
 		el := clean[ci]
@@ -1441,22 +1433,23 @@ export func run_inspect(config) {
 		print("  [" + kind + "] " + label + "  →  " + sel)
 		ci = ci + 1
 	}
-	print("")
-	print("Saved: " + out_dir + "/elements.json")
-	print("Use these selectors to author a flow; validate it with: lens flow <file> --validate")
+	print_lines(array(
+		"",
+		"Saved: " + out_dir + "/elements.json",
+		"Use these selectors to author a flow; validate it with: lens flow <file> --validate"
+	))
 	return EXIT_OK
 }
 
 export func run_flow_validate(config) {
 	flow_path := to_string(config["url"])
 	if flow_path == "" {
-		print("Lens: flow file path is required.")
-		print("Usage: lens flow <flow-file> --validate")
+		print_usage_error("Lens: flow file path is required.", "Usage: lens flow <flow-file> --validate")
 		return EXIT_INVALID_INPUT
 	}
 	flow_result := load_flow_file(flow_path)
 	if is_falseish(flow_result["valid"]) {
-		print("Lens failed: " + to_string(flow_result["error"]))
+		print_lens_failed(flow_result["error"])
 		return EXIT_INVALID_INPUT
 	}
 	flow := flow_result["flow"]
@@ -1471,10 +1464,12 @@ export func run_flow_validate(config) {
 	# (run → run_flow_validate → check_click_safety) — nesting them deeper
 	# overflows the Kujo VM's small native stack.
 	if is_falseish(json_mode) {
-		print("Lens flow validation — " + to_string(flow["name"]))
-		print("URL: " + to_string(flow["url"]))
-		print("Steps: " + to_string(len(flow_steps)))
-		print("")
+		print_lines(array(
+			"Lens flow validation — " + to_string(flow["name"]),
+			"URL: " + to_string(flow["url"]),
+			"Steps: " + to_string(len(flow_steps)),
+			""
+		))
 	}
 
 	mut results := array()
@@ -1559,8 +1554,10 @@ export func run_flow_validate(config) {
 
 	print("")
 	if problems == 0 {
-		print("Valid: all " + to_string(len(flow_steps)) + " steps are well-formed and pass the safety model.")
-		print("Run it for real with:  lens flow <file> --execute --record --walkthrough")
+		print_lines(array(
+			"Valid: all " + to_string(len(flow_steps)) + " steps are well-formed and pass the safety model.",
+			"Run it for real with:  lens flow <file> --execute --record --walkthrough"
+		))
 		return EXIT_OK
 	}
 	print("Found " + to_string(problems) + " issue(s). Fix them before running with --execute.")
@@ -2044,6 +2041,49 @@ func pad3_str(n) {
 	return to_string(n)
 }
 
+# Helper: print a two-line input error and its matching usage hint.
+func print_usage_error(message, usage) {
+	print_lines(array(message, usage))
+}
+
+# Helper: print a Lens input or validation failure.
+func print_lens_failed(message) {
+	print("Lens failed: " + to_string(message))
+}
+
+# Helper: print a Lens runtime or artifact error.
+func print_lens_error(message) {
+	print("Lens error: " + to_string(message))
+}
+
+# Helper: print a verbose Lens status line.
+func print_lens_info(message) {
+	print("[lens] " + to_string(message))
+}
+
+# Helper: print the shared browser automation dependency error.
+func print_browser_node_error() {
+	print_lines(array(
+		"Lens error: Node.js is required for browser automation.",
+		"Install Node.js from https://nodejs.org"
+	))
+}
+
+# Helper: print the common verbose flow-load summary.
+func print_flow_loaded(message, step_count) {
+	print_lines(array(
+		message,
+		"[lens] Steps: " + to_string(step_count)
+	))
+}
+
+# Helper: print a labeled count only when it is non-zero.
+func print_count_if_positive(label, count) {
+	if count > 0 {
+		print(label + ": " + to_string(count))
+	}
+}
+
 # ── Phase 3.2: watch loop ────────────────────────────────────────────
 #
 # Runs the check pipeline repeatedly until the process is interrupted. Each
@@ -2057,8 +2097,10 @@ func run_watch(argv, interval_seconds) {
 	mut iteration := 0
 	while true {
 		iteration = iteration + 1
-		print("")
-		print("── watch run #" + to_string(iteration) + " ──────────────────────────────")
+		print_lines(array(
+			"",
+			"── watch run #" + to_string(iteration) + " ──────────────────────────────"
+		))
 		run(stripped)
 		# Sleep between runs via the system sleep (Unix); avoids busy-waiting.
 		spawn_process(array("sleep", to_string(interval_seconds)))

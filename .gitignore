@@ -13,3 +13,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Local proof/sample run output
+proof/
