@@ -59,6 +59,15 @@ actually work?"* Lens answers it the same way every time:
 - **🔒 Secret-safe** — tokens, JWTs, credentials, and sensitive params are redacted from every artifact *and* report.
 - **👀 Observe, don't touch** — opens a URL and watches. It never clicks, types, logs in, or submits forms unless you opt into a safety-gated flow.
 
+## Production posture
+
+Lens is currently **beta/stabilizing**: the core contracts are intentionally
+small, documented, tested, and local-first, while the public API remains free to
+tighten before a 1.0 release. The repo is structured as a Kujo showcase: source
+lives under `src/`, browser-only work is isolated in `bridge/`, examples are
+copyable, and the test suite covers CLI parsing, safety rules, redaction,
+reports, flows, visual checks, accessibility, integrations, and failure paths.
+
 ## Quick start
 
 ```bash
@@ -80,9 +89,14 @@ cd /path/to/lens
 | `lens check <url>` | Load a URL, capture evidence, run checks, write a report |
 | `lens check <url> --check-links` | Also verify same-origin links (opt-in) |
 | `lens check <url> --accessibility` | Add automated axe-core accessibility scanning |
+| `lens check <url> --perf` | Capture opt-in performance evidence |
+| `lens check <url> --crawl --max-depth 1` | Run a bounded same-origin crawl |
+| `lens check <url> --html` | Write a self-contained HTML report |
+| `lens check <url> --browser firefox` | Run with another Playwright browser engine |
 | `lens check <url> --spec spec.json` | Verify deterministic browser assertions |
 | `lens check <url> --baseline` / `--compare-baseline` | Save / diff visual regression baselines |
-| `lens flow flow.json` | Run a safe, declarative browser flow |
+| `lens flow flow.json --validate` | Check flow structure and safety without launching a browser |
+| `lens flow flow.json --execute --record --walkthrough` | Run a safe flow and produce proof |
 | `lens check <url> --json` | Print a machine-readable summary to stdout |
 
 Run `lens --help` for the full flag list.
@@ -180,6 +194,7 @@ accessibility in depth.
 - [Flow authoring](docs/flow-authoring.md) — task description → flow JSON (with an agent prompt)
 - [Examples](examples/) — canonical, copyable `.lens.toml`, flows, and specs
 - [Enhancement checklist](docs/enhancements.md) — where Lens is headed next
+- [Enterprise readiness next session](docs/enterprise-readiness-next-session.md) — the next improvement list
 - [CLI reference](docs/reference.md#cli-command-reference)
 - [Safe browser flows](docs/reference.md#safe-browser-flows-phase-8)
 - [Visual regression](docs/reference.md#visual-regression-phase-9)
@@ -203,6 +218,7 @@ kujo run tests/lens_tests.kujo   # full test suite passes
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md) — the build + verification gauntlet
 - [Enhancement checklist](docs/enhancements.md) — the roadmap, task by task
+- [Enterprise readiness next session](docs/enterprise-readiness-next-session.md)
 
 ## License
 

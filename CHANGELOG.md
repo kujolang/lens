@@ -78,6 +78,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   abort uncatchably on pathological nesting/size).
 
 ### Fixed
+- **Verbose-log redaction**: `--verbose` now redacts target URL secrets and
+  `--auth-file` paths before printing the browser bridge command.
+- **Documentation freshness**: the reference, spec, README, and getting-started
+  guide now describe the current 0.9.0 surface instead of older pre-execution
+  flow limitations.
 - **Heavy-site reliability**: both bridges cap the network-idle wait (~3.5s)
   instead of waiting the full page timeout, fixing `bridge produced no output`
   on public sites whose network never goes idle (analytics, long-polling).
@@ -91,12 +96,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   don't play webm.
 
 ### Security
+- Verbose bridge command logging now uses the same defense-in-depth posture as
+  artifacts: URL secrets are redacted and auth storage-state paths are masked.
 - Typed-input values (e.g. credentials in `type` steps) are redacted to
   `[REDACTED]` in `flow.json`, and the internal `flow-program.json` handoff is
   deleted immediately after the bridge consumes it — no secret reaches any
   artifact, walkthrough, or report.
 
 ### Changed
+- Root project metadata in `kujo.toml` now matches the released `0.9.0`
+  package/spec version.
 - Browser bridge now captures viewports **concurrently** instead of
   sequentially (~37% faster wall-clock on realistic pages; neutral on trivial
   ones). Output order remains deterministic.

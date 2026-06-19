@@ -25,9 +25,9 @@ CI pipelines.
   analysis. All checks are deterministic rules. Lens makes no design judgments
   and draws no root-cause conclusions it cannot back with captured evidence.
 - **Not a general browser-automation tool** — Outside the explicit, safety-gated
-  flow system, Lens does not click buttons, fill forms, or log in. It opens a URL
-  and observes. Flows perform only the declared read-only navigation; interactive
-  steps (click/type) are safety-checked but not executed.
+  flow system, Lens does not click buttons, fill forms, or log in. `lens check`
+  opens a URL and observes. `lens flow --execute` performs only the declared
+  steps after safety validation.
 - **Not a security scanner** — Lens does not check CSP headers, cookie security,
   HTTPS configuration, or XSS vectors.
 - **Not a crawler** — Link checking is shallow, same-origin only, and opt-in.
@@ -66,7 +66,7 @@ Lens integrates with the ecosystem through:
 - **Stable JSON output** (`schema_version: "1"`) for tool consumption
 - **Exit codes 0-4** for CI/CD and script integration
 - **Agent Repair Brief** for downstream agent handoff
-- Extension points for future Spec/Eval/RunLedger/Howl integration (v0.2)
+- Opt-in Spec/Eval/RunLedger/Howl integration surfaces
 
 ## Installation & Build
 
@@ -168,6 +168,31 @@ Flags:
   --allow-external     Allow checking external (non-localhost) URLs
   --fail-on <level>    Severity threshold for failure: info, warning, error,
                        critical (default: error)
+  --spec <path>        Run deterministic browser assertions from a JSON spec
+  --eval-out <path>    Write Eval-compatible JSON output
+  --baseline           Save screenshots as visual baselines
+  --compare-baseline   Compare screenshots against existing baselines
+  --update-baseline    Permit overwriting existing baselines
+  --baseline-dir <dir> Baseline storage directory
+  --diff-threshold <n> Visual diff threshold from 0.0 to 1.0
+  --accessibility      Run axe-core accessibility checks
+  --a11y               Alias for --accessibility
+  --a11y-tags <csv>    Limit axe-core rule tags
+  --a11y-include <sel> Scope accessibility checks to a selector
+  --a11y-exclude <sel> Exclude a selector from accessibility checks
+  --perf               Capture opt-in performance metrics
+  --throttle <profile> Emulate slow-3g, 3g, or 4g network conditions
+  --device <name>      Emulate a Playwright device descriptor
+  --browser <name>     Browser engine: chromium, firefox, or webkit
+  --auth-file <path>   Inject Playwright storage-state into the browser
+  --crawl              Run a bounded same-origin crawl
+  --max-depth <n>      Crawl depth, default 1, max 5
+  --max-pages <n>      Crawl page cap, default 20, max 200
+  --html               Also write lens-report.html
+  --watch              Re-run on an interval until interrupted
+  --watch-interval <n> Watch interval in seconds
+  --ledger <path>      Append RunLedger-compatible JSONL
+  --howl <path>        Write a Howl summary JSON
   --help, -h           Show help
   --version, -v        Show version
 ```
@@ -738,7 +763,8 @@ Lens error: Browser provider failed.
 **Fix:** `cd bridge && npm install && npx playwright install chromium`.
 
 ### 3. Page Load Timeout
-**Fix:** Verify server is running. Increase timeout: `--timeout 30000`.
+**Fix:** Verify server is running. Increase timeout in seconds: `--timeout 60`
+or, at most, `--timeout 300`.
 
 ### 4. Screenshots Not Generated
 Check write permissions on output directory. Run with `--verbose`.
@@ -764,29 +790,28 @@ Use `--out` with a writable directory. Check disk space with `df -h`.
 
 ## Known Limitations
 
-1. **Limited browser interaction** — Outside safe flows, Lens does not click,
-   type, or scroll. In flows, interactive steps (click/type/wait_for_*,
-   assert_text/selector) are safety-checked but not executed; only the declared
-   navigation and the `assert_no_console_errors` / `assert_no_failed_requests`
-   assertions run against the captured snapshot. SPAs with lazy loading or
-   auth-gated content may produce incomplete results.
-2. **No performance metrics** — No Lighthouse-style scores.
-3. **Single navigation per run** — `lens check` loads one URL; `lens flow`
-   performs one primary navigation.
-4. **No config file** — CLI flags only. Config file planned for a future release.
-5. **No provider plugins** — Chromium only. Firefox/WebKit planned for a future
-   release.
+1. **Observation by default** — `lens check` never mutates state. Interaction
+   happens only through explicit, safety-gated `lens flow --execute`.
+2. **Performance metrics are not Lighthouse scores** — `--perf` captures basic
+   LCP/CLS/TTFB/FCP-style evidence for trend and threshold checks, not a full
+   Lighthouse audit.
+3. **Bounded crawl only** — `--crawl` is same-origin, capped, and
+   destructive-path-aware. Lens is not a general crawler.
+4. **Auth is storage-state only** — `--auth-file` injects a Playwright
+   storage-state file by path. Lens does not discover credentials, manage
+   logins, or store auth material.
+5. **Alternate browsers require local installs** — `--browser firefox|webkit`
+   uses Playwright engines that must be installed in the bridge environment.
 6. **Link checking is HTTP only** — No WebSocket/SSE. Shallow redirect following.
-7. **Blank page detection is heuristic** — 7-signal multi-factor but may miss
+7. **Blank page detection is heuristic** — multi-signal but may miss
    canvas-only or WebGL-only pages.
-8. **Horizontal overflow is viewport-level** — Detects overflow but not the
-   specific offending element.
-9. **No authentication support** — By design for safety.
-10. **Visual diff is pixel-based** — Fixed per-channel threshold; sub-pixel
+8. **Overflow evidence is selector-level, not DOM dumps** — Findings name
+   oversized selectors and widths without storing element HTML or rendered text.
+9. **Visual diff is pixel-based** — Fixed per-channel threshold; sub-pixel
     anti-aliasing may trigger small differences (tune with `--diff-threshold`).
-11. **Accessibility is automated-only** — axe-core catches common violations but
+10. **Accessibility is automated-only** — axe-core catches common violations but
     cannot detect every issue; manual review remains essential.
-12. **Kujo runtime constraints** — Immutable function params; dict access guarded
+11. **Kujo runtime constraints** — Immutable function params; dict access guarded
     with `has_key`; binary files copied via the system `cp` (Unix environments).
 
 ## Dependencies
@@ -923,17 +948,14 @@ Lens can execute safe, deterministic browser flow files via `lens flow <file>`.
 ### What `lens flow` Does
 
 - Validates safety rules for every declared step before anything runs
-- Performs the declared **primary navigation** with the read-only provider and
-  captures real evidence (console, network, DOM, screenshots)
-- Evaluates `assert_no_console_errors` and `assert_no_failed_requests` against
-  that captured evidence — these are real pass/fail checks, never fabricated
+- In default read-only mode, performs the declared primary navigation and
+  reports interactive steps as `skipped`
+- With `--execute`, performs declared `click`, `type`, `scroll`,
+  `wait_for_*`, and `assert_*` steps in a live browser session
+- Evaluates assertions against captured or executed evidence — these are real
+  pass/fail checks, never fabricated
 - Blocks destructive-looking actions by default
 - Produces flow-specific artifacts and reports with `LENS-FLOW-NNN` findings
-
-Steps that require true interactive execution (click, type, wait_for_*,
-assert_text/selector) are **not executed**; they are reported honestly as
-`skipped`. Lens never reports a step as passed unless its effect was performed
-and (for assertions) actually verified.
 
 ### What `lens flow` Does NOT Do
 
@@ -954,6 +976,9 @@ lens flow examples/flows/dashboard.json --out ./tmp/flow-run --fail-on warning
 
 # With eval output
 lens flow examples/flows/dashboard.json --eval-out ./eval/flow-results.json
+
+# Execute safe interactions and produce proof
+lens flow examples/flows/login.json --execute --record --walkthrough
 ```
 
 ### Flow File Format
@@ -1051,14 +1076,12 @@ Blocked, failed, and errored steps produce `LENS-FLOW-001`, `LENS-FLOW-002`, etc
 
 ### Known Limitations
 
-1. Interactive steps (click, type, wait_for_*, assert_text/selector) are
-   safety-checked but not executed; they are reported as `skipped`
-2. Evidence reflects the primary navigation snapshot, not per-step state (a flow
-   with an un-executed click before an assertion still evaluates the assertion
-   against the initial navigation snapshot)
+1. Default flow mode is read-only; interactive steps require `--execute`
+2. Recording can film rendered page content; review `walkthrough.html` before
+   sharing sensitive screens
 3. Safety keyword list is not configurable per-project
-4. `assert_no_console_errors` and `assert_no_failed_requests` are the only
-   assertions evaluated against real captured evidence
+4. Flow execution is intentionally declarative; Lens does not infer or repair
+   steps with AI/LLM logic
 
 ## Visual Regression (Phase 9)
 
@@ -1222,22 +1245,19 @@ When enabled:
 
 ## Roadmap
 
-These features are planned for future releases:
+Lens now includes the original foundation items: config files, custom
+viewports, performance metrics, bounded crawl, HTML reports, RunLedger/Howl
+outputs, accessibility checks, multi-browser selection, flow execution, and
+walkthrough proof artifacts.
 
-1. **Offending-element detection** — Identify which element causes overflow.
-2. **Config file support** — `.lens.toml` for project-level defaults.
-3. **Provider plugins** — Firefox and WebKit via Playwright.
-4. **RunLedger integration** — Record runs for trend analysis.
-5. **Howl integration** — Post pass/fail summary to Howl.
-6. **Interactive flow execution** — Real click/type/wait_for/assert_text steps
-   with per-step evidence collection.
-
-For the full, dependency-ordered, agent-executable plan — including the
-proof-of-work walkthrough-recording goal these items build toward — see the
-[**Enhancement Checklist**](enhancements.md).
+For the next enterprise-readiness pass, see the new
+[**Enterprise Readiness Next Session**](enterprise-readiness-next-session.md)
+worklist. The older [Enhancement Checklist](enhancements.md) remains as
+historical implementation context.
 
 ## Version
 
 Lens v0.9.0 — browser checks, same-origin link checking, Spec/Eval integration,
-safe flows, visual baselines/diffing, and axe-core accessibility scanning, with
-centralized secret redaction across every artifact and report.
+safe executable flows, visual baselines/diffing, axe-core accessibility
+scanning, performance evidence, bounded crawl, HTML reports, and centralized
+secret redaction across artifacts, reports, and verbose bridge logs.

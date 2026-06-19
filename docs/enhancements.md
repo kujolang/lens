@@ -5,6 +5,10 @@ one, implement it, run the standard verification gauntlet, and open a PR —
 without needing the others in front of it. Tasks are ordered by dependency, so
 working top-to-bottom is always safe.
 
+> **Status note:** many items in this checklist have since shipped in Lens
+> v0.9.0. For the current next-session readiness worklist, use
+> [Enterprise Readiness Next Session](enterprise-readiness-next-session.md).
+
 This document supersedes the short "Roadmap" list in
 [reference.md](reference.md#roadmap).
 
