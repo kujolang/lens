@@ -44,7 +44,7 @@ from src.redact import redact_text, redact_finding, redact_check_results
 from src.redact import redact_console_message, redact_network_event, redact_dom_summary
 from src.checks import new_check_result, new_finding, add_finding, worst_severity
 from src.checks import count_findings_by_severity, check_page_load
-from src.provider import provider_failed
+from src.provider import provider_failed, redacted_bridge_command_for_display
 from src.visual import copy_file_binary
 from src.accessibility import check_accessibility
 from src.report import generate_markdown_report, generate_json_report
@@ -600,6 +600,23 @@ func test_provider_failed_clean_navigation() {
 	# A viewport with no navigation_error is usable even without dom/screenshot.
 	res := { "viewports": array({"name": "desktop"}) }
 	check_eq(provider_failed(res), false, "provider_failed: clean navigation → false")
+}
+
+func test_redacted_bridge_command_for_display() {
+	cmd := redacted_bridge_command_for_display(array(
+		"node",
+		"bridge/browser-bridge.js",
+		"--url",
+		"http://localhost:3000/?token=SUPERSECRET&api_key=KEYVALUE123456",
+		"--auth-file",
+		"/Users/example/private/state.json",
+		"--format",
+		"json"
+	))
+	check(is_falseish(contains(cmd, "SUPERSECRET")), "provider verbose: URL token redacted")
+	check(is_falseish(contains(cmd, "KEYVALUE123456")), "provider verbose: API key redacted")
+	check(is_falseish(contains(cmd, "/Users/example/private/state.json")), "provider verbose: auth file path redacted")
+	check(is_trueish(contains(cmd, "--auth-file [REDACTED]")), "provider verbose: auth file flag retained with redaction marker")
 }
 
 func test_parse_timeout_clamp_high() {
@@ -1522,6 +1539,7 @@ test_provider_failed_empty_viewports()
 test_provider_failed_all_nav_errors()
 test_provider_failed_partial_usable()
 test_provider_failed_clean_navigation()
+test_redacted_bridge_command_for_display()
 test_parse_timeout_clamp_high()
 test_parse_timeout_clamp_low()
 test_parse_max_links_clamp_high()

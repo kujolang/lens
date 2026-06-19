@@ -18,14 +18,16 @@ scope: |
   Implemented:
   - CLI foundation with `lens check <url>` command
   - URL validation (localhost-first, --allow-external opt-in)
-  - CLI flag parsing (--out, --viewport, --timeout, --verbose, --json,
-    --check-links, --max-links, --allow-external, --fail-on)
-  - Playwright/Node.js bridge for Chromium browser automation
-  - Dual-viewport (desktop 1440×900, mobile 390×844) screenshot capture
+  - CLI flag parsing (--config, --out, --viewport, --timeout, --verbose,
+    --json, --check-links, --max-links, --allow-external, --fail-on,
+    --perf, --browser, --auth-file, --crawl, --html, --watch)
+  - Playwright/Node.js bridge for Chromium, Firefox, and WebKit automation
+    (Chromium is the default; alternate engines require Playwright installs)
+  - Preset and custom viewport screenshot capture with optional concurrency cap
   - Console, network, and DOM evidence collection
   - Deterministic checks: page load, console errors, network failures,
     blank page (multi-factor), horizontal overflow, screenshots, link checking
-  - Finding IDs with per-check prefixes (LENS-PAGELOAD-1, etc.)
+  - Finding IDs with per-check prefixes (LENS-PAGELOAD-001, etc.)
   - Exit codes 0-4 for pass/fail/input/runtime/artifact states
   - Secret redaction for headers, query params, URLs, JWT tokens
   - Markdown report with Summary, severity sections, evidence, repair tasks,
@@ -33,25 +35,29 @@ scope: |
   - JSON report with schema_version 1, summary, repair_brief, checks arrays
   - Link check opt-in with same-origin detection, unsafe scheme skipping,
     HTTP-based verification with normalized link results
-  - 231-test suite covering CLI parsing, URL validation, checks, findings,
+  - 372-test suite covering CLI parsing, URL validation, checks, findings,
     report generation, redaction, provider shapes, error/exit-code paths,
-    and artifact writing
+    artifact writing, flows, integrations, accessibility, and verbose-log
+    sanitization
 
   Implemented since the original Phase 1 spec:
   - Playwright/Chromium browser checks with redacted evidence capture
   - Same-origin, opt-in, shallow link checking
   - Spec-backed deterministic assertions (--spec) and Eval output (--eval-out)
-  - Safe browser flows (lens flow) with a strict safety model
+  - Safe browser flows (lens flow) with validation, optional live execution,
+    recording, and walkthrough artifacts
   - Visual baselines and pixel diffing (--baseline / --compare-baseline)
   - axe-core automated accessibility scanning (--accessibility / --a11y)
+  - Project defaults via .lens.toml, self-contained HTML reports, watch mode,
+    RunLedger/Howl output, opt-in auth storage-state injection, bounded crawl,
+    performance metrics, throttling, and device emulation
   - Centralized secret redaction across every artifact AND report
 
   Deliberate exclusions (still out of scope):
   - No AI/LLM/vision integration or subjective design critique
-  - No interactive flow execution beyond the declared navigation
-    (click/type/wait_for/assert_text are safety-checked but not executed)
-  - No login/credential management or payment workflows
-  - No recursive crawling
+  - No mutation outside explicit, safety-gated `lens flow --execute`
+  - No credential discovery, credential storage, or implicit login automation
+  - No unbounded/general-purpose crawling
   - No security namespace (CSP, HTTPS, cookie security checks)
 
 non_goals:
@@ -62,8 +68,8 @@ non_goals:
   - "Cloud sync"
   - "Login / credential management"
   - "Payment workflows"
-  - "Recursive crawling"
-  - "Interactive flow automation (click/type execution)"
+  - "Unbounded recursive crawling"
+  - "Unreviewed/destructive flow automation"
   - "Package manager"
   - "Security scanner / security namespace"
 
@@ -85,6 +91,8 @@ acceptance_criteria:
   - "--json flag prints JSON summary to stdout"
   - "No secret appears unredacted in any artifact or report"
   - "lens flow evaluates assert_no_console_errors against captured evidence"
+  - "lens flow --execute performs declared safe interactions and records per-step results"
   - "--baseline creates valid PNG baselines; --update-baseline required to overwrite"
   - "--accessibility runs axe-core and degrades honestly when unavailable"
+  - "--verbose does not print raw auth-file paths or URL secrets"
   - "All tests pass"
