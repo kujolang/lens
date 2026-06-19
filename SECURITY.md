@@ -27,6 +27,9 @@ surface. Key guarantees:
   to `[REDACTED]` in `flow.json`; the internal program handoff is deleted
   immediately after the bridge consumes it. The `--auth-file` storage state is
   passed to Playwright by path and never read, logged, or written by Lens.
+- **Verbose logs are sanitized.** `--verbose` keeps diagnostic bridge-command
+  output useful while redacting secret-bearing URLs and masking `--auth-file`
+  paths.
 
 ## Caveats to be aware of
 

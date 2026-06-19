@@ -14,7 +14,8 @@
 #   provider_errors (array of error strings),
 #   metadata (bridge info)
 
-from src.common import is_trueish, is_falseish, str_trim
+from src.common import is_trueish, is_falseish, str_trim, str_starts_with
+from src.redact import redact_text, redact_url
 
 # Maximum number of times to invoke the bridge when it produces no output
 # at all. Transient headless-Chromium launch failures are retried; a bridge
@@ -96,7 +97,7 @@ export func run_provider(url, config, out_dir) {
 
 	if is_trueish(config["verbose"]) {
 		print_lens_info("Running browser bridge...")
-		print_lens_info(str_join_args(bridge_args))
+		print_lens_info(redacted_bridge_command_for_display(bridge_args))
 	}
 
 	# Run the bridge. Headless Chromium launches can fail transiently
@@ -158,15 +159,38 @@ func build_csv_arg(items) {
 	return result
 }
 
-# Join an argument vector for verbose display only.
-func str_join_args(args) {
+# Join an argument vector for verbose display only, after scrubbing any
+# user-provided secret-bearing values. This keeps --verbose useful without
+# turning terminal logs into a side channel for auth state paths or URL tokens.
+export func redacted_bridge_command_for_display(args) {
 	mut result := ""
+	mut redact_auth_value := false
+	mut redact_url_value := false
 	mut idx := 0
 	while idx < len(args) {
+		arg := to_string(args[idx])
+		mut display := redact_text(arg)
+
+		if is_trueish(redact_auth_value) {
+			display = "[REDACTED]"
+			redact_auth_value = false
+		} else if is_trueish(redact_url_value) {
+			display = redact_url(arg)
+			redact_url_value = false
+		} else {
+			if arg == "--auth-file" {
+				redact_auth_value = true
+			} else if arg == "--url" {
+				redact_url_value = true
+			} else if is_trueish(str_starts_with(arg, "http://")) || is_trueish(str_starts_with(arg, "https://")) {
+				display = redact_url(arg)
+			}
+		}
+
 		if idx > 0 {
 			result = result + " "
 		}
-		result = result + to_string(args[idx])
+		result = result + display
 		idx = idx + 1
 	}
 	return result

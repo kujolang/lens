@@ -636,8 +636,9 @@ export func parse_max_pages(argv) {
 	return val
 }
 
-# Parse --auth-file (Phase 2.4). Path to a storage-state/headers file. Empty
-# unless explicitly provided; auth injection is opt-in and never on the CLI.
+# Parse --auth-file (Phase 2.4). Path to a Playwright storage-state file.
+# Empty unless explicitly provided; the file contents are never read by Kujo or
+# written to artifacts.
 export func parse_auth_file(argv) {
 	return flag_value(argv, "--auth-file", "")
 }
@@ -790,7 +791,7 @@ export func print_help() {
 		"  --crawl             Bounded same-origin crawl (opt-in)",
 		"  --max-depth <n>     Crawl depth from start URL (default: 1, max: 5)",
 		"  --max-pages <n>     Max pages to crawl (default: 20, max: 200)",
-		"  --auth-file <path>  Inject auth storage-state/headers (opt-in; never logged)",
+		"  --auth-file <path>  Inject Playwright storage-state (opt-in; never logged)",
 		"  --html              Also write a self-contained HTML report",
 		"  --watch             Re-run on an interval until interrupted (Ctrl-C)",
 		"  --watch-interval <n> Seconds between watch runs (default: 5)",
