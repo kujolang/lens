@@ -4,7 +4,7 @@
 [![version](https://img.shields.io/badge/version-0.9.0-blue.svg)](CHANGELOG.md)
 [![tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](tests/lens_tests.kujo)
 [![node](https://img.shields.io/badge/node-%E2%89%A518-339933.svg?logo=node.js&logoColor=white)](#quick-start)
-[![built with Kujo](https://img.shields.io/badge/built%20with-Kujo-orange.svg)](https://github.com/kujolang/kujo)
+[![built with Kujo](https://img.shields.io/badge/built%20with-Kujo-white.svg)](https://github.com/kujolang/kujo)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Give your AI agents eyes.** Lens opens what you just built in a real browser,
