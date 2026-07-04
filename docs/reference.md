@@ -39,7 +39,7 @@ CI pipelines.
 ## Why Lens Exists
 
 AI agents building software need fast, deterministic feedback about what they
-just built. Before Lens, there was no tool in the Kujo/Kujo ecosystem that could:
+just built. Before Lens, there was no tool in the Kujo ecosystem that could:
 
 - Open a browser and capture what actually renders
 - Detect blank pages, console errors, broken network requests, and overflow
@@ -47,7 +47,7 @@ just built. Before Lens, there was no tool in the Kujo/Kujo ecosystem that could
 - Do all of this without AI/LLM dependencies, keeping the feedback loop cheap
   and repeatable
 
-Lens fills the browser/visual QA gap in the Kujo/Kujo toolchain.
+Lens fills the browser/visual QA gap in the Kujo toolchain.
 
 ## Ecosystem Fit
 

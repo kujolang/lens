@@ -3,7 +3,7 @@
  * browser-bridge.js — Lens browser automation bridge.
  *
  * Minimal Playwright-based bridge that captures browser runtime evidence
- * for the Kujo/Kujo Lens tool. All orchestration, config, artifact writing,
+ * for the Kujo Lens tool. All orchestration, config, artifact writing,
  * reporting, redaction, and checks live in Kujo. This bridge only handles
  * the browser interaction that Kujo cannot do natively.
  *
