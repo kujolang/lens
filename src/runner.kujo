@@ -1537,7 +1537,7 @@ export func run_flow_validate(config) {
 
 	# Machine-readable verdict for autonomous agents (parse instead of scrape).
 	if is_trueish(json_mode) {
-		print(to_json({
+		payload := {
 			"tool": "lens",
 			"command": "flow-validate",
 			"name": to_string(flow["name"]),
@@ -1545,7 +1545,8 @@ export func run_flow_validate(config) {
 			"step_count": len(flow_steps),
 			"problem_count": problems,
 			"steps": results
-		}))
+		}
+		print(to_json(payload))
 		if problems == 0 {
 			return EXIT_OK
 		}
