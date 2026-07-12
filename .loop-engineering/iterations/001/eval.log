@@ -28,6 +28,5 @@ lens has no documented shell runner
 gate cli_regression: pass
 
 ## gate: diff_check
-$ git diff --check -- $(git diff --name-only | grep -v '^.loop-engineering/' || true)
-.loop-engineering/iterations/001/diff.patch:24: trailing whitespace.
-+- 
+$ files=$(git diff --name-only | grep -v "^.loop-engineering/" || true); if [ -n "$files" ]; then git diff --check -- $files; fi
+gate diff_check: pass
