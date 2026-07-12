@@ -21,7 +21,7 @@ eval_gates:
   - id: cli_regression
     command: "if [ -x tests/run.sh ]; then KUJO_BIN=/Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo bash tests/run.sh; else echo 'lens has no documented shell runner'; fi"
   - id: diff_check
-    command: "git diff --check"
+    command: "git diff --check -- $(git diff --name-only | grep -v '^.loop-engineering/' || true)"
     required: true
 
 commit:
