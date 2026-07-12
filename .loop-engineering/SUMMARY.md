@@ -10,9 +10,9 @@ blocked
 
 ## Verification
 
-- passed: cli_regression, diff_check, cli_regression, diff_check, cli_regression, diff_check
+- passed: kujo_checks, cli_regression, kujo_checks, cli_regression, kujo_checks, cli_regression
 - blocked: none
-- failed: kujo_checks, kujo_checks, kujo_checks
+- failed: diff_check, diff_check, diff_check
 
 ## Commits
 

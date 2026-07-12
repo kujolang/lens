@@ -1,7 +1,26 @@
 
 ## gate: kujo_checks
-$ for f in lens.kujo src/*.kujo tests/*.kujo; do /Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo check \"$f\" >/dev/null || exit 1; done
-[KUJOCLI001] [cli] error: Failed to read .kujo file '"lens.kujo"': No such file or directory (os error 2)
+$ for f in lens.kujo src/*.kujo tests/*.kujo; do /Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo check $f >/dev/null || exit 1; done
+Compiler optimization: 0 constants folded, 33 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 8 constants folded, 213 dead instructions removed, 1 peephole optimizations
+Compiler optimization: 0 constants folded, 11 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 1 constants folded, 99 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 17 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 21 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 2 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 63 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 27 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 5 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 20 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 34 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 32 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 19 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 160 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 29 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 24 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 0 constants folded, 18 dead instructions removed, 0 peephole optimizations
+Compiler optimization: 2 constants folded, 0 dead instructions removed, 0 peephole optimizations
+gate kujo_checks: pass
 
 ## gate: cli_regression
 $ if [ -x tests/run.sh ]; then KUJO_BIN=/Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo bash tests/run.sh; else echo 'lens has no documented shell runner'; fi
@@ -10,4 +29,5 @@ gate cli_regression: pass
 
 ## gate: diff_check
 $ git diff --check
-gate diff_check: pass
+.loop-engineering/iterations/001/diff.patch:7: trailing whitespace.
++ 
