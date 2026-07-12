@@ -1,0 +1,7 @@
+diff --git a/.loop-engineering/ledger.tsv b/.loop-engineering/ledger.tsv
+index dafd866..4c16fa3 100644
+--- a/.loop-engineering/ledger.tsv
++++ b/.loop-engineering/ledger.tsv
+@@ -1 +1,2 @@
+ iteration	action	verdict	progress	evidence	justification
++001	configured-gates	failed	0	iterations/001/eval.log	required gate failed

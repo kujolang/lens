@@ -1,0 +1,13 @@
+
+## gate: kujo_checks
+$ for f in lens.kujo src/*.kujo tests/*.kujo; do /Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo check \"$f\" >/dev/null || exit 1; done
+[KUJOCLI001] [cli] error: Failed to read .kujo file '"lens.kujo"': No such file or directory (os error 2)
+
+## gate: cli_regression
+$ if [ -x tests/run.sh ]; then KUJO_BIN=/Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo bash tests/run.sh; else echo 'lens has no documented shell runner'; fi
+lens has no documented shell runner
+gate cli_regression: pass
+
+## gate: diff_check
+$ git diff --check
+gate diff_check: pass
