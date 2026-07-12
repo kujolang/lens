@@ -28,26 +28,38 @@ lens has no documented shell runner
 gate cli_regression: pass
 
 ## gate: diff_check
-$ git diff --check
-.loop-engineering/iterations/001/diff.patch:7: trailing whitespace.
-+ 
+$ git diff --check -- $(git diff --name-only | grep -v '^.loop-engineering/' || true)
+.loop-engineering/iterations/001/diff.patch:24: trailing whitespace.
++- 
 .loop-engineering/iterations/001/eval.log:33: trailing whitespace.
-++ 
+++- 
 .loop-engineering/iterations/001/gate-diff_check.log:2: trailing whitespace.
-++ 
-.loop-engineering/iterations/002/diff.patch:7: trailing whitespace.
-+ 
-.loop-engineering/iterations/002/diff.patch:24: trailing whitespace.
-++ 
-.loop-engineering/iterations/002/diff.patch:35: trailing whitespace.
-+ 
+++- 
+.loop-engineering/iterations/002/diff.patch:25: trailing whitespace.
++  
+.loop-engineering/iterations/002/diff.patch:44: trailing whitespace.
+++- 
 .loop-engineering/iterations/002/diff.patch:60: trailing whitespace.
-+ 
-.loop-engineering/iterations/002/diff.patch:64: trailing whitespace.
-+ 
-.loop-engineering/iterations/002/diff.patch:69: trailing whitespace.
-+++ 
-.loop-engineering/iterations/002/diff.patch:76: trailing whitespace.
-+++ 
-.loop-engineering/iterations/002/diff.patch:108: trailing whitespace.
-+ 
++-+ 
+.loop-engineering/iterations/002/diff.patch:63: trailing whitespace.
++++- 
+.loop-engineering/iterations/002/diff.patch:70: trailing whitespace.
++-+ 
+.loop-engineering/iterations/002/diff.patch:72: trailing whitespace.
++++- 
+.loop-engineering/iterations/002/diff.patch:97: trailing whitespace.
++- 
+.loop-engineering/iterations/002/diff.patch:114: trailing whitespace.
++-+ 
+.loop-engineering/iterations/002/diff.patch:125: trailing whitespace.
++- 
+.loop-engineering/iterations/002/diff.patch:150: trailing whitespace.
++- 
+.loop-engineering/iterations/002/diff.patch:154: trailing whitespace.
++- 
+.loop-engineering/iterations/002/diff.patch:159: trailing whitespace.
++-++ 
+.loop-engineering/iterations/002/diff.patch:166: trailing whitespace.
++-++ 
+.loop-engineering/iterations/002/diff.patch:198: trailing whitespace.
++- 

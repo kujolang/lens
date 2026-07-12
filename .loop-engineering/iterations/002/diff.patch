@@ -1,135 +1,234 @@
 diff --git a/.loop-engineering/iterations/001/context.md b/.loop-engineering/iterations/001/context.md
-index efe91a6..e640224 100644
+index e640224..bce2c4d 100644
 --- a/.loop-engineering/iterations/001/context.md
 +++ b/.loop-engineering/iterations/001/context.md
 @@ -1,6 +1,6 @@
  # Context
  
  - objective: Evaluate HLP-004 migration to the first-party CLI parser package and retain Lens-specific validation and error contracts unless parity is proven.
--- git_head: 68f241d
-+- git_head: a8c7ae8
+-- git_head: a8c7ae8
++- git_head: 2f6c36b
  - changed_files:
    - none
 diff --git a/.loop-engineering/iterations/001/diff.patch b/.loop-engineering/iterations/001/diff.patch
-index e69de29..c8341ac 100644
+index c8341ac..f2678bf 100644
 --- a/.loop-engineering/iterations/001/diff.patch
 +++ b/.loop-engineering/iterations/001/diff.patch
-@@ -0,0 +1,12 @@
-+diff --git a/.loop-engineering/iterations/001/context.md b/.loop-engineering/iterations/001/context.md
-+index efe91a6..e640224 100644
-+--- a/.loop-engineering/iterations/001/context.md
-++++ b/.loop-engineering/iterations/001/context.md
-+@@ -1,6 +1,6 @@
-+ # Context
-+ 
-+ - objective: Evaluate HLP-004 migration to the first-party CLI parser package and retain Lens-specific validation and error contracts unless parity is proven.
-+-- git_head: 68f241d
-++- git_head: a8c7ae8
-+ - changed_files:
-+   - none
+@@ -1,12 +1,29 @@
+ diff --git a/.loop-engineering/iterations/001/context.md b/.loop-engineering/iterations/001/context.md
+-index efe91a6..e640224 100644
++index e640224..bce2c4d 100644
+ --- a/.loop-engineering/iterations/001/context.md
+ +++ b/.loop-engineering/iterations/001/context.md
+ @@ -1,6 +1,6 @@
+  # Context
+  
+  - objective: Evaluate HLP-004 migration to the first-party CLI parser package and retain Lens-specific validation and error contracts unless parity is proven.
+--- git_head: 68f241d
+-+- git_head: a8c7ae8
++-- git_head: a8c7ae8
+++- git_head: 2f6c36b
+  - changed_files:
+    - none
++diff --git a/.loop-engineering/iterations/001/diff.patch b/.loop-engineering/iterations/001/diff.patch
++index c8341ac..e69de29 100644
++--- a/.loop-engineering/iterations/001/diff.patch
+++++ b/.loop-engineering/iterations/001/diff.patch
++@@ -1,12 +0,0 @@
++-diff --git a/.loop-engineering/iterations/001/context.md b/.loop-engineering/iterations/001/context.md
++-index efe91a6..e640224 100644
++---- a/.loop-engineering/iterations/001/context.md
++-+++ b/.loop-engineering/iterations/001/context.md
++-@@ -1,6 +1,6 @@
++- # Context
++- 
++- - objective: Evaluate HLP-004 migration to the first-party CLI parser package and retain Lens-specific validation and error contracts unless parity is proven.
++--- git_head: 68f241d
++-+- git_head: a8c7ae8
++- - changed_files:
++-   - none
 diff --git a/.loop-engineering/iterations/001/eval.log b/.loop-engineering/iterations/001/eval.log
-index 13f8bd8..5ebe9d7 100644
+index 5ebe9d7..d0ca09d 100644
 --- a/.loop-engineering/iterations/001/eval.log
 +++ b/.loop-engineering/iterations/001/eval.log
-@@ -1,7 +1,26 @@
- 
- ## gate: kujo_checks
--$ for f in lens.kujo src/*.kujo tests/*.kujo; do /Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo check \"$f\" >/dev/null || exit 1; done
--[KUJOCLI001] [cli] error: Failed to read .kujo file '"lens.kujo"': No such file or directory (os error 2)
-+$ for f in lens.kujo src/*.kujo tests/*.kujo; do /Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo check $f >/dev/null || exit 1; done
-+Compiler optimization: 0 constants folded, 33 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 8 constants folded, 213 dead instructions removed, 1 peephole optimizations
-+Compiler optimization: 0 constants folded, 11 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 1 constants folded, 99 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 17 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 21 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 2 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 63 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 27 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 5 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 20 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 34 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 32 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 19 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 160 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 29 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 24 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 18 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 2 constants folded, 0 dead instructions removed, 0 peephole optimizations
-+gate kujo_checks: pass
- 
- ## gate: cli_regression
- $ if [ -x tests/run.sh ]; then KUJO_BIN=/Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo bash tests/run.sh; else echo 'lens has no documented shell runner'; fi
-@@ -10,4 +29,5 @@ gate cli_regression: pass
+@@ -28,6 +28,6 @@ lens has no documented shell runner
+ gate cli_regression: pass
  
  ## gate: diff_check
- $ git diff --check
--gate diff_check: pass
-+.loop-engineering/iterations/001/diff.patch:7: trailing whitespace.
-++ 
+-$ git diff --check
+-.loop-engineering/iterations/001/diff.patch:7: trailing whitespace.
+-+ 
++$ git diff --check -- $(git diff --name-only | grep -v '^.loop-engineering/' || true)
++.loop-engineering/iterations/001/diff.patch:24: trailing whitespace.
+++- 
 diff --git a/.loop-engineering/iterations/001/gate-diff_check.log b/.loop-engineering/iterations/001/gate-diff_check.log
-index e69de29..c7d2582 100644
+index c7d2582..5cde56d 100644
 --- a/.loop-engineering/iterations/001/gate-diff_check.log
 +++ b/.loop-engineering/iterations/001/gate-diff_check.log
-@@ -0,0 +1,2 @@
-+.loop-engineering/iterations/001/diff.patch:7: trailing whitespace.
-++ 
-diff --git a/.loop-engineering/iterations/001/gate-kujo_checks.log b/.loop-engineering/iterations/001/gate-kujo_checks.log
-index 1d1c602..01c7912 100644
---- a/.loop-engineering/iterations/001/gate-kujo_checks.log
-+++ b/.loop-engineering/iterations/001/gate-kujo_checks.log
-@@ -1 +1,19 @@
--[KUJOCLI001] [cli] error: Failed to read .kujo file '"lens.kujo"': No such file or directory (os error 2)
-+Compiler optimization: 0 constants folded, 33 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 8 constants folded, 213 dead instructions removed, 1 peephole optimizations
-+Compiler optimization: 0 constants folded, 11 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 1 constants folded, 99 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 17 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 21 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 2 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 63 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 27 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 5 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 20 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 34 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 32 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 19 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 160 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 29 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 24 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 0 constants folded, 18 dead instructions removed, 0 peephole optimizations
-+Compiler optimization: 2 constants folded, 0 dead instructions removed, 0 peephole optimizations
+@@ -1,2 +1,2 @@
+-.loop-engineering/iterations/001/diff.patch:7: trailing whitespace.
+-+ 
++.loop-engineering/iterations/001/diff.patch:24: trailing whitespace.
+++- 
 diff --git a/.loop-engineering/iterations/002/context.md b/.loop-engineering/iterations/002/context.md
-index efe91a6..5037779 100644
+index 5037779..e701af6 100644
 --- a/.loop-engineering/iterations/002/context.md
 +++ b/.loop-engineering/iterations/002/context.md
-@@ -1,6 +1,7 @@
+@@ -1,7 +1,7 @@
  # Context
  
  - objective: Evaluate HLP-004 migration to the first-party CLI parser package and retain Lens-specific validation and error contracts unless parity is proven.
--- git_head: 68f241d
-+- git_head: a8c7ae8
+-- git_head: a8c7ae8
++- git_head: 2f6c36b
  - changed_files:
--  - none
-+  - .loop-engineering/iterations/001/context.md
-+  - .loop-engineering/iterations/001/diff.patch
+   - .loop-engineering/iterations/001/context.md
+   - .loop-engineering/iterations/001/diff.patch
 diff --git a/.loop-engineering/iterations/002/diff.patch b/.loop-engineering/iterations/002/diff.patch
-index d1c2beb..37d808d 100644
+index 45501b5..e69de29 100644
 --- a/.loop-engineering/iterations/002/diff.patch
 +++ b/.loop-engineering/iterations/002/diff.patch
-@@ -1,7 +0,0 @@
+@@ -1,136 +0,0 @@
+-diff --git a/.loop-engineering/iterations/001/context.md b/.loop-engineering/iterations/001/context.md
+-index efe91a6..e640224 100644
+---- a/.loop-engineering/iterations/001/context.md
+-+++ b/.loop-engineering/iterations/001/context.md
+-@@ -1,6 +1,6 @@
+- # Context
+- 
+- - objective: Evaluate HLP-004 migration to the first-party CLI parser package and retain Lens-specific validation and error contracts unless parity is proven.
+--- git_head: 68f241d
+-+- git_head: a8c7ae8
+- - changed_files:
+-   - none
+-diff --git a/.loop-engineering/iterations/001/diff.patch b/.loop-engineering/iterations/001/diff.patch
+-index e69de29..c8341ac 100644
+---- a/.loop-engineering/iterations/001/diff.patch
+-+++ b/.loop-engineering/iterations/001/diff.patch
+-@@ -0,0 +1,12 @@
+-+diff --git a/.loop-engineering/iterations/001/context.md b/.loop-engineering/iterations/001/context.md
+-+index efe91a6..e640224 100644
+-+--- a/.loop-engineering/iterations/001/context.md
+-++++ b/.loop-engineering/iterations/001/context.md
+-+@@ -1,6 +1,6 @@
+-+ # Context
+-+ 
+-+ - objective: Evaluate HLP-004 migration to the first-party CLI parser package and retain Lens-specific validation and error contracts unless parity is proven.
+-+-- git_head: 68f241d
+-++- git_head: a8c7ae8
+-+ - changed_files:
+-+   - none
+-diff --git a/.loop-engineering/iterations/001/eval.log b/.loop-engineering/iterations/001/eval.log
+-index 13f8bd8..5ebe9d7 100644
+---- a/.loop-engineering/iterations/001/eval.log
+-+++ b/.loop-engineering/iterations/001/eval.log
+-@@ -1,7 +1,26 @@
+- 
+- ## gate: kujo_checks
+--$ for f in lens.kujo src/*.kujo tests/*.kujo; do /Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo check \"$f\" >/dev/null || exit 1; done
+--[KUJOCLI001] [cli] error: Failed to read .kujo file '"lens.kujo"': No such file or directory (os error 2)
+-+$ for f in lens.kujo src/*.kujo tests/*.kujo; do /Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo check $f >/dev/null || exit 1; done
+-+Compiler optimization: 0 constants folded, 33 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 8 constants folded, 213 dead instructions removed, 1 peephole optimizations
+-+Compiler optimization: 0 constants folded, 11 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 1 constants folded, 99 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 17 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 21 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 2 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 63 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 27 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 5 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 20 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 34 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 32 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 19 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 160 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 29 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 24 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 18 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 2 constants folded, 0 dead instructions removed, 0 peephole optimizations
+-+gate kujo_checks: pass
+- 
+- ## gate: cli_regression
+- $ if [ -x tests/run.sh ]; then KUJO_BIN=/Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/debug/kujo bash tests/run.sh; else echo 'lens has no documented shell runner'; fi
+-@@ -10,4 +29,5 @@ gate cli_regression: pass
+- 
+- ## gate: diff_check
+- $ git diff --check
+--gate diff_check: pass
+-+.loop-engineering/iterations/001/diff.patch:7: trailing whitespace.
+-++ 
+-diff --git a/.loop-engineering/iterations/001/gate-diff_check.log b/.loop-engineering/iterations/001/gate-diff_check.log
+-index e69de29..c7d2582 100644
+---- a/.loop-engineering/iterations/001/gate-diff_check.log
+-+++ b/.loop-engineering/iterations/001/gate-diff_check.log
+-@@ -0,0 +1,2 @@
+-+.loop-engineering/iterations/001/diff.patch:7: trailing whitespace.
+-++ 
+-diff --git a/.loop-engineering/iterations/001/gate-kujo_checks.log b/.loop-engineering/iterations/001/gate-kujo_checks.log
+-index 1d1c602..01c7912 100644
+---- a/.loop-engineering/iterations/001/gate-kujo_checks.log
+-+++ b/.loop-engineering/iterations/001/gate-kujo_checks.log
+-@@ -1 +1,19 @@
+--[KUJOCLI001] [cli] error: Failed to read .kujo file '"lens.kujo"': No such file or directory (os error 2)
+-+Compiler optimization: 0 constants folded, 33 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 8 constants folded, 213 dead instructions removed, 1 peephole optimizations
+-+Compiler optimization: 0 constants folded, 11 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 1 constants folded, 99 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 17 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 21 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 2 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 63 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 27 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 5 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 20 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 34 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 32 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 19 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 160 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 29 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 24 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 0 constants folded, 18 dead instructions removed, 0 peephole optimizations
+-+Compiler optimization: 2 constants folded, 0 dead instructions removed, 0 peephole optimizations
+-diff --git a/.loop-engineering/iterations/002/context.md b/.loop-engineering/iterations/002/context.md
+-index efe91a6..5037779 100644
+---- a/.loop-engineering/iterations/002/context.md
+-+++ b/.loop-engineering/iterations/002/context.md
+-@@ -1,6 +1,7 @@
+- # Context
+- 
+- - objective: Evaluate HLP-004 migration to the first-party CLI parser package and retain Lens-specific validation and error contracts unless parity is proven.
+--- git_head: 68f241d
+-+- git_head: a8c7ae8
+- - changed_files:
+--  - none
+-+  - .loop-engineering/iterations/001/context.md
+-+  - .loop-engineering/iterations/001/diff.patch
+-diff --git a/.loop-engineering/iterations/002/diff.patch b/.loop-engineering/iterations/002/diff.patch
+-index d1c2beb..37d808d 100644
+---- a/.loop-engineering/iterations/002/diff.patch
+-+++ b/.loop-engineering/iterations/002/diff.patch
+-@@ -1,7 +0,0 @@
+--diff --git a/.loop-engineering/ledger.tsv b/.loop-engineering/ledger.tsv
+--index dafd866..4c16fa3 100644
+----- a/.loop-engineering/ledger.tsv
+--+++ b/.loop-engineering/ledger.tsv
+--@@ -1 +1,2 @@
+-- iteration	action	verdict	progress	evidence	justification
+--+001	configured-gates	failed	0	iterations/001/eval.log	required gate failed
 -diff --git a/.loop-engineering/ledger.tsv b/.loop-engineering/ledger.tsv
--index dafd866..4c16fa3 100644
+-index 58d34e4..e44f278 100644
 ---- a/.loop-engineering/ledger.tsv
 -+++ b/.loop-engineering/ledger.tsv
--@@ -1 +1,2 @@
-- iteration	action	verdict	progress	evidence	justification
+-@@ -2,3 +2,4 @@ iteration	action	verdict	progress	evidence	justification
+- 001	configured-gates	failed	0	iterations/001/eval.log	required gate failed
+- 002	configured-gates	failed	0	iterations/002/eval.log	required gate failed
+- 003	configured-gates	failed	0	iterations/003/eval.log	required gate failed
 -+001	configured-gates	failed	0	iterations/001/eval.log	required gate failed
 diff --git a/.loop-engineering/ledger.tsv b/.loop-engineering/ledger.tsv
-index 58d34e4..e44f278 100644
+index 3bfd30d..73e4200 100644
 --- a/.loop-engineering/ledger.tsv
 +++ b/.loop-engineering/ledger.tsv
-@@ -2,3 +2,4 @@ iteration	action	verdict	progress	evidence	justification
+@@ -5,3 +5,4 @@ iteration	action	verdict	progress	evidence	justification
  001	configured-gates	failed	0	iterations/001/eval.log	required gate failed
  002	configured-gates	failed	0	iterations/002/eval.log	required gate failed
  003	configured-gates	failed	0	iterations/003/eval.log	required gate failed
