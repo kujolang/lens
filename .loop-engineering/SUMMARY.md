@@ -24,7 +24,7 @@ success
 
 ## External Blockers
 
-- kujo-cli-module-distribution: Publish/install the first-party CLI module or add a supported module search path/package dependency, then migrate parser call sites and add parser parity tests.
+- lens-cli-contract-first: Lens-specific parser validation, flag semantics, and error contracts are not behavior-equivalent to the first-party compatibility adapter; retain the wrapper until a versioned parse-spec parity contract is approved.
 
 ## Next Start
 
