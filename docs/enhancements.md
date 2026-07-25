@@ -38,7 +38,7 @@ No task is "done" until all of these pass. Run them in order. This is the
 
 1. **Baseline green.** Before touching code, record the current state:
    ```bash
-   ../kujo/target/debug/kujo run tests/lens_tests.kujo   # note the pass count
+   kujo run tests/lens_tests.kujo   # note the pass count
    ```
 2. **Branch.** Never work on `main`. `git checkout -b enh/<task-id>`.
 3. **Implement** the task's steps.
@@ -47,7 +47,7 @@ No task is "done" until all of these pass. Run them in order. This is the
    path, and any new redaction surface.
 5. **Full suite passes, count went up:**
    ```bash
-   ../kujo/target/debug/kujo run tests/lens_tests.kujo   # 0 failed, count > baseline
+   kujo run tests/lens_tests.kujo   # 0 failed, count > baseline
    ```
 6. **Bridge syntax** (only if `bridge/*.js` changed):
    ```bash

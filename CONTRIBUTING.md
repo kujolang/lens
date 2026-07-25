@@ -30,14 +30,14 @@ Use the Kujo runtime expected by this repository. Most repos support one of
 these environment variables:
 
 ```bash
-export KUJO_BIN=/path/to/kujo
-export KUJO=/path/to/kujo
+export KUJO_BIN=kujo
+export KUJO=kujo
 ```
 
 See `docs/getting-started.md` for the full walkthrough. In short:
 
 ```bash
-cd /path/to/kujo && cargo build
+kujo --version
 cd /path/to/lens/bridge && npm install && npx playwright install chromium
 cd /path/to/lens && ./lens --version
 ```

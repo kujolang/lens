@@ -21,18 +21,16 @@ You need three things before installing Lens:
 If `node --version` prints something below 18, upgrade from
 [nodejs.org](https://nodejs.org) before continuing.
 
-## 2. Build the Kujo runtime
+## 2. Verify the Kujo runtime
 
-Lens runs on Kujo, so you need the `kujo` binary. Build it once:
+Lens runs on Kujo, so install Kujo until the `kujo` command is available on
+your `PATH`:
 
 ```bash
-cd /path/to/kujo
-cargo build
+kujo --version
 ```
 
-This produces `target/debug/kujo`. By default, Lens looks for Kujo as a sibling
-directory (`../kujo/target/debug/kujo` relative to the `lens` script). If your
-layout differs, set `KUJO_BIN` (see [step 4](#4-verify-the-install)).
+If your environment needs an explicit runtime override, set `KUJO_BIN=kujo`.
 
 ## 3. Install the browser bridge
 
@@ -71,7 +69,7 @@ export PATH="/path/to/lens:$PATH"
 If you see a "Kujo binary not found" style error, point Lens at your build:
 
 ```bash
-export KUJO_BIN="/path/to/kujo/target/debug/kujo"
+export KUJO_BIN="kujo"
 ./lens --version
 ```
 
@@ -173,8 +171,6 @@ To confirm Lens itself is healthy (the full test suite passes, no browser needed
 
 ```bash
 kujo run tests/lens_tests.kujo
-# or, if kujo isn't on your PATH:
-../kujo/target/debug/kujo run tests/lens_tests.kujo
 ```
 
 Expected:
@@ -206,7 +202,7 @@ read the Agent Repair Brief and fix what it points to.
 |---------|-----|
 | `Node.js is required for browser automation` | Install Node ≥ 18; verify with `node --version`. |
 | `Browser provider failed` | `cd bridge && npm install && npx playwright install chromium`. |
-| Kujo binary not found | `export KUJO_BIN=/path/to/kujo/target/debug/kujo`. |
+| Kujo binary not found | `export KUJO_BIN=kujo`. |
 | External URL blocked (exit 2) | Add `--allow-external` — this is a safety default. |
 | Page load timeout | Confirm the server is running; raise `--timeout <seconds>`. |
 

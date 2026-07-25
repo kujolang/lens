@@ -69,7 +69,7 @@ reports, flows, visual checks, accessibility, integrations, and failure paths.
 ## Quick start
 
 ```bash
-cd /path/to/kujo && cargo build
+kujo --version
 cd /path/to/lens/bridge && npm install && npx playwright install chromium
 cd /path/to/lens
 ./lens check http://localhost:3000

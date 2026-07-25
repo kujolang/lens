@@ -73,7 +73,7 @@ Lens integrates with the ecosystem through:
 ### Prerequisites
 
 - **Kujo** runtime — built from `/2026/kujo` (`cargo build` produces
-  `target/debug/kujo`)
+  `kujo`)
 - **Node.js** >= 18 — required for the Playwright browser bridge
 - **bash** — for the `lens` shell wrapper
 
@@ -81,7 +81,7 @@ Lens integrates with the ecosystem through:
 
 ```bash
 # 1. Build Kujo (if not already built)
-cd /path/to/kujo
+kujo --version
 cargo build
 
 # 2. Install Playwright + Chromium in the Lens bridge directory
