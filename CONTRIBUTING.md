@@ -26,12 +26,10 @@ For Lens specifically, preserve these invariants on every change:
 
 ## Local Setup
 
-Use the Kujo runtime expected by this repository. Most repos support one of
-these environment variables:
+Install Kujo so the `kujo` command is available on your `PATH`:
 
 ```bash
-export KUJO_BIN=kujo
-export KUJO=kujo
+kujo --version
 ```
 
 See `docs/getting-started.md` for the full walkthrough. In short:
