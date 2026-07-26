@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Launch-readiness Eval metadata for the Kujo prelaunch review.
 - **`lens inspect <url>`**: read-only selector discovery — lists a page's
   interactive elements (buttons, links, inputs, modal triggers) with suggested
   selectors + text, saved to `elements.json`. The key to authoring flows.

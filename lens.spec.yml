@@ -96,3 +96,5 @@ acceptance_criteria:
   - "--accessibility runs axe-core and degrades honestly when unavailable"
   - "--verbose does not print raw auth-file paths or URL secrets"
   - "All tests pass"
+  - "Launch-readiness Eval suite passes without live credentials or external URLs"
+  - "Local browser proof is captured against a localhost fixture"

@@ -1,0 +1,34 @@
+{
+  "name": "lens-launch-readiness",
+  "version": "0.1.0",
+  "tests": [
+    {
+      "name": "Lens help succeeds",
+      "check": "command_succeeds",
+      "params": {
+        "command": "cd /Users/robertdevore/2026/Kujolang/kujo-repos/lens && ./lens --help"
+      }
+    },
+    {
+      "name": "Lens version succeeds",
+      "check": "command_succeeds",
+      "params": {
+        "command": "cd /Users/robertdevore/2026/Kujolang/kujo-repos/lens && ./lens --version"
+      }
+    },
+    {
+      "name": "Lens Kujo suite succeeds",
+      "check": "command_succeeds",
+      "params": {
+        "command": "cd /Users/robertdevore/2026/Kujolang/kujo-repos/lens && kujo run tests/lens_tests.kujo"
+      }
+    },
+    {
+      "name": "Lens bridge suite succeeds",
+      "check": "command_succeeds",
+      "params": {
+        "command": "cd /Users/robertdevore/2026/Kujolang/kujo-repos/lens && npm test --prefix bridge"
+      }
+    }
+  ]
+}
