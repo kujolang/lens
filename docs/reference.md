@@ -100,7 +100,7 @@ export PATH="/path/to/lens:$PATH"
 
 ```bash
 lens --version
-# Lens v0.9.0
+# Lens v1.0.0
 
 lens --help
 # Shows usage and flags
@@ -1257,7 +1257,7 @@ historical implementation context.
 
 ## Version
 
-Lens v0.9.0 — browser checks, same-origin link checking, Spec/Eval integration,
+Lens v1.0.0 — browser checks, same-origin link checking, Spec/Eval integration,
 safe executable flows, visual baselines/diffing, axe-core accessibility
 scanning, performance evidence, bounded crawl, HTML reports, and centralized
 secret redaction across artifacts, reports, and verbose bridge logs.

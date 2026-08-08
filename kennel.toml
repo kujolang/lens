@@ -1,6 +1,6 @@
 [package]
 name = "lens"
-version = "0.9.0"
+version = "1.0.0"
 description = "Deterministic browser/visual QA tool for AI-built software. Gives agents eyes by opening a local app or URL, collecting evidence, and producing agent-ready repair reports."
 license = "MIT"
 authors = ["Kujolang <contact@kujolang.ai>"]
@@ -10,10 +10,10 @@ categories = ["developer-tools"]
 readme = "README.md"
 
 [package.status]
-stage = "beta"
-stability = "stabilizing"
-public_api = false
-notes = "Browser checks, safe flows, visual baselines, and axe-core accessibility scanning are implemented. Centralized secret redaction across all artifacts."
+stage = "production"
+stability = "stable"
+public_api = true
+notes = "Stable deterministic browser checks, safety-gated flows, visual baselines, accessibility scanning, and redacted artifact contracts."
 
 [kujo]
 minimum_version = "0.1.0"

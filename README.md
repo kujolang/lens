@@ -1,6 +1,6 @@
 # Lens
 
-[![Version](https://img.shields.io/badge/version-0.9.0-black)](https://github.com/kujolang/lens)
+[![Version](https://img.shields.io/badge/version-1.0.0-black)](https://github.com/kujolang/lens)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 [![built with Kujo](https://img.shields.io/badge/built%20with-Kujo-white.svg)](https://github.com/kujolang/kujo)
 [![CI](https://github.com/kujolang/lens/actions/workflows/ci.yml/badge.svg)](https://github.com/kujolang/lens/actions/workflows/ci.yml)
@@ -60,9 +60,8 @@ actually work?"* Lens answers it the same way every time:
 
 ## Production posture
 
-Lens is currently **beta/stabilizing**: the core contracts are intentionally
-small, documented, tested, and local-first, while the public API remains free to
-tighten before a 1.0 release. The repo is structured as a Kujo showcase: source
+Lens 1.0 is **stable within its deterministic local-first scope**: the core
+contracts are intentionally small, documented, and tested. The repo is structured as a Kujo showcase: source
 lives under `src/`, browser-only work is isolated in `bridge/`, examples are
 copyable, and the test suite covers CLI parsing, safety rules, redaction,
 reports, flows, visual checks, accessibility, integrations, and failure paths.

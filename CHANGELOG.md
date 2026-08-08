@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-08
+
 ### Added
 - Launch-readiness Eval metadata for the Kujo prelaunch review.
 - **`lens inspect <url>`**: read-only selector discovery — lists a page's
@@ -66,7 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   name the specific oversized element(s) and their width (Phase 4.4).
 
 ### Project & robustness
-- Version bumped to **0.9.0**, single-sourced via `lens_version()`.
+- Version promoted to **1.0.0**, single-sourced via `lens_version()`.
 - `examples/` directory (`.lens.toml`, read-only + interactive flows, a spec);
   docs now reference real, runnable example paths.
 - CI gained an **end-to-end job** that runs `lens check` + `lens flow --execute`
