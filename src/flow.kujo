@@ -89,7 +89,16 @@ export func load_flow_file(flow_path) {
 		}
 	}
 	
-	parsed := parse_json(raw)
+	mut parsed := {}
+	try {
+		parsed = parse_json(raw)
+	} except e {
+		return {
+			"valid": false,
+			"error": "Invalid JSON in flow file " + flow_path + ": " + to_string(e),
+			"flow": {}
+		}
+	}
 	if is_falseish(has_key(parsed, "steps")) && is_falseish(has_key(parsed, "name")) {
 		return {
 			"valid": false,

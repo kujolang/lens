@@ -54,7 +54,19 @@ export func load_spec_file(spec_path) {
 		}
 	}
 	
-	parsed := parse_json(raw)
+	mut parsed := {}
+	try {
+		parsed = parse_json(raw)
+	} except e {
+		return {
+			"valid": false,
+			"error": "Invalid JSON in Spec file " + spec_path + ": " + to_string(e),
+			"assertions": {},
+			"warnings": array(),
+			"supported_count": 0,
+			"unsupported_count": 0
+		}
+	}
 	if is_falseish(has_key(parsed, "title")) && is_falseish(has_key(parsed, "url")) && is_falseish(has_key(parsed, "console")) && is_falseish(has_key(parsed, "network")) && is_falseish(has_key(parsed, "layout")) && is_falseish(has_key(parsed, "links")) && is_falseish(has_key(parsed, "text")) && is_falseish(has_key(parsed, "selectors")) {
 		return {
 			"valid": false,
