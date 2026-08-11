@@ -211,6 +211,12 @@ export func is_json_mode(argv) {
 	return has_flag(argv, "--json")
 }
 
+# Fast, compact defaults for an agent's inner repair loop. Explicit CLI flags
+# can override the viewport, settle window, or browser selected by this profile.
+export func is_quick(argv) {
+	return has_flag(argv, "--quick")
+}
+
 # Check if --verbose flag is present.
 export func is_verbose(argv) {
 	return has_flag(argv, "--verbose")
@@ -520,14 +526,27 @@ export func build_config(argv) {
 		idx = len(argv) + 1
 	}
 	
+	quick := is_quick(argv)
+	mut quick_viewports := parse_viewports(argv)
+	mut quick_settle_ms := parse_settle_ms(argv)
+	mut quick_browser := parse_browser(argv)
+	mut quick_json_output := is_json_mode(argv)
+	if is_trueish(quick) {
+		quick_json_output = true
+		if is_falseish(has_flag(argv, "--viewport")) { quick_viewports = array("desktop") }
+		if is_falseish(has_flag(argv, "--settle-ms")) { quick_settle_ms = 0 }
+		if is_falseish(has_flag(argv, "--browser")) { quick_browser = "chromium" }
+	}
+
 	mut config := {
 		"subcommand": subcommand,
 		"url": url,
 		"out_dir": parse_out_dir(argv),
-		"viewports": parse_viewports(argv),
+		"viewports": quick_viewports,
 		"timeout": parse_timeout(argv),
 		"verbose": is_verbose(argv),
-		"json_output": is_json_mode(argv),
+		"json_output": quick_json_output,
+		"quick": quick,
 		"check_links": is_check_links(argv),
 		"max_links": parse_max_links(argv),
 		"allow_external": is_allow_external(argv),
@@ -543,14 +562,14 @@ export func build_config(argv) {
 		"a11y_tags": parse_a11y_tags(argv),
 		"a11y_include": parse_a11y_include(argv),
 		"a11y_exclude": parse_a11y_exclude(argv),
-		"settle_ms": parse_settle_ms(argv),
+		"settle_ms": quick_settle_ms,
 		"max_concurrency": parse_max_concurrency(argv),
 		"config_path": parse_config_path(argv),
 		"perf": is_perf(argv),
 		"perf_lcp_ms": DEFAULT_PERF_LCP_MS,
 		"perf_cls_x100": DEFAULT_PERF_CLS_X100,
 		"perf_ttfb_ms": DEFAULT_PERF_TTFB_MS,
-		"browser": parse_browser(argv),
+		"browser": quick_browser,
 		"throttle": parse_throttle(argv),
 		"device": parse_device(argv),
 		"crawl": is_crawl(argv),
@@ -737,6 +756,15 @@ export func merge_file_config(config, argv, file_data) {
 		}
 	}
 
+	# --quick is an explicit CLI profile, so its defaults outrank project-file
+	# values while still allowing direct CLI flags to override each choice.
+	if is_trueish(merged["quick"]) {
+		merged["json_output"] = true
+		if is_falseish(has_flag(argv, "--viewport")) { merged["viewports"] = array("desktop") }
+		if is_falseish(has_flag(argv, "--settle-ms")) { merged["settle_ms"] = 0 }
+		if is_falseish(has_flag(argv, "--browser")) { merged["browser"] = "chromium" }
+	}
+
 	return merged
 }
 
@@ -772,6 +800,7 @@ export func print_help() {
 		"  --timeout <seconds> Page load timeout in seconds (default: 30, max: 300)",
 		"  --verbose           Print expanded terminal output",
 		"  --json              Print JSON summary to stdout",
+		"  --quick             Agent inner-loop profile: desktop, no extra settle, Chromium, JSON",
 		"  --check-links       Check same-origin visible links (off by default)",
 		"  --max-links <n>     Max links to check when --check-links (default: 50)",
 		"  --allow-external    Allow checking external/public URLs",
@@ -815,6 +844,7 @@ export func print_help() {
 		"Examples:",
 		"  lens check http://localhost:3000",
 		"  lens check http://localhost:8080 --viewport mobile --json",
+		"  lens check http://localhost:3000 --quick",
 		"  lens check https://example.com --allow-external --check-links",
 		"  lens check http://127.0.0.1:3000 --fail-on warning --verbose",
 		"  lens check http://localhost:3000 --spec ./specs/dashboard.json",

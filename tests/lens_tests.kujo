@@ -11,7 +11,7 @@
 from src.config import parse_viewport, parse_severity, severity_index
 from src.config import severity_meets_threshold, has_flag, flag_value
 from src.config import parse_subcommand, parse_viewports, parse_fail_on
-from src.config import is_json_mode, is_verbose, is_check_links
+from src.config import is_json_mode, is_quick, is_verbose, is_check_links
 from src.config import is_allow_external, parse_timeout, parse_max_links
 from src.config import parse_out_dir, build_config
 from src.config import is_accessibility, parse_a11y_tags, parse_a11y_include, parse_a11y_exclude
@@ -133,6 +133,26 @@ func test_build_config_flags() {
 	check(config["check_links"] == true, "build_config detects --check-links")
 	check(config["json_output"] == true, "build_config detects --json")
 	check(config["verbose"] == true, "build_config detects --verbose")
+}
+
+func test_quick_profile_defaults() {
+	argv := array("check", "--quick", "http://localhost:3000")
+	config := build_config(argv)
+	check_eq(is_quick(argv), true, "quick: flag is detected")
+	check_eq(config["quick"], true, "quick: profile recorded in config")
+	check_eq(config["json_output"], true, "quick: JSON output enabled")
+	check_eq(len(config["viewports"]), 1, "quick: one viewport selected")
+	check_eq(config["viewports"][0], "desktop", "quick: desktop viewport selected")
+	check_eq(config["settle_ms"], 0, "quick: extra settle disabled")
+	check_eq(config["browser"], "chromium", "quick: optimized Chromium selected")
+}
+
+func test_quick_profile_explicit_overrides() {
+	argv := array("check", "--quick", "--viewport", "mobile", "--settle-ms", "250", "--browser", "firefox", "http://localhost:3000")
+	config := build_config(argv)
+	check_eq(config["viewports"][0], "mobile", "quick: explicit viewport wins")
+	check_eq(config["settle_ms"], 250, "quick: explicit settle window wins")
+	check_eq(config["browser"], "firefox", "quick: explicit browser wins")
 }
 
 # ============================================================
@@ -762,6 +782,17 @@ func test_merge_file_config_viewports() {
 	vps := merged["viewports"]
 	check_eq(len(vps), 2, "merge: viewports validated (garbage dropped)")
 	check_eq(to_string(vps[1]), "1024x768", "merge: custom viewport kept")
+}
+
+func test_quick_profile_overrides_project_defaults() {
+	argv := array("check", "--quick", "http://localhost:3000")
+	config := build_config(argv)
+	file_data := { "viewports": array("desktop", "mobile"), "settle_ms": 900, "browser": "webkit" }
+	merged := merge_file_config(config, argv, file_data)
+	check_eq(len(merged["viewports"]), 1, "quick merge: project viewports stay compact")
+	check_eq(merged["viewports"][0], "desktop", "quick merge: desktop remains selected")
+	check_eq(merged["settle_ms"], 0, "quick merge: project settle does not slow profile")
+	check_eq(merged["browser"], "chromium", "quick merge: project browser does not replace optimized default")
 }
 
 # ============================================================
@@ -1533,6 +1564,8 @@ test_has_flag()
 test_flag_value()
 test_build_config_defaults()
 test_build_config_flags()
+test_quick_profile_defaults()
+test_quick_profile_explicit_overrides()
 test_extract_host()
 test_has_valid_scheme()
 test_is_localhost_host()
@@ -1601,6 +1634,7 @@ test_merge_file_config_applies_when_flag_absent()
 test_merge_file_config_cli_wins()
 test_merge_file_config_invalid_fail_on()
 test_merge_file_config_viewports()
+test_quick_profile_overrides_project_defaults()
 test_parse_browser()
 test_parse_throttle()
 test_parse_device()
