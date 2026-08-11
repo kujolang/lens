@@ -730,37 +730,115 @@ export func normalize_url(href, base_url) {
 		return ""
 	}
 	
-	# Absolute URL
-	if is_trueish(str_starts_with(h, "http://")) || is_trueish(str_starts_with(h, "https://")) {
-		return h
+	# Absolute URL (schemes are case-insensitive).
+	lower_h := str_lower(h)
+	if is_trueish(str_starts_with(lower_h, "http://")) || is_trueish(str_starts_with(lower_h, "https://")) {
+		return strip_url_fragment(h)
+	}
+
+	# Scheme-relative URLs (//host/path) are absolute, not root-relative.
+	# Preserve that distinction so external links stay external.
+	if is_trueish(str_starts_with(h, "//")) {
+		mut scheme := "http:"
+		if is_trueish(str_starts_with(str_lower(to_string(base_url)), "https://")) {
+			scheme = "https:"
+		}
+		return strip_url_fragment(scheme + h)
 	}
 	
 	# Root-relative
 	if is_trueish(str_starts_with(h, "/")) {
-		# Strip path from base_url to get origin
-		mut origin := base_url
-		# Find third slash (after https://)
-		mut slash_count := 0
-		mut i := 0
-		while i < len(origin) {
-			if origin[i] == "/" {
-				slash_count = slash_count + 1
-				if slash_count == 3 {
-					origin = substring(origin, 0, i)
-					i = len(origin) + 1
-				}
-			}
-			i = i + 1
-		}
-		return origin + h
+		return url_origin(base_url) + strip_url_fragment(h)
 	}
-	
-	# Path-relative (starts with ./ or just name)
+
+	# Query-relative URLs replace the current query without changing the path.
+	if is_trueish(str_starts_with(h, "?")) {
+		return strip_url_query_and_fragment(base_url) + strip_url_fragment(h)
+	}
+
+	# Path-relative URLs resolve against the current document's directory,
+	# not by appending to the full document URL.
 	if is_trueish(str_starts_with(h, "./")) {
 		h = substring(h, 2, len(h))
 	}
-	# Append to base path
-	return base_url + "/" + h
+	base_clean := strip_url_query_and_fragment(base_url)
+	origin := url_origin(base_clean)
+	if base_clean == origin {
+		return origin + "/" + strip_url_fragment(h)
+	}
+	mut last_slash := -1
+	mut i := 0
+	while i < len(base_clean) {
+		if base_clean[i] == "/" {
+			last_slash = i
+		}
+		i = i + 1
+	}
+	mut directory := base_clean + "/"
+	if last_slash >= 0 {
+		directory = substring(base_clean, 0, last_slash + 1)
+	}
+	return directory + strip_url_fragment(h)
+}
+
+func url_origin(raw_url) {
+	mut origin := to_string(raw_url)
+	mut slash_count := 0
+	mut i := 0
+	while i < len(origin) {
+		if origin[i] == "/" {
+			slash_count = slash_count + 1
+			if slash_count == 3 {
+				return substring(origin, 0, i)
+			}
+		}
+		i = i + 1
+	}
+	return strip_url_query_and_fragment(origin)
+}
+
+func strip_url_query_and_fragment(raw_url) {
+	mut out := to_string(raw_url)
+	q := index_of(out, "?")
+	if q >= 0 {
+		out = substring(out, 0, q)
+	}
+	hash := index_of(out, "#")
+	if hash >= 0 {
+		out = substring(out, 0, hash)
+	}
+	return out
+}
+
+func strip_url_fragment(raw_url) {
+	value := to_string(raw_url)
+	hash := index_of(value, "#")
+	if hash >= 0 {
+		return substring(value, 0, hash)
+	}
+	return value
+}
+
+# Keep the real request URL separate from the redacted artifact/report URL.
+# Link checks must navigate with the former or secret-bearing application links
+# are changed before they are tested and can produce false failures.
+export func prepare_link_url(href, base_url) {
+	request_url := normalize_url(href, base_url)
+	return {
+		"request_url": request_url,
+		"display_url": redact_url(request_url)
+	}
+}
+
+export func link_url_was_seen(urls, candidate) {
+	mut i := 0
+	while i < len(urls) {
+		if to_string(urls[i]) == candidate {
+			return true
+		}
+		i = i + 1
+	}
+	return false
 }
 
 # Check if a URL is same-origin as the base URL.
@@ -830,6 +908,7 @@ export func check_links(config, bridge_data) {
 	
 	mut checked_count := 0
 	mut link_idx := 0
+	mut checked_urls := array()
 	
 	while link_idx < len(raw_links) && checked_count < max_links {
 		raw := raw_links[link_idx]
@@ -887,8 +966,11 @@ export func check_links(config, bridge_data) {
 			continue
 		}
 		
-		# Normalize URL
-		normalized := redact_url(normalize_url(href, base_url))
+		# Normalize URL while keeping secrets out of stored output. The real URL
+		# is used only for the request; the redacted form is used everywhere else.
+		prepared := prepare_link_url(href, base_url)
+		request_url := to_string(prepared["request_url"])
+		normalized := to_string(prepared["display_url"])
 		
 		# Skip fragment-only (normalize_url returns "" for fragments)
 		if normalized == "" {
@@ -911,7 +993,7 @@ export func check_links(config, bridge_data) {
 		}
 		
 		# Check same-origin
-		same_origin := is_same_origin(normalized, base_url)
+		same_origin := is_same_origin(request_url, base_url)
 		
 		if is_falseish(same_origin) {
 			mut skip_result := {
@@ -933,7 +1015,7 @@ export func check_links(config, bridge_data) {
 		}
 		
 		# Skip destructive paths
-		if is_trueish(is_destructive_path(normalized)) {
+		if is_trueish(is_destructive_path(request_url)) {
 			mut skip_result := {
 				"href": href,
 				"normalized_url": normalized,
@@ -951,6 +1033,27 @@ export func check_links(config, bridge_data) {
 			link_idx = link_idx + 1
 			continue
 		}
+
+		# The bridge reports the same anchors once per viewport. Check each
+		# normalized destination once so duplicates do not consume --max-links.
+		if is_trueish(link_url_was_seen(checked_urls, request_url)) {
+			LINK_RESULTS = append(LINK_RESULTS, {
+				"href": href,
+				"normalized_url": normalized,
+				"same_origin": true,
+				"checked": false,
+				"ok": true,
+				"status": -1,
+				"method": "",
+				"error": "",
+				"source_text": text,
+				"viewport": vp,
+				"skipped_reason": "duplicate_url"
+			})
+			link_idx = link_idx + 1
+			continue
+		}
+		checked_urls = append(checked_urls, request_url)
 		
 		# Make GET request for same-origin link
 		checked_count = checked_count + 1
@@ -975,7 +1078,7 @@ export func check_links(config, bridge_data) {
 		mut error_msg := ""
 		
 		# Use http_get (Kujo builtin)
-		response := http_get(normalized)
+		response := http_get(request_url)
 		
 		# Check if response is an error
 		if is_trueish(has_key(response, "status")) {
