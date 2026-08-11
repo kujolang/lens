@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+- Added `--quick`, an opt-in agent repair profile that emits JSON, captures one
+  desktop viewport, removes the settle delay, and keeps explicit CLI overrides.
+- The launcher now prefers an installed Kujo runtime or sibling release build
+  before falling back to the sibling debug build.
+- Replaced the full Playwright package with Playwright Core and the optimized
+  Chromium headless shell, reducing the bridge install footprint.
+- The benchmark harness now prefers release Kujo and reports full and quick
+  end-to-end medians.
+
 ### Fixed
 - Malformed flow JSON now returns an input error instead of aborting the Kujo VM.
 - Malformed Spec JSON now returns an input error instead of aborting the Kujo VM.

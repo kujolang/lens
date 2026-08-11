@@ -39,8 +39,8 @@ browser binary:
 
 ```bash
 cd /path/to/lens/bridge
-npm install                      # Playwright + axe-core
-npx playwright install chromium  # the Chromium binary itself
+npm install                      # Playwright Core + axe-core
+npm run install-browser          # optimized Chromium headless shell
 ```
 
 Then make the launcher executable (one time):
@@ -189,9 +189,13 @@ All tests passed.
 Lens is built for the build-then-verify cycle. A typical agent or CI step is:
 
 ```bash
-./lens check http://localhost:3000 --fail-on error --json
+./lens check http://localhost:3000 --quick --fail-on error
 echo "exit code: $?"   # 0 = clean, 1 = findings, 2-4 = setup/runtime issue
 ```
+
+`--quick` emits JSON and captures one desktop viewport with no extra settle
+delay. Use it for repair iterations, then remove it for the final
+desktop+mobile verification run.
 
 Branch on the [exit code](reference.md#exit-codes): `0` means ship it, `1` means
 read the Agent Repair Brief and fix what it points to.
@@ -201,7 +205,7 @@ read the Agent Repair Brief and fix what it points to.
 | Symptom | Fix |
 |---------|-----|
 | `Node.js is required for browser automation` | Install Node ≥ 18; verify with `node --version`. |
-| `Browser provider failed` | `cd bridge && npm install && npx playwright install chromium`. |
+| `Browser provider failed` | `cd bridge && npm install && npm run install-browser`. |
 | Kujo binary not found | `export KUJO_BIN=kujo`. |
 | External URL blocked (exit 2) | Add `--allow-external` — this is a safety default. |
 | Page load timeout | Confirm the server is running; raise `--timeout <seconds>`. |

@@ -16,7 +16,13 @@ set -euo pipefail
 ITERS="${1:-8}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-export KUJO_BIN="${KUJO_BIN:-$ROOT/../kujo/target/debug/kujo}"
+if [[ -z "${KUJO_BIN:-}" ]]; then
+  if [[ -x "$ROOT/../kujo/target/release/kujo" ]]; then
+    export KUJO_BIN="$ROOT/../kujo/target/release/kujo"
+  else
+    export KUJO_BIN="$ROOT/../kujo/target/debug/kujo"
+  fi
+fi
 
 TRIVIAL_PORT=9971
 REALISTIC_PORT=9972
@@ -74,9 +80,17 @@ bench_cli() { # $1 = url
   done | median
 }
 
+bench_cli_quick() { # $1 = url
+  for _ in $(seq 1 "$ITERS"); do
+    time_run "$ROOT/lens" check "$1" --quick --out "$WORK/quick-run"
+  done | median
+}
+
 echo "Lens benchmark — median of $ITERS iterations (seconds, lower is better)"
 echo "---------------------------------------------------------------"
 printf "%-32s %s\n" "bridge  trivial (desktop+mobile):"   "$(bench_bridge "http://127.0.0.1:$TRIVIAL_PORT")"
 printf "%-32s %s\n" "bridge  realistic (desktop+mobile):" "$(bench_bridge "http://127.0.0.1:$REALISTIC_PORT/")"
 printf "%-32s %s\n" "cli     trivial:"                    "$(bench_cli "http://127.0.0.1:$TRIVIAL_PORT")"
 printf "%-32s %s\n" "cli     realistic:"                  "$(bench_cli "http://127.0.0.1:$REALISTIC_PORT/")"
+printf "%-32s %s\n" "cli quick trivial:"                  "$(bench_cli_quick "http://127.0.0.1:$TRIVIAL_PORT")"
+printf "%-32s %s\n" "cli quick realistic:"                "$(bench_cli_quick "http://127.0.0.1:$REALISTIC_PORT/")"

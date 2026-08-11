@@ -30,6 +30,9 @@ python3 -m http.server 3000 --bind 127.0.0.1 &
 lens check http://127.0.0.1:3000 --html --accessibility
 ```
 
+For agent repair iterations, use `lens check http://127.0.0.1:3000 --quick`.
+Run the full command above before handoff to preserve desktop+mobile coverage.
+
 Expected terminal output:
 
 ```

@@ -203,7 +203,7 @@ Richer evidence. Each becomes a new check + finding type and feeds the artifact.
 - **Goal:** `--browser firefox|webkit|chromium` (chromium default). (Roadmap item.)
 - **Why:** Cross-browser visual proof.
 - **Depends on:** 1.3.
-- **Steps:** Parameterize the bridge launcher over the Playwright browser type; ensure `npx playwright install` covers them; document that axe-core/video behave per engine.
+- **Steps:** Parameterize the bridge launcher over the Playwright browser type; ensure `npx playwright-core install` covers them; document that axe-core/video behave per engine.
 - **Acceptance:** Each engine produces screenshots + evidence; unavailable engine degrades honestly.
 - **Verify (delta):** Provider-shape tests per engine (mocked); manual smoke per engine.
 - **Effort:** M.

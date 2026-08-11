@@ -70,7 +70,7 @@ reports, flows, visual checks, accessibility, integrations, and failure paths.
 
 ```bash
 kujo --version
-cd /path/to/lens/bridge && npm install && npx playwright install chromium
+cd /path/to/lens/bridge && npm install && npm run install-browser
 cd /path/to/lens
 ./lens check http://localhost:3000
 ```
@@ -85,6 +85,7 @@ cd /path/to/lens
 | Command | What it does |
 |---------|--------------|
 | `lens check <url>` | Load a URL, capture evidence, run checks, write a report |
+| `lens check <url> --quick` | Run the compact one-viewport agent repair profile |
 | `lens check <url> --check-links` | Also verify same-origin links (opt-in) |
 | `lens check <url> --accessibility` | Add automated axe-core accessibility scanning |
 | `lens check <url> --perf` | Capture opt-in performance evidence |
@@ -98,6 +99,9 @@ cd /path/to/lens
 | `lens check <url> --json` | Print a machine-readable summary to stdout |
 
 Run `lens --help` for the full flag list.
+
+Use `--quick` for fast inner-loop diagnosis. Run a full default desktop+mobile
+check before handoff so the final evidence retains normal coverage.
 
 ## What it checks
 

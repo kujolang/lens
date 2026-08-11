@@ -84,10 +84,10 @@ Lens integrates with the ecosystem through:
 kujo --version
 cargo build
 
-# 2. Install Playwright + Chromium in the Lens bridge directory
+# 2. Install Playwright Core + Chromium in the Lens bridge directory
 cd /path/to/lens/bridge
 npm install
-npx playwright install chromium
+npm run install-browser
 
 # 3. Make the lens wrapper executable
 chmod +x /path/to/lens/lens
@@ -111,7 +111,7 @@ For accessibility scanning, install axe-core in the bridge (bundled by
 
 ```bash
 cd /path/to/lens/bridge
-npm install   # installs playwright + axe-core
+npm install   # installs playwright-core + axe-core
 ```
 
 ## Basic Usage
@@ -119,6 +119,9 @@ npm install   # installs playwright + axe-core
 ```bash
 # Check a local dev server
 lens check http://localhost:3000
+
+# Fast one-viewport agent repair pass (also enables JSON output)
+lens check http://localhost:3000 --quick
 
 # Check with link checking enabled
 lens check http://localhost:3000 --check-links
@@ -163,6 +166,7 @@ Flags:
   --timeout <seconds>  Page load timeout in seconds (default: 30, max: 300)
   --verbose            Enable verbose terminal output
   --json               Print JSON summary to stdout
+  --quick              Compact agent profile: JSON, desktop only, no settle
   --check-links        Enable shallow same-origin link checking
   --max-links <n>      Maximum links to check (default: 50)
   --allow-external     Allow checking external (non-localhost) URLs
@@ -245,6 +249,15 @@ before capturing (default 400 ms). Lower it for snappier runs on simple pages;
 raise it for apps with late client-side rendering. `--max-concurrency` caps how
 many viewports are captured at once (default: all of them, in parallel).
 
+### Quick agent profile
+
+`--quick` is an opt-in inner-loop profile for autonomous repair work. It emits
+JSON, captures only the desktop viewport, sets the post-readiness settle window
+to zero, and uses Chromium. Explicit `--viewport`, `--settle-ms`, and
+`--browser` flags still override those choices. Project config cannot silently
+weaken the profile. Run a normal check without `--quick` before handoff to
+restore the default desktop+mobile coverage.
+
 ## Capture Depth (Phase 2)
 
 These options enrich the evidence Lens collects. All are opt-in; default runs
@@ -255,7 +268,7 @@ are unchanged and fully deterministic.
 | `--perf` | Capture LCP, CLS, TTFB, FCP, and load timings per viewport into `metrics.json`; emit `LENS-PERF` warnings past thresholds | Opt-in because timing is environment-dependent. Thresholds: `perf_lcp_ms` (4000), `perf_cls_x100` (25), `perf_ttfb_ms` (1500), tunable in the config file. |
 | `--throttle <profile>` | Emulate `slow-3g` / `3g` / `4g` network conditions | Chromium only; other engines ignore it (recorded in metadata). |
 | `--device <name>` | Emulate a Playwright device descriptor (e.g. `"iPhone 13"`) | Sets the device's viewport + user agent. |
-| `--browser <name>` | Run on `chromium` (default), `firefox`, or `webkit` | Non-default engines require `npx playwright install <engine>`; a missing engine exits 3 with a clear message. |
+| `--browser <name>` | Run on `chromium` (default), `firefox`, or `webkit` | Non-default engines require `npx playwright-core install <engine>`; a missing engine exits 3 with a clear message. |
 | `--auth-file <path>` | Inject a Playwright **storage-state** JSON so Lens can check an authenticated page | **Opt-in.** Contents stay inside Playwright — never logged, never written to any artifact. A missing file exits 2. |
 | `--crawl` | Bounded, same-origin, safety-gated crawl from the start URL | See below. |
 | `--max-depth <n>` | Crawl depth from the start URL | Default 1, max 5. |
@@ -359,9 +372,11 @@ Lens failed: External URLs are blocked by default. Use --allow-external to check
 
 ## Browser Provider Strategy
 
-Lens uses a Node.js/Playwright bridge (`bridge/browser-bridge.js`) to control
-a headless Chromium browser. The bridge is a minimal script that handles only
-what Kujo cannot do natively:
+Lens uses a Node.js/Playwright Core bridge (`bridge/browser-bridge.js`) to
+control Chromium's optimized headless shell. That is the fastest and leanest
+default for Lens's capture workload; Firefox and WebKit remain opt-in
+compatibility engines. The bridge is a minimal script that handles only what
+Kujo cannot do natively:
 
 - Launching Chromium in headless mode
 - Navigating to the target URL
@@ -616,7 +631,7 @@ within a run and appear in both Markdown and JSON reports.
 
 ```bash
 kujo run tests/lens_tests.kujo
-# 368 tests covering CLI parsing, URL validation, checks, findings,
+# 398 tests covering CLI parsing, URL validation, checks, findings,
 # report generation, redaction (free-text, URL, finding, sweep, console,
 # network, DOM), provider partial-failure resilience, error/exit-code
 # paths, page-load classification, accessibility engine handling,
@@ -626,14 +641,21 @@ kujo run tests/lens_tests.kujo
 ## Performance
 
 The dominant cost of a run is the browser bridge (Chromium launch +
-navigation), not the Kujo pipeline. The bridge captures viewports
+navigation), not the Kujo pipeline. Lens uses Playwright Core and Chromium's
+optimized headless shell by default; Firefox and WebKit remain explicit
+compatibility choices. The bridge captures viewports
 **concurrently**, so a default desktop+mobile run is close to the cost of a
 single viewport on pages with real load latency.
+
+The launcher prefers an installed Kujo runtime, then a sibling release build,
+before falling back to a sibling debug build. Set `KUJO_BIN` to override that
+selection. For the shortest agent repair loop, use `--quick`; keep the full
+default run as the final regression gate.
 
 Use the benchmark harness to capture medians and catch regressions:
 
 ```bash
-scripts/bench.sh        # median of 8 iterations (pass a number to change)
+scripts/bench.sh        # full + quick medians, 8 iterations by default
 ```
 
 Reference baselines on a warm Chromium (median of 8, macOS dev laptop — your
@@ -674,7 +696,7 @@ bridge/
 └── visual-diff.py            — Pixel-level screenshot diff (Pillow + numpy)
 
 tests/
-└── lens_tests.kujo           — 368 unit/integration tests
+└── lens_tests.kujo           — 398 unit/integration tests
 
 docs/
 └── reference.md              — This reference manual
@@ -760,7 +782,7 @@ Lens error: Node.js is required for browser automation.
 ```
 Lens error: Browser provider failed.
 ```
-**Fix:** `cd bridge && npm install && npx playwright install chromium`.
+**Fix:** `cd bridge && npm install && npm run install-browser`.
 
 ### 3. Page Load Timeout
 **Fix:** Verify server is running. Increase timeout in seconds: `--timeout 60`
@@ -818,7 +840,7 @@ Use `--out` with a writable directory. Check disk space with `df -h`.
 
 - **Kujo** runtime — built from `/2026/kujo`
 - **Node.js** >= 18 — for Playwright browser bridge
-- **Playwright** + **Chromium** — in `bridge/node_modules`
+- **Playwright Core** + **Chromium headless shell** — in `bridge/node_modules`
 - **bash** — for the `lens` shell wrapper
 
 ## Spec Integration (Phase 7)

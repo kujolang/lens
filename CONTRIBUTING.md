@@ -36,7 +36,7 @@ See `docs/getting-started.md` for the full walkthrough. In short:
 
 ```bash
 kujo --version
-cd /path/to/lens/bridge && npm install && npx playwright install chromium
+cd /path/to/lens/bridge && npm install && npm run install-browser
 cd /path/to/lens && ./lens --version
 ```
 

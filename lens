@@ -8,6 +8,18 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-KUJO_BIN="${KUJO_BIN:-${SCRIPT_DIR}/../kujo/target/debug/kujo}"
+
+# Prefer an installed release binary, then a sibling release build. Debug
+# builds are a development fallback and can make report generation materially
+# slower. KUJO_BIN remains the explicit override.
+if [[ -n "${KUJO_BIN:-}" ]]; then
+  :
+elif command -v kujo >/dev/null 2>&1; then
+  KUJO_BIN="$(command -v kujo)"
+elif [[ -x "${SCRIPT_DIR}/../kujo/target/release/kujo" ]]; then
+  KUJO_BIN="${SCRIPT_DIR}/../kujo/target/release/kujo"
+else
+  KUJO_BIN="${SCRIPT_DIR}/../kujo/target/debug/kujo"
+fi
 
 exec "${KUJO_BIN}" run "${SCRIPT_DIR}/lens.kujo" -- "$@"
