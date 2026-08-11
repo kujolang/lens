@@ -21,6 +21,7 @@ from src.config import parse_browser, parse_throttle, parse_device, is_perf
 from src.config import is_crawl, parse_max_depth, parse_max_pages, parse_auth_file
 from src.config_file import resolve_config_path, load_config_file
 from src.checks import check_performance
+from src.checks import normalize_url, prepare_link_url, link_url_was_seen
 from src.crawl import collect_crawl_candidates
 from src.config import is_html, is_watch, parse_watch_interval, parse_ledger, parse_howl
 from src.report_html import html_escape, generate_html_report
@@ -29,6 +30,7 @@ from src.config import is_execute, is_record, is_walkthrough
 from src.flow_exec import build_program_step
 from src.report_html import generate_walkthrough_html
 from src.flow import redact_flow_for_output, load_flow_file
+from src.spec import load_spec_file
 from src.flow import is_destructive, check_click_safety, check_type_safety
 from src.runner import step_required_field_error
 from src.config import lens_version
@@ -1059,6 +1061,45 @@ func test_collect_crawl_candidates() {
 	check_eq(len(cands), 2, "crawl candidates: keeps 2 safe same-origin links")
 }
 
+func test_malformed_flow_json_is_rejected() {
+	path := "/tmp/lens-test-malformed-flow.json"
+	write_file(path, "{\"name\": \"broken\", \"steps\": [}", true)
+	result := load_flow_file(path)
+	check_eq(result["valid"], false, "flow loader: malformed JSON is rejected without crashing")
+	check(is_trueish(contains(to_string(result["error"]), "Invalid JSON")), "flow loader: malformed JSON explains the error")
+}
+
+func test_malformed_spec_json_is_rejected() {
+	path := "/tmp/lens-test-malformed-spec.json"
+	write_file(path, "{\"title\": {\"contains\": }}", true)
+	result := load_spec_file(path)
+	check_eq(result["valid"], false, "spec loader: malformed JSON is rejected without crashing")
+	check(is_trueish(contains(to_string(result["error"]), "Invalid JSON")), "spec loader: malformed JSON explains the error")
+}
+
+func test_normalize_url_resolves_document_relative_links() {
+	base := "http://localhost:3000/docs/page.html?old=1#top"
+	check_eq(normalize_url("next.html", base), "http://localhost:3000/docs/next.html", "normalize_url: relative link resolves against document directory")
+	check_eq(normalize_url("?new=2", base), "http://localhost:3000/docs/page.html?new=2", "normalize_url: query-relative link replaces current query")
+	check_eq(normalize_url("about", "http://localhost:3000"), "http://localhost:3000/about", "normalize_url: relative link resolves from an origin-only base")
+}
+
+func test_normalize_url_preserves_protocol_relative_origin() {
+	check_eq(normalize_url("//example.com/path", "https://localhost:3000/app"), "https://example.com/path", "normalize_url: protocol-relative external link remains external")
+}
+
+func test_prepare_link_url_keeps_request_secret_and_redacts_display() {
+	prepared := prepare_link_url("/download?token=secret-value", "http://localhost:3000/app")
+	check(is_trueish(contains(to_string(prepared["request_url"]), "secret-value")), "link URL: real request retains required query value")
+	check(is_falseish(contains(to_string(prepared["display_url"]), "secret-value")), "link URL: stored display URL redacts query value")
+}
+
+func test_duplicate_link_urls_are_detected() {
+	seen := array("http://localhost:3000/about")
+	check_eq(link_url_was_seen(seen, "http://localhost:3000/about"), true, "link check: duplicate viewport URL is detected")
+	check_eq(link_url_was_seen(seen, "http://localhost:3000/contact"), false, "link check: unique URL is not skipped")
+}
+
 func test_console_artifact_writing() {
 	# Verify console messages serialize to valid JSON-like array.
 	messages := array(
@@ -1593,6 +1634,12 @@ test_generate_walkthrough_html()
 test_write_ledger_record_appends()
 test_write_howl_summary()
 test_collect_crawl_candidates()
+test_malformed_flow_json_is_rejected()
+test_malformed_spec_json_is_rejected()
+test_normalize_url_resolves_document_relative_links()
+test_normalize_url_preserves_protocol_relative_origin()
+test_prepare_link_url_keeps_request_secret_and_redacts_display()
+test_duplicate_link_urls_are_detected()
 test_viewport_config_mapping()
 test_artifact_paths_for_screenshots()
 test_provider_failure_scenario()

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Malformed flow JSON now returns an input error instead of aborting the Kujo VM.
+- Malformed Spec JSON now returns an input error instead of aborting the Kujo VM.
+- Document-relative and query-relative links now resolve against the current page correctly.
+- Protocol-relative external links remain external during link checks and crawls.
+- Secret-bearing links are requested with their real URL while artifacts retain only the redacted URL.
+- Duplicate destinations captured across viewports no longer consume the link-check limit.
+- `lens inspect` now emits valid selectors for `data-test` and `data-cy` elements.
+- Hidden anchors are no longer included in captured link evidence.
+- Flow screenshot names can no longer escape the run's screenshot directory.
+- Executed flow steps now honor the flow's configured timeout.
+
 ## [1.0.0] - 2026-08-08
 
 ### Added
