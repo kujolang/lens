@@ -261,6 +261,23 @@ function formatMs(ms) {
   return Math.round(ms);
 }
 
+// Collect visible anchors only. This lives outside captureViewport so the DOM
+// behavior can be exercised directly in bridge regression tests.
+const COLLECT_LINKS = () => {
+  const anchorNodes = document.querySelectorAll('a[href]');
+  const results = [];
+  for (const a of anchorNodes) {
+    const style = getComputedStyle(a);
+    if (style.display === 'none' || style.visibility === 'hidden' || a.getClientRects().length === 0) continue;
+    const href = a.getAttribute('href') || '';
+    const text = (a.textContent || '').trim().substring(0, 200);
+    const title = (a.getAttribute('title') || '').trim().substring(0, 200);
+    const ariaLabel = (a.getAttribute('aria-label') || '').trim().substring(0, 200);
+    results.push({ href, text, title, aria_label: ariaLabel });
+  }
+  return results;
+};
+
 // ── Main capture logic per viewport ───────────────────────────────────
 
 async function captureViewport(browser, url, viewportName, timeoutMs, screenshotDir, opts) {
@@ -472,20 +489,7 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
   // Capture links
   let links = [];
   try {
-    links = await page.evaluate(() => {
-      const anchorNodes = document.querySelectorAll('a[href]');
-      const results = [];
-      for (const a of anchorNodes) {
-        // Skip invisible links
-        if (a.offsetParent === null && getComputedStyle(a).visibility === 'hidden') continue;
-        const href = a.getAttribute('href') || '';
-        const text = (a.textContent || '').trim().substring(0, 200);
-        const title = (a.getAttribute('title') || '').trim().substring(0, 200);
-        const ariaLabel = (a.getAttribute('aria-label') || '').trim().substring(0, 200);
-        results.push({ href, text, title, aria_label: ariaLabel });
-      }
-      return results;
-    });
+    links = await page.evaluate(COLLECT_LINKS);
   } catch (_) {
     links = [];
   }
@@ -653,5 +657,5 @@ if (require.main === module) {
     process.exit(1);
   });
 } else {
-  module.exports = { parseArgs, resolveViewport, mapWithConcurrency, VIEWPORT_SIZES, THROTTLE_PROFILES };
+  module.exports = { parseArgs, resolveViewport, mapWithConcurrency, COLLECT_LINKS, VIEWPORT_SIZES, THROTTLE_PROFILES };
 }

@@ -33,8 +33,8 @@ const COLLECT = (maxElements) => {
   const esc = (s) => String(s).replace(/(["\\])/g, '\\$1');
   function suggest(el) {
     if (el.id) return '#' + (window.CSS && CSS.escape ? CSS.escape(el.id) : el.id);
-    const tid = el.getAttribute('data-testid') || el.getAttribute('data-test') || el.getAttribute('data-cy');
-    if (tid) return '[data-testid="' + esc(tid) + '"]';
+    const testAttr = ['data-testid', 'data-test', 'data-cy'].find((name) => el.hasAttribute(name));
+    if (testAttr) return '[' + testAttr + '="' + esc(el.getAttribute(testAttr)) + '"]';
     const al = el.getAttribute('aria-label');
     if (al) return '[aria-label="' + esc(al) + '"]';
     const tag = el.tagName.toLowerCase();
@@ -119,5 +119,5 @@ async function main() {
 if (require.main === module) {
   main().catch((err) => { console.error('Inspect bridge fatal: ' + err.message); process.exit(1); });
 } else {
-  module.exports = { parseArgs };
+  module.exports = { parseArgs, COLLECT };
 }

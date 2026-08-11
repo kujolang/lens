@@ -100,10 +100,25 @@ function resolveViewport(token) {
   return VIEWPORT_SIZES.desktop;
 }
 
+function sanitizeScreenshotName(raw) {
+  const cleaned = String(raw || 'step')
+    .replace(/[\\/]+/g, '-')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^\.+/, '')
+    .slice(0, 100);
+  return cleaned || 'step';
+}
+
+function resolveStepTimeout(step, defaultTimeoutMs) {
+  if (step.timeout_ms && step.timeout_ms > 0) return step.timeout_ms;
+  if (defaultTimeoutMs && defaultTimeoutMs > 0) return defaultTimeoutMs;
+  return 10000;
+}
+
 // Execute a single step. Returns { status, message, screenshot }.
-async function executeStep(page, step, opts) {
+async function executeStep(page, step, opts, defaultTimeoutMs) {
   const type = step.type;
-  const timeout = (step.timeout_ms && step.timeout_ms > 0) ? step.timeout_ms : 10000;
+  const timeout = resolveStepTimeout(step, defaultTimeoutMs);
   try {
     if (type === 'visit') {
       await page.goto(step.url, { waitUntil: 'load', timeout });
@@ -181,7 +196,7 @@ async function executeStep(page, step, opts) {
                                       : { status: 'fail', message: 'Text NOT found: ' + step.text };
     }
     if (type === 'screenshot') {
-      const name = (step.name || 'step') + '.png';
+      const name = sanitizeScreenshotName(step.name) + '.png';
       const p = path.join(opts.screenshotDir, name);
       await page.screenshot({ path: p, fullPage: false });
       return { status: 'pass', message: 'Captured ' + name, screenshot: 'screenshots/' + name };
@@ -227,7 +242,7 @@ async function main() {
 
   const recording = program.record && opts.videoDir;
   for (const step of program.steps) {
-    const r = await executeStep(page, step, opts);
+    const r = await executeStep(page, step, opts, program.timeout);
     result.steps.push({ index: step.index, type: step.type, status: r.status, message: r.message, screenshot: r.screenshot || '' });
     // A short, watchable pause between steps so the recording is followable.
     if (recording) await page.waitForTimeout(450);
@@ -283,5 +298,5 @@ async function main() {
 if (require.main === module) {
   main().catch((err) => { console.error('Flow bridge fatal: ' + err.message); process.exit(1); });
 } else {
-  module.exports = { parseArgs, resolveViewport, executeStep, VIEWPORT_SIZES };
+  module.exports = { parseArgs, resolveViewport, sanitizeScreenshotName, resolveStepTimeout, executeStep, VIEWPORT_SIZES };
 }
