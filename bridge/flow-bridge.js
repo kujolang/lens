@@ -16,7 +16,7 @@
  * Output: JSON results to stdout.
  */
 
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 const fs = require('fs');
 const path = require('path');
 

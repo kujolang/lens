@@ -42,7 +42,7 @@ runs:
       working-directory: ${{ inputs.lens-dir }}/bridge
       run: |
         npm ci
-        npx playwright install chromium
+        npm run install-browser
 
     - name: Run Lens
       id: run

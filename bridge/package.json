@@ -8,10 +8,11 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "install-browser": "playwright-core install chromium"
   },
   "dependencies": {
     "axe-core": "^4.11.4",
-    "playwright": "^1.52.0"
+    "playwright-core": "^1.52.0"
   }
 }

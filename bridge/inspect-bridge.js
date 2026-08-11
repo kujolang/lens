@@ -12,7 +12,7 @@
  * Output: JSON to stdout.
  */
 
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 
 function nowISO() { return new Date().toISOString(); }
 

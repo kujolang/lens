@@ -19,7 +19,7 @@
  * Exit codes: 0 on success, 1 on bridge/runtime error.
  */
 
-const { chromium, firefox, webkit } = require('playwright');
+const { chromium, firefox, webkit, devices } = require('playwright-core');
 const fs = require('fs');
 const path = require('path');
 
@@ -286,7 +286,6 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
   // Build context options. A device descriptor (Phase 2.2) sets its own
   // viewport/userAgent; otherwise we use the requested viewport size.
   const contextOptions = {};
-  const { devices } = require('playwright');
   if (opts && opts.device && devices[opts.device]) {
     Object.assign(contextOptions, devices[opts.device]);
   } else {
@@ -550,7 +549,7 @@ async function main() {
     metadata: {
       bridge: 'lens-browser-bridge',
       version: '0.1.0',
-      playwright_version: require('playwright/package.json').version,
+      playwright_version: require('playwright-core/package.json').version,
       node_version: process.version,
       browser: opts.browser,
       throttle: opts.throttle || 'none',

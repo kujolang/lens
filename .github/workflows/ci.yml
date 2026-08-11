@@ -102,7 +102,8 @@ jobs:
         working-directory: lens/bridge
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          npx playwright-core install-deps chromium
+          npm run install-browser
 
       - name: Run Lens against a real server
         working-directory: lens
