@@ -1,21 +1,14 @@
 #!/usr/bin/env bash
-# bench.sh — Lens performance benchmark harness.
-#
-# Measures median wall-clock for the browser bridge and the full CLI against
-# two fixtures: a trivial static page and a realistic page (per-request
-# latency + subresources). Use it to catch performance regressions — capture
-# medians before and after a change and compare.
-#
-# Usage:
-#   scripts/bench.sh [iterations]   # default 8
-#
-# Requires: python3, node, a built kujo (KUJO_BIN or ../kujo/target/debug/kujo).
+# Deterministic Lens benchmark harness. Prints medians and optionally writes a
+# machine-readable receipt for regression comparison.
 
 set -euo pipefail
 
 ITERS="${1:-8}"
+JSON_OUT="${2:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+HARNESS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT="${LENS_BENCH_TARGET_ROOT:-$HARNESS_ROOT}"
 if [[ -z "${KUJO_BIN:-}" ]]; then
   if [[ -x "$ROOT/../kujo/target/release/kujo" ]]; then
     export KUJO_BIN="$ROOT/../kujo/target/release/kujo"
@@ -24,73 +17,115 @@ if [[ -z "${KUJO_BIN:-}" ]]; then
   fi
 fi
 
-TRIVIAL_PORT=9971
-REALISTIC_PORT=9972
+PORT="${LENS_BENCH_PORT:-9972}"
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"; kill ${TRIVIAL_PID:-0} ${REALISTIC_PID:-0} 2>/dev/null || true' EXIT
+FIXTURE_PID=""
+cleanup() {
+  if [[ -n "$FIXTURE_PID" ]]; then
+    kill "$FIXTURE_PID" 2>/dev/null || true
+    wait "$FIXTURE_PID" 2>/dev/null || true
+  fi
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
 
 median() { sort -n | awk '{a[NR]=$1} END{ if(NR==0){print "n/a"} else if(NR%2){print a[(NR+1)/2]} else {print (a[NR/2]+a[NR/2+1])/2} }'; }
 
-time_run() { # $@ = command; prints elapsed seconds
-  local t0 t1
-  t0=$(date +%s.%N); "$@" >/dev/null 2>&1 || true; t1=$(date +%s.%N)
-  echo "$t1 - $t0" | bc
+time_run() {
+  local allowed_exit="$1" t0 t1 status
+  shift
+  t0=$(python3 -c 'import time; print(time.perf_counter())')
+  set +e
+  "$@" >/dev/null 2>&1
+  status=$?
+  set -e
+  if (( status > allowed_exit )); then
+    echo "benchmark command failed with exit $status: $*" >&2
+    return "$status"
+  fi
+  t1=$(python3 -c 'import time; print(time.perf_counter())')
+  python3 - "$t0" "$t1" <<'PY'
+import sys
+print(float(sys.argv[2]) - float(sys.argv[1]))
+PY
 }
 
-# ── Fixtures ──────────────────────────────────────────────────────────
-python3 -m http.server "$TRIVIAL_PORT" --bind 127.0.0.1 >/dev/null 2>&1 &
-TRIVIAL_PID=$!
-
-cat > "$WORK/realistic.py" <<EOF
-import http.server, socketserver, time
-PAGE = b"""<!doctype html><html><head><title>App</title>
-<link rel=stylesheet href=a.css><link rel=stylesheet href=b.css>
-<script src=x.js></script><script src=y.js></script></head>
-<body><h1>Dashboard</h1><main><p>Hello</p></main></body></html>"""
-class H(http.server.BaseHTTPRequestHandler):
-    def log_message(self,*a): pass
-    def do_GET(self):
-        time.sleep(0.6)
-        if self.path=='/' or self.path.endswith('.html'):
-            self.send_response(200); self.send_header('Content-Type','text/html'); self.end_headers(); self.wfile.write(PAGE)
-        elif self.path.endswith('.css'):
-            self.send_response(200); self.send_header('Content-Type','text/css'); self.end_headers(); self.wfile.write(b'body{margin:0}')
-        else:
-            self.send_response(200); self.send_header('Content-Type','application/javascript'); self.end_headers(); self.wfile.write(b'console.log(1)')
-with socketserver.ThreadingTCPServer(('127.0.0.1',$REALISTIC_PORT),H) as s: s.serve_forever()
-EOF
-python3 "$WORK/realistic.py" >/dev/null 2>&1 &
-REALISTIC_PID=$!
+python3 "$SCRIPT_DIR/benchmark-fixture-server.py" --port "$PORT" >/dev/null 2>&1 &
+FIXTURE_PID=$!
 sleep 1
+BASE_URL="http://127.0.0.1:$PORT"
 
-# ── Warm Chromium so the launch cost isn't counted as a cold outlier ──
-node "$ROOT/bridge/browser-bridge.js" --url "http://127.0.0.1:$TRIVIAL_PORT" \
+node "$ROOT/bridge/browser-bridge.js" --url "$BASE_URL/trivial" \
   --viewports desktop --timeout 30 --screenshot-dir "$WORK/warm" --format json >/dev/null 2>&1 || true
 
-bench_bridge() { # $1 = url
+bench_bridge() {
+  local path="$1"
   for _ in $(seq 1 "$ITERS"); do
-    time_run node "$ROOT/bridge/browser-bridge.js" --url "$1" \
+    time_run 0 node "$ROOT/bridge/browser-bridge.js" --url "$BASE_URL/$path" \
       --viewports desktop,mobile --timeout 30 --screenshot-dir "$WORK/shots" --format json
   done | median
 }
 
-bench_cli() { # $1 = url
+bench_cli() {
+  local path="$1"
   for _ in $(seq 1 "$ITERS"); do
-    time_run "$ROOT/lens" check "$1" --out "$WORK/run"
+    time_run 1 "$ROOT/lens" check "$BASE_URL/$path" --out "$WORK/run"
   done | median
 }
 
-bench_cli_quick() { # $1 = url
+bench_quick() {
+  local path="$1"
   for _ in $(seq 1 "$ITERS"); do
-    time_run "$ROOT/lens" check "$1" --quick --out "$WORK/quick-run"
+    time_run 1 "$ROOT/lens" check "$BASE_URL/$path" --quick --out "$WORK/quick-run"
   done | median
 }
+
+bridge_trivial="$(bench_bridge trivial)"
+bridge_realistic="$(bench_bridge realistic)"
+cli_trivial="$(bench_cli trivial)"
+cli_realistic="$(bench_cli realistic)"
+quick_trivial="$(bench_quick trivial)"
+quick_realistic="$(bench_quick realistic)"
+quick_spa="$(bench_quick spa)"
+quick_images="$(bench_quick image-heavy)"
+quick_late="$(bench_quick late-network)"
+quick_links="$(bench_quick many-links)"
 
 echo "Lens benchmark — median of $ITERS iterations (seconds, lower is better)"
-echo "---------------------------------------------------------------"
-printf "%-32s %s\n" "bridge  trivial (desktop+mobile):"   "$(bench_bridge "http://127.0.0.1:$TRIVIAL_PORT")"
-printf "%-32s %s\n" "bridge  realistic (desktop+mobile):" "$(bench_bridge "http://127.0.0.1:$REALISTIC_PORT/")"
-printf "%-32s %s\n" "cli     trivial:"                    "$(bench_cli "http://127.0.0.1:$TRIVIAL_PORT")"
-printf "%-32s %s\n" "cli     realistic:"                  "$(bench_cli "http://127.0.0.1:$REALISTIC_PORT/")"
-printf "%-32s %s\n" "cli quick trivial:"                  "$(bench_cli_quick "http://127.0.0.1:$TRIVIAL_PORT")"
-printf "%-32s %s\n" "cli quick realistic:"                "$(bench_cli_quick "http://127.0.0.1:$REALISTIC_PORT/")"
+echo "----------------------------------------------------------------"
+printf "%-36s %s\n" "bridge trivial (desktop+mobile):" "$bridge_trivial"
+printf "%-36s %s\n" "bridge realistic (desktop+mobile):" "$bridge_realistic"
+printf "%-36s %s\n" "cli trivial:" "$cli_trivial"
+printf "%-36s %s\n" "cli realistic:" "$cli_realistic"
+printf "%-36s %s\n" "quick trivial:" "$quick_trivial"
+printf "%-36s %s\n" "quick realistic:" "$quick_realistic"
+printf "%-36s %s\n" "quick SPA-like:" "$quick_spa"
+printf "%-36s %s\n" "quick image-heavy:" "$quick_images"
+printf "%-36s %s\n" "quick late-network:" "$quick_late"
+printf "%-36s %s\n" "quick many-links:" "$quick_links"
+
+if [[ -n "$JSON_OUT" ]]; then
+  python3 - "$JSON_OUT" "$ITERS" "$bridge_trivial" "$bridge_realistic" \
+    "$cli_trivial" "$cli_realistic" "$quick_trivial" "$quick_realistic" \
+    "$quick_spa" "$quick_images" "$quick_late" "$quick_links" <<'PY'
+import json
+import platform
+import sys
+from pathlib import Path
+
+names = [
+    "bridge_trivial", "bridge_realistic", "cli_trivial", "cli_realistic",
+    "quick_trivial", "quick_realistic", "quick_spa", "quick_image_heavy",
+    "quick_late_network", "quick_many_links",
+]
+payload = {
+    "schema_version": 1,
+    "iterations": int(sys.argv[2]),
+    "unit": "seconds",
+    "lower_is_better": True,
+    "environment": {"system": platform.system(), "machine": platform.machine()},
+    "medians": {name: float(value) for name, value in zip(names, sys.argv[3:])},
+}
+Path(sys.argv[1]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+fi

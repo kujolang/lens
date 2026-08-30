@@ -10,6 +10,36 @@ on:
 # test suite at it via KUJO_BIN. If your fork keeps Kujo elsewhere, adjust the
 # checkout `repository`/`ref` below.
 jobs:
+  compatibility:
+    name: Bridge compatibility (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [18, 20, 22]
+    steps:
+      - name: Checkout Lens
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: bridge/package-lock.json
+
+      - name: Install bridge dependencies
+        working-directory: bridge
+        run: npm ci
+
+      - name: Syntax and unit tests
+        run: |
+          node --check bridge/browser-bridge.js
+          node --check bridge/flow-bridge.js
+          node --check bridge/inspect-bridge.js
+          npm test --prefix bridge
+
   test:
     name: Tests + checks
     runs-on: ubuntu-latest
@@ -111,14 +141,17 @@ jobs:
           KUJO_BIN: ${{ github.workspace }}/kujo/target/debug/kujo
         run: |
           set -euo pipefail
-          # Serve a fixture page with a known overflow element.
-          mkdir -p /tmp/site
-          printf '<!doctype html><title>CI Fixture</title><h1>Hello</h1><main>ok</main><a href="/">self</a>' > /tmp/site/index.html
-          ( cd /tmp/site && python3 -m http.server 8099 --bind 127.0.0.1 & echo $! > /tmp/srv.pid )
+          python3 scripts/benchmark-fixture-server.py --port 8099 >/tmp/lens-e2e-fixture.log 2>&1 &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
           sleep 1
 
           echo "::group::lens check (--html --check-links --accessibility)"
-          ./lens check http://127.0.0.1:8099 --html --check-links --accessibility --out /tmp/run
+          ./lens check 'http://127.0.0.1:8099/trivial?token=CI_SECRET_MUST_NOT_LEAK_123' \
+            --html --check-links --accessibility --perf --crawl --max-depth 1 --max-pages 5 \
+            --baseline --baseline-dir /tmp/baselines --out /tmp/run --verbose \
+            >/tmp/lens-e2e.log 2>&1
+          cat /tmp/lens-e2e.log
           echo "::endgroup::"
 
           # Assert the core artifacts were produced.
@@ -126,13 +159,31 @@ jobs:
             test -s "/tmp/run/$f" || { echo "MISSING artifact: $f"; exit 1; }
           done
           grep -q '"status"' /tmp/run/lens-report.json
+          test -s /tmp/run/metrics.json || { echo "MISSING metrics.json"; exit 1; }
+          test -s /tmp/run/crawl.json || { echo "MISSING crawl.json"; exit 1; }
+          test -s /tmp/baselines/check/*/baseline-metadata.json || { echo "MISSING baseline metadata"; exit 1; }
+          if grep -R -F 'CI_SECRET_MUST_NOT_LEAK_123' /tmp/run /tmp/baselines /tmp/lens-e2e.log; then
+            echo "raw secret leaked into Lens artifacts"
+            exit 1
+          fi
+          ./lens check 'http://127.0.0.1:8099/trivial?token=CI_SECRET_MUST_NOT_LEAK_123' \
+            --quick --out /tmp/json-run >/tmp/lens-json-e2e.log
+          if grep -R -F 'CI_SECRET_MUST_NOT_LEAK_123' /tmp/json-run /tmp/lens-json-e2e.log; then
+            echo "raw secret leaked into Lens JSON output"
+            exit 1
+          fi
 
           echo "::group::lens flow --execute --record --walkthrough"
-          printf '{"name":"ci","url":"http://127.0.0.1:8099/","viewports":["desktop"],"timeout_seconds":20,"steps":[{"visit":"http://127.0.0.1:8099/"},{"assert_selector":"h1"},{"assert_text":"Hello"},{"screenshot":{"name":"home"}},{"assert_no_console_errors":true}]}' > /tmp/flow.json
-          ./lens flow /tmp/flow.json --execute --record --walkthrough --out /tmp/flow-run
+          ./lens flow benchmarks/fixture-flow.json --execute --record --walkthrough \
+            --out /tmp/flow-run --verbose >/tmp/lens-flow-e2e.log 2>&1
+          cat /tmp/lens-flow-e2e.log
           echo "::endgroup::"
           test -s /tmp/flow-run/walkthrough.html || { echo "MISSING walkthrough.html"; exit 1; }
           test -s /tmp/flow-run/video/walkthrough.webm || { echo "MISSING recording"; exit 1; }
+          if grep -R -F 'FLOW_SECRET_MUST_NOT_LEAK_456' /tmp/flow-run /tmp/lens-flow-e2e.log; then
+            echo "raw flow secret leaked into Lens artifacts"
+            exit 1
+          fi
 
           # External URL must be blocked with exit code 2.
           set +e
@@ -140,7 +191,6 @@ jobs:
           test $? -eq 2 || { echo "external URL not blocked with exit 2"; exit 1; }
           set -e
 
-          kill "$(cat /tmp/srv.pid)" 2>/dev/null || true
           echo "e2e OK"
 
       - name: Upload run artifacts
@@ -151,3 +201,79 @@ jobs:
           path: |
             /tmp/run
             /tmp/flow-run
+            /tmp/baselines
+            /tmp/json-run
+            /tmp/lens-e2e.log
+            /tmp/lens-json-e2e.log
+            /tmp/lens-flow-e2e.log
+
+  browser-engines:
+    name: Browser engine (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - name: Checkout Lens
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: lens
+
+      - name: Checkout Kujo runtime
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: kujolang/kujo
+          path: kujo
+
+      - name: Cache cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            kujo/target
+          key: ${{ runner.os }}-cargo-browser-${{ hashFiles('kujo/Cargo.lock') }}
+
+      - name: Build Kujo
+        working-directory: kujo
+        run: cargo build
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: lens/bridge/package-lock.json
+
+      - name: Install selected browser engine
+        working-directory: lens/bridge
+        run: |
+          npm ci
+          npx playwright-core install-deps "${{ matrix.browser }}"
+          npx playwright-core install "${{ matrix.browser }}"
+
+      - name: Verify installed and missing-engine behavior
+        working-directory: lens
+        env:
+          KUJO_BIN: ${{ github.workspace }}/kujo/target/debug/kujo
+        run: |
+          set -euo pipefail
+          python3 scripts/benchmark-fixture-server.py --port 8098 >/tmp/lens-engine-fixture.log 2>&1 &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
+          sleep 1
+
+          ./lens check http://127.0.0.1:8098/trivial \
+            --browser "${{ matrix.browser }}" --out "/tmp/${{ matrix.browser }}-run"
+
+          mkdir -p "$RUNNER_TEMP/empty-playwright-browsers"
+          set +e
+          PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/empty-playwright-browsers" \
+            ./lens check http://127.0.0.1:8098/trivial \
+              --browser "${{ matrix.browser }}" --out "/tmp/${{ matrix.browser }}-missing" \
+              >"$RUNNER_TEMP/missing-engine.log" 2>&1
+          code=$?
+          set -e
+          test "$code" -eq 3
+          grep -q 'Browser provider failed' "$RUNNER_TEMP/missing-engine.log"

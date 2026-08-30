@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-08-30",
+  "source": "codex/repository-hardening working tree after scalability hardening",
+  "iterations": 3,
+  "unit": "seconds",
+  "lower_is_better": true,
+  "informational_only": true,
+  "environment": {
+    "system": "Darwin",
+    "machine": "x86_64"
+  },
+  "medians": {
+    "bridge_trivial": 6.448652029037476,
+    "bridge_realistic": 4.825639963150024,
+    "cli_trivial": 6.561441898345947,
+    "cli_realistic": 6.909346103668213,
+    "quick_trivial": 8.195420980453491,
+    "quick_realistic": 12.268112897872925,
+    "quick_spa": 12.760780096054077,
+    "quick_image_heavy": 7.643341064453125,
+    "quick_late_network": 9.448168992996216,
+    "quick_many_links": 7.359889030456543
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "CI fixture token=FLOW_SECRET_MUST_NOT_LEAK_456",
+  "url": "http://127.0.0.1:8099/trivial?api_key=FLOW_SECRET_MUST_NOT_LEAK_456",
+  "viewports": ["desktop"],
+  "timeout_seconds": 20,
+  "steps": [
+    { "visit": "http://127.0.0.1:8099/trivial?api_key=FLOW_SECRET_MUST_NOT_LEAK_456" },
+    { "assert_selector": "h1" },
+    { "assert_text": "Trivial" },
+    { "screenshot": { "name": "home" } },
+    { "assert_no_console_errors": true }
+  ]
+}
