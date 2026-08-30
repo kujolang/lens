@@ -116,9 +116,18 @@ export func run_flow_bridge(program, out_dir) {
 
 	out := to_string(res.stdout)
 	if is_trueish(str_blank(out)) {
-		return { "error": true, "message": "flow bridge produced no output: " + to_string(res.stderr) }
+		return { "error": true, "message": "Flow bridge produced no structured output." }
 	}
-	return parse_json(out)
+	mut parsed := {}
+	try {
+		parsed = parse_json(out)
+	} except e {
+		return { "error": true, "message": "Flow bridge returned malformed JSON." }
+	}
+	if is_falseish(is_dict(parsed)) {
+		return { "error": true, "message": "Flow bridge returned an invalid result shape." }
+	}
+	return parsed
 }
 
 func str_blank(s) {

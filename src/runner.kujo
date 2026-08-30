@@ -6,11 +6,11 @@
 from src.common import format_timestamp_dir, is_trueish, is_falseish, str_starts_with, str_join, print_lines
 from src.config import severity_meets_threshold, build_config, print_help, print_version, merge_file_config, lens_version
 from src.config_file import resolve_config_path, load_config_file
-from src.validate import validate_url
+from src.validate import validate_url, validate_auth_storage_state
 from src.checks import run_all_checks, worst_severity, get_link_results
 from src.report import generate_markdown_report, generate_json_report, generate_metadata_json
 from src.provider import run_provider, provider_failed, extract_console_messages, extract_network_events, extract_dom_summaries, extract_all_links, extract_metrics
-from src.redact import redact_url, redact_text, redact_console_entry, redact_console_message, redact_network_event, redact_dom_summary, redact_check_results, redact_finding
+from src.redact import redact_url, redact_text, redact_console_entry, redact_console_message, redact_network_event, redact_dom_summary, redact_check_results, redact_finding, redact_accessibility_scans
 from src.spec import load_spec_file
 from src.eval import generate_eval_output
 from src.flow import load_flow_file, get_step_type, check_click_safety, check_type_safety, is_destructive, get_step_value, get_step_dict, redact_flow_for_output
@@ -127,14 +127,15 @@ export func run(argv) {
 	}
 
 	# ── Phase 2.4: validate auth file (opt-in) ─────────────────────────
-	# Auth injection is opt-in. We confirm the storage-state file exists but
-	# never read or echo its contents — it is handed to Playwright by path.
+	# Auth injection is opt-in. Validate the storage-state envelope before
+	# handing it to Playwright, without echoing its path or parser details.
 	auth_file := to_string(config["auth_file"])
+	auth_validation := validate_auth_storage_state(auth_file)
+	if is_falseish(auth_validation["valid"]) {
+		print_lens_failed(auth_validation["error"])
+		return EXIT_INVALID_INPUT
+	}
 	if auth_file != "" {
-		if is_falseish(file_exists(auth_file)) {
-			print_lens_failed("auth file not found: " + auth_file)
-			return EXIT_INVALID_INPUT
-		}
 		if is_trueish(config["verbose"]) {
 			print_lens_info("Auth storage-state will be injected (contents never logged).")
 		}
@@ -469,7 +470,7 @@ export func run(argv) {
 		
 		# Write visual-diffs.json
 		vis_json := to_json(visual_results)
-		write_file(out_dir + "/visual-diffs.json", vis_json)
+		write_file(out_dir + "/visual-diffs.json", vis_json, true)
 		meta["artifacts"] = append(meta["artifacts"], "visual-diffs.json")
 		
 		# Add diff paths to artifacts
@@ -506,22 +507,12 @@ export func run(argv) {
 			status = "FAIL"
 		}
 		
-		# Write accessibility.json (redact URLs in scans before writing).
+		# Write accessibility.json after a full nested redaction sweep. Axe
+		# selector targets and errors are page-controlled, not just the scan URL.
 		if is_trueish(has_key(a11y_check, "scans")) {
-			mut redacted_scans := array()
-			mut si := 0
-			scans := a11y_check["scans"]
-			while si < len(scans) {
-				mut s := scans[si]
-				# Redact sensitive query params from the scan URL.
-				if is_trueish(has_key(s, "url")) {
-					s["url"] = redact_url(to_string(s["url"]))
-				}
-				redacted_scans = append(redacted_scans, s)
-				si = si + 1
-			}
+			redacted_scans := redact_accessibility_scans(a11y_check["scans"])
 			a11y_json := to_json(redacted_scans)
-			write_file(out_dir + "/accessibility.json", a11y_json)
+			write_file(out_dir + "/accessibility.json", a11y_json, true)
 			meta["artifacts"] = append(meta["artifacts"], "accessibility.json")
 		}
 		
@@ -978,10 +969,10 @@ func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_view
 
 	# Write flow artifacts
 	flow_json := to_json(redact_flow_for_output(flow))
-	write_file(out_dir + "/flow.json", flow_json)
+	write_file(out_dir + "/flow.json", flow_json, true)
 
 	steps_json := to_json(step_results)
-	write_file(out_dir + "/flow-steps.json", steps_json)
+	write_file(out_dir + "/flow-steps.json", steps_json, true)
 	
 	# Build metadata
 	finished_at := now_utc()
@@ -1108,13 +1099,13 @@ func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_view
 		"timeout": flow["timeout_seconds"]
 	}
 	flow_metadata_json := generate_metadata_json(meta_config, meta, array(), provider_meta)
-	write_file(out_dir + "/metadata.json", flow_metadata_json)
+	write_file(out_dir + "/metadata.json", flow_metadata_json, true)
 
 	md_report := generate_flow_report(config, meta, flow, step_results, passed, failed, blocked, skipped, errored, flow_findings)
-	write_file(out_dir + "/lens-report.md", md_report)
+	write_file(out_dir + "/lens-report.md", md_report, true)
 	
 	json_report := generate_flow_json_report(config, meta, flow, step_results, passed, failed, blocked, skipped, errored, flow_findings)
-	write_file(out_dir + "/lens-report.json", json_report)
+	write_file(out_dir + "/lens-report.json", json_report, true)
 
 	# Note: the Phase 4.3 walkthrough.html is generated by run_flow_exec at a
 	# shallow call depth (the Kujo VM's native stack cannot afford to build it
@@ -1143,7 +1134,7 @@ func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_view
 			},
 			"results": step_results
 		})
-		write_file(eval_out_path, eval_json)
+		write_file(eval_out_path, eval_json, true)
 	}
 	
 	# Terminal output
@@ -1231,6 +1222,11 @@ export func run_flow_exec(config) {
 	nav_validation := validate_url(nav_url, flow["allow_external"])
 	if is_falseish(nav_validation["valid"]) {
 		print_lens_failed(nav_validation["error"])
+		return EXIT_INVALID_INPUT
+	}
+	auth_validation := validate_auth_storage_state(to_string(config["auth_file"]))
+	if is_falseish(auth_validation["valid"]) {
+		print_lens_failed(auth_validation["error"])
 		return EXIT_INVALID_INPUT
 	}
 	if is_falseish(node_available()) {

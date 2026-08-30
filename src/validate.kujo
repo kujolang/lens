@@ -124,3 +124,40 @@ export func validate_url(raw_url, allow_external) {
 	
 	return result
 }
+
+# Validate a Playwright storage-state file before it crosses the browser
+# boundary. Errors deliberately omit both the path and parser details because
+# either can disclose private workspace or credential context in terminal/CI
+# logs. The parsed state is never returned or persisted.
+export func validate_auth_storage_state(auth_path) {
+	if to_string(auth_path) == "" {
+		return { "valid": true, "error": "" }
+	}
+	if is_falseish(file_exists(auth_path)) {
+		return { "valid": false, "error": "Auth storage-state file was not found." }
+	}
+
+	raw := read_file(auth_path)
+	if str_trim(raw) == "" {
+		return { "valid": false, "error": "Auth storage-state file is empty." }
+	}
+
+	mut parsed := {}
+	try {
+		parsed = parse_json(raw)
+	} except e {
+		return { "valid": false, "error": "Auth storage-state file is not valid JSON." }
+	}
+
+	if is_falseish(is_dict(parsed)) {
+		return { "valid": false, "error": "Auth storage-state JSON must be an object." }
+	}
+	if is_falseish(has_key(parsed, "cookies")) || is_falseish(is_array(parsed["cookies"])) {
+		return { "valid": false, "error": "Auth storage-state JSON must contain a cookies array." }
+	}
+	if is_falseish(has_key(parsed, "origins")) || is_falseish(is_array(parsed["origins"])) {
+		return { "valid": false, "error": "Auth storage-state JSON must contain an origins array." }
+	}
+
+	return { "valid": true, "error": "" }
+}

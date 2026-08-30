@@ -138,10 +138,35 @@ export func run_provider(url, config, out_dir) {
 		}
 	}
 
-	# Parse the JSON result using Kujo's built-in parse_json.
-	# parse_json returns the parsed value directly, or throws on error.
-	parsed := parse_json(bridge_output)
+	return parse_provider_output(bridge_output)
+}
 
+# Parse bridge stdout at the process trust boundary. A bridge bug or truncated
+# process output must become the documented browser-provider failure (exit 3),
+# not an uncaught VM parse error. Raw output is intentionally not echoed because
+# it can contain page-controlled data.
+export func parse_provider_output(bridge_output) {
+	mut parsed := {}
+	try {
+		parsed = parse_json(to_string(bridge_output))
+	} except e {
+		return {
+			"error": true,
+			"exit_code": 3,
+			"message": "Browser provider returned malformed JSON.",
+			"provider_errors": array("Browser bridge output was not valid JSON."),
+			"viewports": array()
+		}
+	}
+	if is_falseish(is_dict(parsed)) {
+		return {
+			"error": true,
+			"exit_code": 3,
+			"message": "Browser provider returned an invalid result shape.",
+			"provider_errors": array("Browser bridge output must be a JSON object."),
+			"viewports": array()
+		}
+	}
 	return parsed
 }
 

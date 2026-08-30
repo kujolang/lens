@@ -151,6 +151,11 @@ Each run writes a self-contained directory:
 
 Reports are redacted by default. See [Redaction & Privacy](docs/reference.md#redaction--privacy) for what Lens redacts and how to review it.
 
+Screenshots and flow recordings capture rendered pixels. They can therefore
+include private account data even when tokens and credentials are redacted from
+structured artifacts. Review visual artifacts before sharing them, and omit
+`--record` on sensitive screens.
+
 ## Exit codes
 
 | Code | Meaning |

@@ -269,7 +269,7 @@ are unchanged and fully deterministic.
 | `--throttle <profile>` | Emulate `slow-3g` / `3g` / `4g` network conditions | Chromium only; other engines ignore it (recorded in metadata). |
 | `--device <name>` | Emulate a Playwright device descriptor (e.g. `"iPhone 13"`) | Sets the device's viewport + user agent. |
 | `--browser <name>` | Run on `chromium` (default), `firefox`, or `webkit` | Non-default engines require `npx playwright-core install <engine>`; a missing engine exits 3 with a clear message. |
-| `--auth-file <path>` | Inject a Playwright **storage-state** JSON so Lens can check an authenticated page | **Opt-in.** Contents stay inside Playwright — never logged, never written to any artifact. A missing file exits 2. |
+| `--auth-file <path>` | Inject a Playwright **storage-state** JSON so Lens can check an authenticated page | **Opt-in.** Lens validates the JSON envelope, then passes the path to Playwright. Contents are never logged or written to an artifact. Missing, malformed, or invalid-shape files exit 2. |
 | `--crawl` | Bounded, same-origin, safety-gated crawl from the start URL | See below. |
 | `--max-depth <n>` | Crawl depth from the start URL | Default 1, max 5. |
 | `--max-pages <n>` | Total pages a crawl may visit | Default 20, max 200. |
@@ -285,11 +285,14 @@ pass/fail gates.
 ### Authenticated runs (`--auth-file`)
 
 Pass a Playwright storage-state file (cookies + localStorage, the output of
-`context.storageState({ path })`) to check a page behind a login. Auth material
-is handed to Playwright **by path** and never read, echoed, or written by Lens.
-The network capture remains a strict whitelist (no headers, cookies, or bodies),
-so no credential reaches an artifact. This is the one feature that can render
-authenticated content on screen — review screenshots before sharing them.
+`context.storageState({ path })`) to check a page behind a login. Lens reads the
+file only to verify that it is valid JSON with Playwright's `cookies` and
+`origins` arrays; it never returns, echoes, or persists the parsed content. The
+validated path is then handed to Playwright. Validation errors omit the path and
+parser details. The network capture remains a strict whitelist (no headers,
+cookies, or bodies), so no credential reaches an artifact. This is the one
+feature that can render authenticated content on screen — review screenshots
+before sharing them.
 
 ### Bounded crawl (`--crawl`)
 
@@ -312,6 +315,10 @@ network failures, blank content); results are aggregated into `crawl.json` and
 
 A reusable GitHub Action ships as [`action.yml`](../action.yml): it installs the
 bridge, runs `lens check`, and uploads the report as a CI artifact.
+
+Action inputs are passed through environment variables rather than interpolated
+into the shell program. The free-form `args` input is tokenized without shell
+evaluation, so quoted values remain usable and command substitutions are inert.
 
 ## Interactive flows & the proof-of-work artifact (Phase 4)
 

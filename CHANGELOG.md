@@ -18,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   end-to-end medians.
 
 ### Fixed
+- Invalid Playwright auth storage-state files now fail with exit 2 before the
+  browser launches; errors do not expose file paths, JSON contents, or parser
+  details. The same validation protects executed flows.
+- Malformed or non-object browser-bridge output now becomes a structured exit-3
+  provider failure instead of aborting on an uncaught JSON parse error.
+- The reusable GitHub Action no longer interpolates inputs as shell source;
+  quoted extra arguments are safely tokenized without command evaluation.
+- Accessibility scan URLs, nested engine errors, and selector targets now pass
+  through the final redaction sweep before entering reports or artifacts.
+- Reusing an explicit `--out` directory now overwrites generated accessibility,
+  visual-diff, and flow report artifacts instead of failing on stale files.
 - Malformed flow JSON now returns an input error instead of aborting the Kujo VM.
 - Malformed Spec JSON now returns an input error instead of aborting the Kujo VM.
 - Document-relative and query-relative links now resolve against the current page correctly.

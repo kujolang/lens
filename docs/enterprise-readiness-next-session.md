@@ -47,14 +47,15 @@ deferred with rationale.
 
 1. Add a redaction smoke command that runs against a secret-bearing URL and
    greps all artifacts, reports, walkthroughs, and verbose logs for raw tokens.
-2. Validate `--auth-file` shape before handing it to Playwright: accept only
-   storage-state JSON with expected top-level keys, and never echo parse errors
-   that include file contents.
+2. **Completed (2026-08-30):** validate `--auth-file` before handing it to
+   Playwright; require the storage-state JSON envelope and keep paths, contents,
+   and parser details out of errors.
 3. Add path-safety checks for user-provided output paths, baseline paths,
    ledger/howl paths, and eval paths. Document where Lens may write.
 4. Add tests proving report HTML escapes every user-controlled field, including
    URLs, finding text, flow names, step labels, and artifact names.
-5. Document screenshot/recording privacy in README, not only SECURITY/reference.
+5. **Completed (2026-08-30):** document screenshot/recording privacy in the
+   README, including the rendered-pixel caveat and `--record` guidance.
 
 ## Priority 4: Performance and scalability
 

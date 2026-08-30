@@ -48,11 +48,39 @@ runs:
       id: run
       shell: bash
       working-directory: ${{ inputs.lens-dir }}
+      env:
+        LENS_ACTION_ARGS: ${{ inputs.args }}
+        LENS_ACTION_FAIL_ON: ${{ inputs.fail-on }}
+        LENS_ACTION_KUJO_BIN: ${{ inputs.kujo-bin }}
+        LENS_ACTION_URL: ${{ inputs.url }}
       run: |
-        if [ -n "${{ inputs.kujo-bin }}" ]; then export KUJO_BIN="${{ inputs.kujo-bin }}"; fi
+        set -euo pipefail
+        if [ -n "$LENS_ACTION_KUJO_BIN" ]; then export KUJO_BIN="$LENS_ACTION_KUJO_BIN"; fi
+
+        # Tokenize the optional argument string without evaluating it as shell
+        # code. GitHub Action inputs are data, and may be supplied by an
+        # untrusted workflow trigger; direct interpolation here would permit
+        # command substitution. shlex preserves quoted values such as device
+        # names while the NUL delimiter preserves whitespace exactly.
+        lens_args=()
+        lens_args_file="$(mktemp)"
+        trap 'rm -f "$lens_args_file"' EXIT
+        python3 - "$LENS_ACTION_ARGS" > "$lens_args_file" <<'PY'
+        import shlex
+        import sys
+
+        for value in shlex.split(sys.argv[1]):
+            sys.stdout.buffer.write(value.encode("utf-8") + b"\0")
+        PY
+        while IFS= read -r -d '' arg; do
+          lens_args+=("$arg")
+        done < "$lens_args_file"
+        rm -f "$lens_args_file"
+        trap - EXIT
+
         OUT=".lens/runs/ci"
         set +e
-        ./lens check "${{ inputs.url }}" --fail-on "${{ inputs.fail-on }}" --out "$OUT" ${{ inputs.args }}
+        ./lens check "$LENS_ACTION_URL" --fail-on "$LENS_ACTION_FAIL_ON" --out "$OUT" "${lens_args[@]}"
         code=$?
         set -e
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"

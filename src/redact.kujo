@@ -402,6 +402,24 @@ export func redact_dom_summary(summary) {
 	return out
 }
 
+# Redact the complete nested accessibility scan payload. Axe selector targets
+# and engine errors are page-controlled data, so redacting only the top-level
+# URL is insufficient. A JSON round trip keeps the schema intact while applying
+# the same free-text secret sweep used by every other report surface.
+export func redact_accessibility_scans(scans) {
+	safe_json := redact_text(to_json(scans))
+	mut safe_scans := array()
+	try {
+		safe_scans = parse_json(safe_json)
+	} except e {
+		return array()
+	}
+	if is_falseish(is_array(safe_scans)) {
+		return array()
+	}
+	return safe_scans
+}
+
 # Redact a single finding dict's free-text fields. Returns a new dict so
 # the caller's finding is not mutated in place.
 export func redact_finding(finding) {
@@ -435,7 +453,7 @@ export func redact_check_results(check_results) {
 		if is_trueish(dict_has_key(cr, "finding_count")) { new_cr["finding_count"] = cr["finding_count"] }
 		if is_trueish(dict_has_key(cr, "duration_ms")) { new_cr["duration_ms"] = cr["duration_ms"] }
 		# Carry through any auxiliary fields used by specific checks.
-		if is_trueish(dict_has_key(cr, "scans")) { new_cr["scans"] = cr["scans"] }
+		if is_trueish(dict_has_key(cr, "scans")) { new_cr["scans"] = redact_accessibility_scans(cr["scans"]) }
 		if is_trueish(dict_has_key(cr, "engine_available")) { new_cr["engine_available"] = cr["engine_available"] }
 		if is_trueish(dict_has_key(cr, "engine_version")) { new_cr["engine_version"] = cr["engine_version"] }
 		if is_trueish(dict_has_key(cr, "engine_note")) { new_cr["engine_note"] = cr["engine_note"] }

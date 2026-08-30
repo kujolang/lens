@@ -20,16 +20,20 @@ surface. Key guarantees:
 - **Centralized secret redaction.** Bearer tokens, JWTs, basic-auth
   credentials, sensitive query parameters, and `key=value` secrets are redacted
   from **every** artifact and report (`src/redact.kujo`), applied at capture, at
-  finding construction, and as a final sweep.
+  finding construction, and as a final sweep. Nested accessibility scan data,
+  including page-derived selector targets and engine errors, is swept too.
 - **Never stored at all:** request/response bodies, cookies, and auth headers.
   The network capture is a strict whitelist.
 - **Typed-input safety.** Values typed in a flow (e.g. credentials) are redacted
   to `[REDACTED]` in `flow.json`; the internal program handoff is deleted
-  immediately after the bridge consumes it. The `--auth-file` storage state is
-  passed to Playwright by path and never read, logged, or written by Lens.
+  immediately after the bridge consumes it. Lens reads `--auth-file` only to
+  validate the Playwright storage-state envelope, then passes the path to the
+  browser; contents and parse details are never logged or written by Lens.
 - **Verbose logs are sanitized.** `--verbose` keeps diagnostic bridge-command
   output useful while redacting secret-bearing URLs and masking `--auth-file`
   paths.
+- **CI inputs are data, not shell code.** The composite Action passes inputs via
+  environment variables and tokenizes extra arguments without shell evaluation.
 
 ## Caveats to be aware of
 

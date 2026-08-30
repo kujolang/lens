@@ -39,14 +39,14 @@ from src.accessibility import map_a11y_severity, is_a11y_enabled
 LENS_VERSION := "1.0.0"
 from src.common import is_trueish, is_falseish
 from src.validate import extract_host, is_localhost_host, is_localhost_url
-from src.validate import validate_url, has_valid_scheme
+from src.validate import validate_url, has_valid_scheme, validate_auth_storage_state
 from src.redact import is_sensitive_header, is_sensitive_query_param
 from src.redact import redact_url, redact_console_entry, redact_header_value
 from src.redact import redact_text, redact_finding, redact_check_results
-from src.redact import redact_console_message, redact_network_event, redact_dom_summary
+from src.redact import redact_console_message, redact_network_event, redact_dom_summary, redact_accessibility_scans
 from src.checks import new_check_result, new_finding, add_finding, worst_severity
 from src.checks import count_findings_by_severity, check_page_load
-from src.provider import provider_failed, redacted_bridge_command_for_display
+from src.provider import provider_failed, redacted_bridge_command_for_display, parse_provider_output
 from src.visual import copy_file_binary
 from src.accessibility import check_accessibility
 from src.report import generate_markdown_report, generate_json_report
@@ -1426,6 +1426,23 @@ func test_redact_dom_summary() {
 	check(is_falseish(contains(to_string(r["visible_text_sample"]), "abcdef1234567")), "dom: visible text sample scrubbed")
 }
 
+func test_redact_accessibility_scans_nested_payload() {
+	scans := array({
+		"url": "http://localhost:3000/?token=A11Y_URL_SECRET_123",
+		"error": "password=A11Y_ERROR_SECRET_456",
+		"violations": array({
+			"id": "label",
+			"targets": array("[data-token='A11Y_TARGET_SECRET_789']")
+		})
+	})
+	safe := redact_accessibility_scans(scans)
+	serialized := to_json(safe)
+	check(is_falseish(contains(serialized, "A11Y_URL_SECRET_123")), "a11y redact: scan URL secret removed")
+	check(is_falseish(contains(serialized, "A11Y_ERROR_SECRET_456")), "a11y redact: nested engine error secret removed")
+	check(is_falseish(contains(serialized, "A11Y_TARGET_SECRET_789")), "a11y redact: selector target secret removed")
+	check(is_trueish(contains(serialized, "[REDACTED]")), "a11y redact: structure retained with marker")
+}
+
 # ── Provider: partial-failure resilience (determinism) ───────────────
 
 func test_provider_failed_partial_ok() {
@@ -1447,6 +1464,52 @@ func test_provider_failed_error_flag() {
 func test_provider_failed_empty_viewports() {
 	empty := {"viewports": array(), "provider_errors": array()}
 	check(provider_failed(empty) == true, "provider_failed: empty viewports is total failure")
+}
+
+func test_parse_provider_output_rejects_malformed_json() {
+	result := parse_provider_output("{broken")
+	check(result["error"] == true, "provider parse: malformed JSON becomes structured failure")
+	check_eq(result["exit_code"], 3, "provider parse: malformed JSON maps to exit 3")
+	check(is_falseish(contains(to_string(result), "{broken")), "provider parse: raw output is not reflected")
+}
+
+func test_parse_provider_output_rejects_non_object() {
+	result := parse_provider_output("[]")
+	check(result["error"] == true, "provider parse: non-object becomes structured failure")
+	check_eq(result["exit_code"], 3, "provider parse: non-object maps to exit 3")
+}
+
+func test_parse_provider_output_accepts_object() {
+	result := parse_provider_output("{\"viewports\":[]}")
+	check(is_falseish(has_key(result, "error")), "provider parse: object remains usable")
+	check_eq(len(result["viewports"]), 0, "provider parse: object fields preserved")
+}
+
+# ── Auth storage-state boundary ─────────────────────────────────────
+
+func test_validate_auth_storage_state() {
+	check(validate_auth_storage_state("")["valid"] == true, "auth state: absent optional path is valid")
+
+	missing_path := "/tmp/LENS-PRIVATE-AUTH-PATH-DO-NOT-ECHO.json"
+	missing := validate_auth_storage_state(missing_path)
+	check(missing["valid"] == false, "auth state: missing file is rejected")
+	check(is_falseish(contains(to_string(missing["error"]), missing_path)), "auth state: missing path is not echoed")
+
+	malformed_path := "/tmp/lens-auth-malformed.json"
+	write_file(malformed_path, "{SUPERSECRET malformed", true)
+	malformed := validate_auth_storage_state(malformed_path)
+	check(malformed["valid"] == false, "auth state: malformed JSON is rejected")
+	check(is_falseish(contains(to_string(malformed["error"]), "SUPERSECRET")), "auth state: parse content is not echoed")
+
+	shape_path := "/tmp/lens-auth-shape.json"
+	write_file(shape_path, "{\"cookies\":{},\"origins\":[]}", true)
+	shape := validate_auth_storage_state(shape_path)
+	check(shape["valid"] == false, "auth state: cookies must be an array")
+
+	valid_path := "/tmp/lens-auth-valid.json"
+	write_file(valid_path, "{\"cookies\":[],\"origins\":[]}", true)
+	valid := validate_auth_storage_state(valid_path)
+	check(valid["valid"] == true, "auth state: Playwright envelope is accepted")
 }
 
 # ── Page-load classification ─────────────────────────────────────────
@@ -1531,9 +1594,14 @@ test_redact_check_results_preserves_engine_fields()
 test_redact_console_message()
 test_redact_network_event_whitelist()
 test_redact_dom_summary()
+test_redact_accessibility_scans_nested_payload()
 test_provider_failed_partial_ok()
 test_provider_failed_error_flag()
 test_provider_failed_empty_viewports()
+test_parse_provider_output_rejects_malformed_json()
+test_parse_provider_output_rejects_non_object()
+test_parse_provider_output_accepts_object()
+test_validate_auth_storage_state()
 test_check_page_load_partial_error()
 test_check_page_load_all_failed()
 test_check_page_load_clean()
