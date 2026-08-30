@@ -60,7 +60,7 @@ export PATH="/path/to/lens:$PATH"
 
 ```bash
 ./lens --version
-# Lens v1.0.0
+# Lens v1.0.1
 
 ./lens --help
 # Usage, flags, and examples

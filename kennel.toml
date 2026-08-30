@@ -1,6 +1,6 @@
 [package]
 name = "lens"
-version = "1.0.0"
+version = "1.0.1"
 description = "Deterministic browser/visual QA tool for AI-built software. Gives agents eyes by opening a local app or URL, collecting evidence, and producing agent-ready repair reports."
 license = "MIT"
 authors = ["Kujolang <contact@kujolang.ai>"]

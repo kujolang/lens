@@ -34,6 +34,16 @@ surface. Key guarantees:
   paths.
 - **CI inputs are data, not shell code.** The composite Action passes inputs via
   environment variables and tokenizes extra arguments without shell evaluation.
+- **Write destinations are validated.** Lens refuses root/current-directory
+  artifact targets, final-target symlinks, file/directory type mismatches,
+  missing parents for direct files, and duplicate Eval/RunLedger/Howl paths.
+  Parent-directory symlinks follow normal host filesystem semantics.
+- **Bounded evidence and visuals.** Per viewport, Lens retains at most 1,000
+  console messages, 2,000 failed network events, and 5,000 links. Custom
+  viewports are capped at 4096×4096; recordings above 100 MiB are removed and
+  reported as warnings.
+- **Baseline identifiers are redacted.** Secret-bearing URLs and flow names are
+  redacted before they become baseline directory names or metadata.
 
 ## Caveats to be aware of
 

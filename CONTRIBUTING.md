@@ -122,8 +122,10 @@ The full per-step detail lives in `docs/enhancements.md`.
 5. Run the full suite; for tested behavior changes, the count should go up:
    `kujo run tests/lens_tests.kujo` should report `0 failed`.
 6. If `bridge/*.js` changed, run `node --check bridge/browser-bridge.js`.
-7. For performance-sensitive changes, compare `scripts/bench.sh` medians against
-   the pre-change build and document the delta.
+7. For performance-sensitive changes, compare machine-readable medians:
+   `scripts/bench.sh 3 /tmp/before.json`,
+   `scripts/bench.sh 3 /tmp/after.json`, then
+   `python3 scripts/compare-benchmarks.py /tmp/before.json /tmp/after.json`.
 8. If capture, storage, or report surfaces change, prove no secret leaks with a
    secret-bearing URL or flow data and add redaction coverage.
 9. Run the real CLI end to end and read the generated report.

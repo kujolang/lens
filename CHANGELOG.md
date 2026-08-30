@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- User-selected output, baseline, Eval, RunLedger, and Howl destinations are
+  validated before any write. Dangerous root/current-directory targets,
+  final-target symlinks, type mismatches, missing file parents, and duplicate
+  direct-file destinations now fail as invalid input.
+- Visual baseline directory names and metadata now redact secret-bearing URLs
+  and flow names, and HTML regression tests cover every user-controlled field.
+- Terminal JSON/verbose summaries and flow reports, walkthroughs, validation
+  output, Eval records, names, URLs, and artifact paths now pass through the
+  final secret-redaction boundary.
+
+### Scalability
+- Browser evidence is bounded at 1,000 console messages, 2,000 network events,
+  and 5,000 captured links per viewport, with explicit truncation findings.
+- Custom viewport dimensions are capped at 4096×4096 and flow recordings at
+  100 MiB; oversized recordings are removed with a warning finding.
+- Added deterministic trivial, realistic, SPA, image-heavy, late-network, and
+  many-link fixtures, machine-readable medians, and a labeled/manual CI
+  regression comparison.
+
+### CI
+- Added Linux/macOS coverage across Node 18/20/22, installed/missing behavior
+  for Chromium, Firefox, and WebKit, and full fixture-backed artifact/redaction
+  coverage for checks, crawls, baselines, and recorded walkthroughs.
+
+### Changed
+- Version promoted to **1.0.1** across the CLI, manifests, spec, docs, and badge.
+
 ### Performance
 - Added `--quick`, an opt-in agent repair profile that emits JSON, captures one
   desktop viewport, removes the settle delay, and keeps explicit CLI overrides.

@@ -1,6 +1,6 @@
 # Lens
 
-[![Version](https://img.shields.io/badge/version-1.0.0-black)](https://github.com/kujolang/lens)
+[![Version](https://img.shields.io/badge/version-1.0.1-black)](https://github.com/kujolang/lens)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 [![built with Kujo](https://img.shields.io/badge/built%20with-Kujo-white.svg)](https://github.com/kujolang/kujo)
 [![CI](https://github.com/kujolang/lens/actions/workflows/ci.yml/badge.svg)](https://github.com/kujolang/lens/actions/workflows/ci.yml)
@@ -151,6 +151,11 @@ Each run writes a self-contained directory:
 
 Reports are redacted by default. See [Redaction & Privacy](docs/reference.md#redaction--privacy) for what Lens redacts and how to review it.
 
+Lens bounds high-volume evidence so CI artifacts stay predictable: each
+viewport retains at most 1,000 console messages, 2,000 failed network events,
+and 5,000 links. A warning finding records any truncation. Custom viewports are
+limited to 4096×4096, and recordings above 100 MiB are removed with a warning.
+
 Screenshots and flow recordings capture rendered pixels. They can therefore
 include private account data even when tokens and credentials are redacted from
 structured artifacts. Review visual artifacts before sharing them, and omit
@@ -218,6 +223,8 @@ narrow: deterministic browser QA, done well.
 
 ```bash
 kujo run tests/lens_tests.kujo   # full test suite passes
+npm test --prefix bridge         # bridge unit/integration tests
+scripts/bench.sh 3 /tmp/lens-bench.json
 ```
 
 ## Project

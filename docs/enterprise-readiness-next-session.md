@@ -13,10 +13,10 @@ deferred with rationale.
 - Root files are still intentional: `lens` is the executable launcher,
   `lens.kujo` is the Kujo entry point, `kujo.toml`/`kennel.toml` are project and
   package manifests, and `lens.spec.yml` is the product contract.
-- Tests pass at 372/372 after this review.
-- The product is best described as beta/stabilizing, not 1.0/LTS: the surface is
-  robust, but enterprise polish still needs more packaging, CI matrix, and
-  hardening work.
+- Tests pass at 448/448 after the hardening follow-through.
+- Lens 1.0.1 is stable within its documented deterministic, local-first scope.
+  Broader product features and presentation work remain optional roadmap items,
+  not correctness blockers.
 
 ## Priority 1: Release and packaging polish
 
@@ -34,41 +34,42 @@ deferred with rationale.
 
 ## Priority 2: CI and compatibility matrix
 
-1. Run CI across Node 18/20/22 and at least macOS + Linux.
-2. Add dedicated bridge CI for Chromium, Firefox, and WebKit availability
+1. **Completed (2026-08-30):** run CI across Node 18/20/22 and macOS + Linux.
+2. **Completed (2026-08-30):** add dedicated bridge CI for Chromium, Firefox, and WebKit availability
    handling. Missing engines should be proven to fail with exit 3 and a helpful
    message.
-3. Add a fixture-backed end-to-end job for `--perf`, `--crawl`, `--html`,
+3. **Completed (2026-08-30):** add a fixture-backed end-to-end job for `--perf`, `--crawl`, `--html`,
    `--accessibility`, `--baseline`, and `flow --execute --record --walkthrough`.
-4. Publish `.lens/runs/ci` artifacts from CI for every end-to-end job so the
+4. **Completed (2026-08-30):** publish run, baseline, and walkthrough artifacts from CI so the
    generated proof artifacts are always inspectable.
 
 ## Priority 3: Security hardening
 
-1. Add a redaction smoke command that runs against a secret-bearing URL and
+1. **Completed (2026-08-30):** add a redaction smoke command that runs against a secret-bearing URL and
    greps all artifacts, reports, walkthroughs, and verbose logs for raw tokens.
 2. **Completed (2026-08-30):** validate `--auth-file` before handing it to
    Playwright; require the storage-state JSON envelope and keep paths, contents,
    and parser details out of errors.
-3. Add path-safety checks for user-provided output paths, baseline paths,
+3. **Completed (2026-08-30):** add path-safety checks for user-provided output paths, baseline paths,
    ledger/howl paths, and eval paths. Document where Lens may write.
-4. Add tests proving report HTML escapes every user-controlled field, including
+4. **Completed (2026-08-30):** add tests proving report HTML escapes every user-controlled field, including
    URLs, finding text, flow names, step labels, and artifact names.
 5. **Completed (2026-08-30):** document screenshot/recording privacy in the
    README, including the rendered-pixel caveat and `--record` guidance.
 
 ## Priority 4: Performance and scalability
 
-1. Add benchmark fixtures for trivial, SPA-like, image-heavy, late-network, and
+1. **Completed (2026-08-30):** add benchmark fixtures for trivial, SPA-like, image-heavy, late-network, and
    many-link pages. Store median baselines in a machine-readable file.
-2. Add a CI perf guard that runs only on labeled/release jobs and warns on
+2. **Completed (2026-08-30):** add a CI perf guard that runs only on labeled/manual jobs and warns on
    meaningful median regression.
-3. Stream or chunk large `console.json`, `network.json`, and crawl results if
-   pages produce high event volume.
-4. Bound screenshot and video artifact sizes, with clear warnings when output
+3. **Completed by bounding (2026-08-30):** cap per-viewport console, network,
+   and link evidence with explicit truncation metadata and findings; crawl was
+   already capped by `--max-pages`.
+4. **Completed (2026-08-30):** bound screenshot dimensions and video artifact sizes, with clear warnings when output
    becomes too large for CI artifacts.
-5. Revisit provider retry logic for non-empty malformed JSON: distinguish
-   transient bridge failure from deterministic bridge bugs.
+5. **Completed (2026-08-30):** provider retry logic treats empty output as
+   transient and non-empty malformed JSON as a deterministic exit-3 bridge bug.
 
 ## Priority 5: Functionality for broader usefulness
 
@@ -103,5 +104,5 @@ deferred with rationale.
 - No raw secrets appear in artifacts, reports, walkthroughs, or verbose logs.
 - New features are opt-in when they expand network, auth, write, or mutation
   surface area.
-- The final user-facing claim remains honest: Lens is a robust Kujo showcase on
-  the path to 1.0, not a vague universal enterprise solution.
+- The final user-facing claim remains honest: Lens is stable in its documented
+  local-first scope, not a vague universal enterprise solution.

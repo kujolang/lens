@@ -100,7 +100,7 @@ export PATH="/path/to/lens:$PATH"
 
 ```bash
 lens --version
-# Lens v1.0.0
+# Lens v1.0.1
 
 lens --help
 # Shows usage and flags
@@ -241,6 +241,8 @@ Beyond the `desktop` (1440×900) and `mobile` (390×844) presets, any
 `<width>x<height>` token is a custom viewport — `--viewport 1024x768` or a
 `viewports = ["1024x768"]` entry. The screenshot and DOM summary are captured at
 that exact size, and the artifact is named after the token (`1024x768.png`).
+Each dimension must be between 1 and 4096 pixels, bounding screenshot memory and
+artifact size.
 
 ### Readiness & concurrency
 
@@ -319,6 +321,11 @@ bridge, runs `lens check`, and uploads the report as a CI artifact.
 Action inputs are passed through environment variables rather than interpolated
 into the shell program. The free-form `args` input is tokenized without shell
 evaluation, so quoted values remain usable and command substitutions are inert.
+
+CI also runs the bridge on Linux and macOS with Node 18/20/22, verifies each
+Playwright engine and its missing-engine exit-3 behavior, and exercises the full
+fixture-backed artifact surface. The separate performance workflow runs only
+manually or for pull requests labeled `performance`.
 
 ## Interactive flows & the proof-of-work artifact (Phase 4)
 
@@ -426,6 +433,22 @@ Notes:
   do not appear in the standard artifact set.
 - All JSON artifacts use stable keys suitable for tool integration.
 - The default output directory is `.lens/runs/<timestamp>/`.
+- Per viewport, console evidence is capped at 1,000 entries, failed-network
+  evidence at 2,000 entries, and captured links at 5,000 entries. Lens emits a
+  `LENS-CAPTURE-LIMITS` warning if evidence is truncated.
+- Flow recordings are capped at 100 MiB. An oversized recording is removed and
+  represented by an `artifact_limit` warning in the flow results.
+
+### Write destination policy
+
+Lens validates all user-selected write destinations before creating artifacts.
+`--out` and `--baseline-dir` must name dedicated directories; `/`, `.`, `..`,
+existing files, and final-target symlinks are rejected. `--eval-out`, `--ledger`,
+and `--howl` must name files whose parent directory already exists; existing
+directories, final-target symlinks, trailing-slash paths, and duplicate direct
+file destinations are rejected. Paths containing a `..` traversal component
+are rejected. Parent-directory symlinks retain ordinary host
+filesystem behavior (for example, macOS `/tmp`). Invalid destinations exit 2.
 
 ## Checks
 
@@ -638,7 +661,7 @@ within a run and appear in both Markdown and JSON reports.
 
 ```bash
 kujo run tests/lens_tests.kujo
-# 398 tests covering CLI parsing, URL validation, checks, findings,
+# 448 assertions covering CLI parsing, URL validation, checks, findings,
 # report generation, redaction (free-text, URL, finding, sweep, console,
 # network, DOM), provider partial-failure resilience, error/exit-code
 # paths, page-load classification, accessibility engine handling,
@@ -659,25 +682,22 @@ before falling back to a sibling debug build. Set `KUJO_BIN` to override that
 selection. For the shortest agent repair loop, use `--quick`; keep the full
 default run as the final regression gate.
 
-Use the benchmark harness to capture medians and catch regressions:
+Use the fixture-backed benchmark harness to capture medians and catch regressions:
 
 ```bash
-scripts/bench.sh        # full + quick medians, 8 iterations by default
+scripts/bench.sh 3 /tmp/lens-bench.json
+python3 scripts/compare-benchmarks.py /tmp/before.json /tmp/after.json
 ```
 
-Reference baselines on a warm Chromium (median of 8, macOS dev laptop — your
-numbers will differ; what matters is the **delta** before vs. after a change):
-
-| Scenario | Median |
-|----------|--------|
-| Bridge, trivial page (desktop+mobile) | ~2.0 s |
-| Bridge, realistic page (latency + assets) | ~3.2 s |
-| Full `lens check`, trivial page | ~3.6 s |
-| Full `lens check`, realistic page | ~4.8 s |
+The harness covers direct bridge and CLI runs plus trivial, realistic, SPA,
+image-heavy, late-network, and many-link pages. It writes stable JSON receipts;
+`benchmarks/baseline.json` records an informational local reference. Compare
+before/after receipts on the same runner because browser timings are
+environment-sensitive.
 
 When making a change that could affect speed, record `scripts/bench.sh` output
-before and after (git-stash the change to measure the baseline) and note the
-delta in the PR. A regression must be justified.
+before and after (or set `LENS_BENCH_TARGET_ROOT` to another checkout) and note
+the delta in the PR. A regression must be justified.
 
 ## Architecture
 
@@ -1286,7 +1306,7 @@ historical implementation context.
 
 ## Version
 
-Lens v1.0.0 — browser checks, same-origin link checking, Spec/Eval integration,
+Lens v1.0.1 — browser checks, same-origin link checking, Spec/Eval integration,
 safe executable flows, visual baselines/diffing, axe-core accessibility
 scanning, performance evidence, bounded crawl, HTML reports, and centralized
 secret redaction across artifacts, reports, and verbose bridge logs.

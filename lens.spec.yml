@@ -2,7 +2,7 @@ name: "lens"
 goal: "Build a deterministic browser/visual QA tool for AI-built software. Lens gives agents eyes by opening a local app or URL, interacting with it in controlled ways, collecting evidence, and producing an agent-ready repair report."
 id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 status: "complete"
-version: "1.0.0"
+version: "1.0.1"
 created_at: "2026-05-31T00:00:00Z"
 priority: "high"
 background: |
