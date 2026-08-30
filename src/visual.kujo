@@ -4,6 +4,7 @@
 # and visual diff findings.
 
 from src.common import is_trueish, is_falseish
+from src.redact import redact_url, redact_text
 
 # Default baseline directory.
 DEFAULT_BASELINE_DIR := ".lens/baselines"
@@ -16,7 +17,9 @@ DEFAULT_DIFF_THRESHOLD := 0.01
 # Build the baseline directory path for a check run.
 export func baseline_dir_for_check(config) {
 	base := baseline_base_dir(config)
-	url := to_string(config["url"])
+	# Baseline paths are artifacts too. Build the stable name from the redacted
+	# URL so query credentials never enter filenames or report metadata.
+	url := redact_url(to_string(config["url"]))
 	# Use simple replacement for unsafe characters
 	mut safe_name := url
 	safe_name = replace(safe_name, "://", "_")
@@ -27,6 +30,8 @@ export func baseline_dir_for_check(config) {
 	safe_name = replace(safe_name, "&", "_")
 	safe_name = replace(safe_name, "=", "_")
 	safe_name = replace(safe_name, ".", "_")
+	safe_name = replace(safe_name, "[", "_")
+	safe_name = replace(safe_name, "]", "_")
 	if safe_name == "" {
 		safe_name = "default"
 	}
@@ -38,7 +43,7 @@ export func baseline_dir_for_flow(config, flow) {
 	base := baseline_base_dir(config)
 	mut flow_name := "flow"
 	if is_trueish(has_key(flow, "name")) {
-		flow_name = to_string(flow["name"])
+		flow_name = redact_text(to_string(flow["name"]))
 	}
 	# Sanitize flow name
 	mut safe_name := flow_name
@@ -111,7 +116,7 @@ export func save_baselines(config, run_dir, viewports, baseline_dir) {
 		meta["created_at"] = now_utc()
 		meta["tool"] = "lens"
 		meta["command"] = to_string(config["subcommand"])
-		meta["url"] = to_string(config["url"])
+		meta["url"] = redact_url(to_string(config["url"]))
 		meta["viewports"] = array()
 		mut mi := 0
 		while mi < len(viewports) {

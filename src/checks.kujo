@@ -256,6 +256,38 @@ export func check_page_load(config, bridge_data) {
 	return cr
 }
 
+# Report resource-bound truncation explicitly. The bridge caps noisy,
+# page-controlled evidence arrays to keep memory and artifact growth bounded;
+# any dropped data is a warning because downstream conclusions are incomplete.
+export func check_capture_limits(config, bridge_data) {
+	cr := new_check_result("Evidence Limits", "evidence_limits")
+	provider_result := bridge_data["provider_result"]
+	viewports := provider_result["viewports"]
+	mut dropped_console := 0
+	mut dropped_network := 0
+	mut dropped_links := 0
+	mut vi := 0
+	while vi < len(viewports) {
+		vp := viewports[vi]
+		if is_trueish(has_key(vp, "evidence_limits")) {
+			limits := vp["evidence_limits"]
+			if is_trueish(has_key(limits, "dropped_console_messages")) { dropped_console = dropped_console + to_int(to_string(limits["dropped_console_messages"])) }
+			if is_trueish(has_key(limits, "dropped_network_events")) { dropped_network = dropped_network + to_int(to_string(limits["dropped_network_events"])) }
+			if is_trueish(has_key(limits, "dropped_links")) { dropped_links = dropped_links + to_int(to_string(limits["dropped_links"])) }
+		}
+		vi = vi + 1
+	}
+	total := dropped_console + dropped_network + dropped_links
+	if total == 0 { return cr }
+	return add_finding(cr, new_finding(
+		"warning", "EVIDENCE",
+		"Browser evidence capture reached a safety limit",
+		"Lens omitted " + to_string(dropped_console) + " console message(s), " + to_string(dropped_network) + " network event(s), and " + to_string(dropped_links) + " link(s) after reaching configured hard bounds.",
+		"metadata.json provider.evidence_limits",
+		"Reduce page noise or inspect the application with a purpose-built trace before relying on conclusions that require the omitted evidence."
+	))
+}
+
 # ── Check 2: Console Errors ──────────────────────────────────────────
 
 export func check_console_errors(config, bridge_data) {
@@ -1698,6 +1730,7 @@ export func run_all_checks(config, bridge_data) {
 	mut results := array()
 	
 	results = append(results, check_page_load(config, bridge_data))
+	results = append(results, check_capture_limits(config, bridge_data))
 	results = append(results, check_console_errors(config, bridge_data))
 	results = append(results, check_network_failures(config, bridge_data))
 	results = append(results, check_blank_page(config, bridge_data))

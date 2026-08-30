@@ -23,6 +23,20 @@ const { chromium, firefox, webkit, devices } = require('playwright-core');
 const fs = require('fs');
 const path = require('path');
 
+// Explicit evidence bounds keep hostile/noisy pages from growing bridge memory
+// and artifacts without limit. Dropped counts are surfaced in metadata and a
+// Lens warning, so truncation is never silent.
+const MAX_CONSOLE_MESSAGES = 1000;
+const MAX_NETWORK_EVENTS = 2000;
+const MAX_CAPTURED_LINKS = 5000;
+const MAX_VIEWPORT_DIMENSION = 4096;
+
+function pushBounded(items, value, limit) {
+  if (items.length >= limit) return false;
+  items.push(value);
+  return true;
+}
+
 // ── CLI argument parsing ──────────────────────────────────────────────
 
 function parseArgs() {
@@ -157,7 +171,12 @@ function resolveViewport(token) {
   const preset = VIEWPORT_SIZES[token];
   if (preset) return { name: token, width: preset.width, height: preset.height };
   const m = /^(\d+)x(\d+)$/.exec(String(token).toLowerCase());
-  if (m) return { name: token, width: parseInt(m[1], 10), height: parseInt(m[2], 10) };
+  if (m) {
+    const width = parseInt(m[1], 10), height = parseInt(m[2], 10);
+    if (width > 0 && height > 0 && width <= MAX_VIEWPORT_DIMENSION && height <= MAX_VIEWPORT_DIMENSION) {
+      return { name: token, width, height };
+    }
+  }
   return { name: token, width: VIEWPORT_SIZES.desktop.width, height: VIEWPORT_SIZES.desktop.height };
 }
 
@@ -263,7 +282,7 @@ function formatMs(ms) {
 
 // Collect visible anchors only. This lives outside captureViewport so the DOM
 // behavior can be exercised directly in bridge regression tests.
-const COLLECT_LINKS = () => {
+const COLLECT_LINKS = (maxLinks = 5000) => {
   const anchorNodes = document.querySelectorAll('a[href]');
   const results = [];
   for (const a of anchorNodes) {
@@ -274,6 +293,7 @@ const COLLECT_LINKS = () => {
     const title = (a.getAttribute('title') || '').trim().substring(0, 200);
     const ariaLabel = (a.getAttribute('aria-label') || '').trim().substring(0, 200);
     results.push({ href, text, title, aria_label: ariaLabel });
+    if (results.length >= maxLinks) break;
   }
   return results;
 };
@@ -314,6 +334,7 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
 
   // Collect console messages
   const consoleMessages = [];
+  let droppedConsoleMessages = 0;
   page.on('console', (msg) => {
     const entry = {
       type: msg.type(),
@@ -326,16 +347,17 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
     if (loc && loc.url) {
       entry.location = `${loc.url}:${loc.lineNumber || 0}:${loc.columnNumber || 0}`;
     }
-    consoleMessages.push(entry);
+    if (!pushBounded(consoleMessages, entry, MAX_CONSOLE_MESSAGES)) droppedConsoleMessages++;
   });
 
   // Collect network events (only failures and HTTP errors)
   const networkEvents = [];
+  let droppedNetworkEvents = 0;
   page.on('response', (response) => {
     const status = response.status();
     // Capture 4xx and 5xx responses
     if (status >= 400) {
-      networkEvents.push({
+      const entry = {
         url: response.url(),
         method: response.request().method(),
         status: status,
@@ -343,12 +365,13 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
         resource_type: response.request().resourceType(),
         timestamp: nowISO(),
         viewport: viewportName,
-      });
+      };
+      if (!pushBounded(networkEvents, entry, MAX_NETWORK_EVENTS)) droppedNetworkEvents++;
     }
   });
 
   page.on('requestfailed', (request) => {
-    networkEvents.push({
+    const entry = {
       url: request.url(),
       method: request.method(),
       status: null,
@@ -356,7 +379,8 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
       resource_type: request.resourceType(),
       timestamp: nowISO(),
       viewport: viewportName,
-    });
+    };
+    if (!pushBounded(networkEvents, entry, MAX_NETWORK_EVENTS)) droppedNetworkEvents++;
   });
 
   // Navigate
@@ -488,7 +512,7 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
   // Capture links
   let links = [];
   try {
-    links = await page.evaluate(COLLECT_LINKS);
+    links = await page.evaluate(COLLECT_LINKS, MAX_CAPTURED_LINKS);
   } catch (_) {
     links = [];
   }
@@ -522,6 +546,16 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
     navigation_error: navigationError,
     accessibility: accessibility,
     metrics: metrics,
+    evidence_limits: {
+      max_console_messages: MAX_CONSOLE_MESSAGES,
+      max_network_events: MAX_NETWORK_EVENTS,
+      max_captured_links: MAX_CAPTURED_LINKS,
+      dropped_console_messages: droppedConsoleMessages,
+      dropped_network_events: droppedNetworkEvents,
+      dropped_links: domSummary && Number.isFinite(domSummary.link_count)
+        ? Math.max(0, domSummary.link_count - links.length)
+        : 0,
+    },
   };
 }
 
@@ -624,6 +658,21 @@ async function main() {
     }
   }
 
+  result.metadata.evidence_limits = result.viewports.reduce((totals, viewport) => {
+    const limits = viewport.evidence_limits || {};
+    totals.dropped_console_messages += limits.dropped_console_messages || 0;
+    totals.dropped_network_events += limits.dropped_network_events || 0;
+    totals.dropped_links += limits.dropped_links || 0;
+    return totals;
+  }, {
+    max_console_messages_per_viewport: MAX_CONSOLE_MESSAGES,
+    max_network_events_per_viewport: MAX_NETWORK_EVENTS,
+    max_captured_links_per_viewport: MAX_CAPTURED_LINKS,
+    dropped_console_messages: 0,
+    dropped_network_events: 0,
+    dropped_links: 0,
+  });
+
   // Close browser
   try {
     await browser.close();
@@ -656,5 +705,10 @@ if (require.main === module) {
     process.exit(1);
   });
 } else {
-  module.exports = { parseArgs, resolveViewport, mapWithConcurrency, COLLECT_LINKS, VIEWPORT_SIZES, THROTTLE_PROFILES };
+  module.exports = {
+    parseArgs, resolveViewport, mapWithConcurrency, COLLECT_LINKS,
+    VIEWPORT_SIZES, THROTTLE_PROFILES, pushBounded,
+    MAX_CONSOLE_MESSAGES, MAX_NETWORK_EVENTS, MAX_CAPTURED_LINKS,
+    MAX_VIEWPORT_DIMENSION,
+  };
 }

@@ -20,6 +20,21 @@ const { chromium } = require('playwright-core');
 const fs = require('fs');
 const path = require('path');
 
+const MAX_CONSOLE_MESSAGES = 1000;
+const MAX_NETWORK_EVENTS = 2000;
+const MAX_VIEWPORT_DIMENSION = 4096;
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+
+function pushBounded(items, value, limit) {
+  if (items.length >= limit) return false;
+  items.push(value);
+  return true;
+}
+
+function recordingExceedsLimit(filePath, maxBytes = MAX_VIDEO_BYTES) {
+  return fs.statSync(filePath).size > maxBytes;
+}
+
 function nowISO() { return new Date().toISOString(); }
 
 function parseArgs() {
@@ -96,7 +111,12 @@ function resolveViewport(token) {
   const preset = VIEWPORT_SIZES[token];
   if (preset) return { width: preset.width, height: preset.height };
   const m = /^(\d+)x(\d+)$/.exec(String(token || '').toLowerCase());
-  if (m) return { width: parseInt(m[1], 10), height: parseInt(m[2], 10) };
+  if (m) {
+    const width = parseInt(m[1], 10), height = parseInt(m[2], 10);
+    if (width > 0 && height > 0 && width <= MAX_VIEWPORT_DIMENSION && height <= MAX_VIEWPORT_DIMENSION) {
+      return { width, height };
+    }
+  }
   return VIEWPORT_SIZES.desktop;
 }
 
@@ -221,6 +241,13 @@ async function main() {
     dom_summary: null,
     steps: [],
     started_at: nowISO(),
+    evidence_limits: {
+      max_console_messages: MAX_CONSOLE_MESSAGES,
+      max_network_events: MAX_NETWORK_EVENTS,
+      dropped_console_messages: 0,
+      dropped_network_events: 0,
+    },
+    artifact_warnings: [],
   };
 
   const browser = await chromium.launch({ headless: true });
@@ -234,11 +261,26 @@ async function main() {
 
   page.on('console', (msg) => {
     if (msg.type() === 'error' || msg.type() === 'warning') {
-      result.console_messages.push({ type: msg.type(), text: msg.text(), timestamp: nowISO() });
+      const entry = { type: msg.type(), text: msg.text(), timestamp: nowISO() };
+      if (!pushBounded(result.console_messages, entry, MAX_CONSOLE_MESSAGES)) {
+        result.evidence_limits.dropped_console_messages++;
+      }
     }
   });
-  page.on('response', (r) => { if (r.status() >= 400) result.network_events.push({ url: r.url(), status: r.status(), method: r.request().method(), timestamp: nowISO() }); });
-  page.on('requestfailed', (r) => result.network_events.push({ url: r.url(), status: null, failure_text: (r.failure() && r.failure().errorText) || 'failed', timestamp: nowISO() }));
+  page.on('response', (r) => {
+    if (r.status() >= 400) {
+      const entry = { url: r.url(), status: r.status(), method: r.request().method(), timestamp: nowISO() };
+      if (!pushBounded(result.network_events, entry, MAX_NETWORK_EVENTS)) {
+        result.evidence_limits.dropped_network_events++;
+      }
+    }
+  });
+  page.on('requestfailed', (r) => {
+    const entry = { url: r.url(), status: null, failure_text: (r.failure() && r.failure().errorText) || 'failed', timestamp: nowISO() };
+    if (!pushBounded(result.network_events, entry, MAX_NETWORK_EVENTS)) {
+      result.evidence_limits.dropped_network_events++;
+    }
+  });
 
   const recording = program.record && opts.videoDir;
   for (const step of program.steps) {
@@ -282,7 +324,12 @@ async function main() {
         result.video = 'video/walkthrough.webm';
       }
       if (fs.existsSync(dest)) {
-        result.video = 'video/walkthrough.webm';
+        if (recordingExceedsLimit(dest)) {
+          fs.unlinkSync(dest);
+          result.artifact_warnings.push('Recording exceeded the 100 MiB artifact limit and was removed.');
+        } else {
+          result.video = 'video/walkthrough.webm';
+        }
         // mp4 transcode (for universal inline playback) is done on the Kujo side
         // after this bridge returns — keeping the bridge fast so it never trips
         // the runtime's process time limit on longer recordings.
@@ -298,5 +345,10 @@ async function main() {
 if (require.main === module) {
   main().catch((err) => { console.error('Flow bridge fatal: ' + err.message); process.exit(1); });
 } else {
-  module.exports = { parseArgs, resolveViewport, sanitizeScreenshotName, resolveStepTimeout, executeStep, VIEWPORT_SIZES };
+  module.exports = {
+    parseArgs, resolveViewport, sanitizeScreenshotName, resolveStepTimeout,
+    executeStep, VIEWPORT_SIZES, pushBounded, MAX_CONSOLE_MESSAGES,
+    MAX_NETWORK_EVENTS, MAX_VIEWPORT_DIMENSION, MAX_VIDEO_BYTES,
+    recordingExceedsLimit,
+  };
 }

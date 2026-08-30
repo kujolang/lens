@@ -161,3 +161,141 @@ export func validate_auth_storage_state(auth_path) {
 
 	return { "valid": true, "error": "" }
 }
+
+# Validate every user-selected write destination before Lens creates or
+# overwrites artifacts. Directory destinations may be created, but cannot be a
+# filesystem root, the current/parent directory, an existing file, or a symlink.
+# Direct file destinations must have an existing real directory parent and may
+# not be an existing directory or symlink. Parent-directory symlinks retain the
+# host filesystem's normal semantics (notably /tmp on macOS); the final target
+# itself is never followed when it is a symlink.
+export func validate_config_write_paths(config) {
+	dir_specs := array(
+		array("out_dir", "--out"),
+		array("baseline_dir", "--baseline-dir")
+	)
+	mut di := 0
+	while di < len(dir_specs) {
+		key := to_string(dir_specs[di][0])
+		label := to_string(dir_specs[di][1])
+		if is_trueish(has_key(config, key)) {
+			result := validate_directory_write_path(to_string(config[key]), label)
+			if is_falseish(result["valid"]) { return result }
+		}
+		di = di + 1
+	}
+
+	file_specs := array(
+		array("eval_out", "--eval-out"),
+		array("ledger", "--ledger"),
+		array("howl", "--howl")
+	)
+	mut fi := 0
+	while fi < len(file_specs) {
+		key := to_string(file_specs[fi][0])
+		label := to_string(file_specs[fi][1])
+		if is_trueish(has_key(config, key)) {
+			result := validate_file_write_path(to_string(config[key]), label)
+			if is_falseish(result["valid"]) { return result }
+		}
+		fi = fi + 1
+	}
+
+	# Prevent two output roles from silently overwriting one another. Compare a
+	# stable textual form; canonicalization cannot resolve paths that do not yet
+	# exist and would itself follow symlinks.
+	mut seen := {}
+	mut si := 0
+	while si < len(file_specs) {
+		key := to_string(file_specs[si][0])
+		label := to_string(file_specs[si][1])
+		if is_trueish(has_key(config, key)) {
+			path := normalize_write_path_text(to_string(config[key]))
+			if path != "" {
+				if is_trueish(has_key(seen, path)) {
+					return { "valid": false, "error": label + " must not reuse another Lens output path." }
+				}
+				seen[path] = label
+			}
+		}
+		si = si + 1
+	}
+
+	return { "valid": true, "error": "" }
+}
+
+export func validate_directory_write_path(raw_path, label) {
+	path := str_trim(to_string(raw_path))
+	if path == "" { return { "valid": true, "error": "" } }
+	normalized := normalize_write_path_text(path)
+	if normalized == "/" || normalized == "." || normalized == ".." || is_trueish(has_parent_segment(normalized)) {
+		return { "valid": false, "error": to_string(label) + " must name a dedicated output directory, not a filesystem root or working directory." }
+	}
+	if is_trueish(path_is_symlink_safe(path)) {
+		return { "valid": false, "error": to_string(label) + " must not target a symbolic link." }
+	}
+	if is_trueish(path_exists(path)) {
+		if is_trueish(path_is_file(path)) {
+			return { "valid": false, "error": to_string(label) + " must name a directory, not an existing file." }
+		}
+	}
+	return { "valid": true, "error": "" }
+}
+
+export func validate_file_write_path(raw_path, label) {
+	path := str_trim(to_string(raw_path))
+	if path == "" { return { "valid": true, "error": "" } }
+	normalized := normalize_write_path_text(path)
+	if normalized == "/" || normalized == "." || normalized == ".." || is_trueish(has_parent_segment(normalized)) || is_trueish(ends_with_slash(path)) {
+		return { "valid": false, "error": to_string(label) + " must name a file, not a directory." }
+	}
+	if is_trueish(path_is_symlink_safe(path)) {
+		return { "valid": false, "error": to_string(label) + " must not target a symbolic link." }
+	}
+	if is_trueish(path_exists(path)) {
+		if is_trueish(path_is_dir(path)) {
+			return { "valid": false, "error": to_string(label) + " must name a file, not an existing directory." }
+		}
+	}
+	parent := dirname(path)
+	if parent != "" && is_falseish(path_exists(parent)) {
+		return { "valid": false, "error": to_string(label) + " parent directory does not exist." }
+	}
+	if parent != "" && is_trueish(path_exists(parent)) && is_falseish(path_is_dir(parent)) {
+		return { "valid": false, "error": to_string(label) + " parent must be a directory." }
+	}
+	return { "valid": true, "error": "" }
+}
+
+func normalize_write_path_text(raw_path) {
+	mut path := replace(str_trim(to_string(raw_path)), "\\", "/")
+	while len(path) > 1 && is_trueish(ends_with_slash(path)) {
+		path = substring(path, 0, len(path) - 1)
+	}
+	if path == "./" { return "." }
+	if path == "../" { return ".." }
+	return path
+}
+
+func ends_with_slash(path) {
+	if len(path) == 0 { return false }
+	last := path[len(path) - 1]
+	return last == "/" || last == "\\"
+}
+
+func has_parent_segment(path) {
+	# Surrounding separators make the test component-aware: names such as
+	# "reports..old" remain valid while any actual `..` traversal is refused.
+	normalized := replace(to_string(path), "\\", "/")
+	return is_trueish(str_contains("/" + normalized + "/", "/../"))
+}
+
+func path_is_symlink_safe(path) {
+	mut linked := false
+	try {
+		linked = is_trueish(path_is_symlink(path))
+	} except e {
+		return false
+	}
+	return linked
+}

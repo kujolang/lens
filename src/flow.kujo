@@ -4,31 +4,40 @@
 # Safety rules block destructive actions by default.
 
 from src.common import is_trueish, is_falseish, str_starts_with, str_contains, str_lower
+from src.redact import redact_text
 
 # Return a copy of a flow safe to persist to flow.json: typed-input values are
 # replaced with [REDACTED] so credentials/secrets entered via `type` steps
 # never reach an artifact. The flow's structure is otherwise preserved.
 export func redact_flow_for_output(flow) {
 	mut out := flow
-	if is_falseish(has_key(flow, "steps")) {
-		return out
-	}
-	mut red_steps := array()
-	steps := flow["steps"]
-	mut idx := 0
-	while idx < len(steps) {
-		mut step := steps[idx]
-		if is_trueish(has_key(step, "type")) {
-			mut td := step["type"]
-			if is_trueish(has_key(td, "value")) {
-				td["value"] = "[REDACTED]"
+	if is_trueish(has_key(flow, "steps")) {
+		mut red_steps := array()
+		steps := flow["steps"]
+		mut idx := 0
+		while idx < len(steps) {
+			mut step := steps[idx]
+			if is_trueish(has_key(step, "type")) {
+				mut td := step["type"]
+				if is_trueish(has_key(td, "value")) {
+					td["value"] = "[REDACTED]"
+				}
+				step["type"] = td
 			}
-			step["type"] = td
+			red_steps = append(red_steps, step)
+			idx = idx + 1
 		}
-		red_steps = append(red_steps, step)
-		idx = idx + 1
+		out["steps"] = red_steps
 	}
-	out["steps"] = red_steps
+
+	# Sweep the full serialized structure as well: flow names, navigation URLs,
+	# selectors, labels, and screenshot names are all user-controlled strings.
+	try {
+		swept := parse_json(redact_text(to_json(out)))
+		if is_trueish(is_dict(swept)) { return swept }
+	} except e {
+		# Preserve the type-value redaction if a future value cannot round-trip.
+	}
 	return out
 }
 

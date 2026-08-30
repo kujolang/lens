@@ -4,7 +4,7 @@
 # JSON reports from check results and run metadata.
 
 from src.common import str_join, is_trueish, is_falseish, str_starts_with
-from src.redact import redact_url
+from src.redact import redact_url, redact_text
 
 # Lifecycle phase emitted in metadata/JSON reports. All MVP phases (1-10)
 # are complete; the tool now reports a stable lifecycle marker.
@@ -26,7 +26,7 @@ export func generate_markdown_report(config, meta, check_results) {
 	lines = append(lines, "Finished: " + to_string(meta["finished_at"]))
 	lines = append(lines, "Duration: " + to_string(meta["duration_ms"]) + "ms")
 	lines = append(lines, "Viewports: " + str_join(config["viewports"], ", "))
-	lines = append(lines, "Output Directory: " + to_string(meta["out_dir"]))
+	lines = append(lines, "Output Directory: " + redact_text(to_string(meta["out_dir"])))
 	lines = append(lines, "")
 	
 	# Summary
@@ -272,7 +272,7 @@ export func generate_markdown_report(config, meta, check_results) {
 	mut art_idx := 0
 	artifacts := meta["artifacts"]
 	while art_idx < len(artifacts) {
-		lines = append(lines, "- `" + to_string(artifacts[art_idx]) + "`")
+		lines = append(lines, "- `" + redact_text(to_string(artifacts[art_idx])) + "`")
 		art_idx = art_idx + 1
 	}
 	# Note missing links.json
@@ -630,11 +630,11 @@ export func generate_json_report(config, meta, check_results, provider_result) {
 			"allow_external": config["allow_external"],
 			"check_links": config["check_links"],
 			"timeout": config["timeout"],
-			"out_dir": meta["out_dir"]
+			"out_dir": redact_text(to_string(meta["out_dir"]))
 		}
 	}
 	
-	return to_json(report)
+	return redact_text(to_json(report))
 }
 
 # Build the repair_brief object for JSON report.
@@ -861,13 +861,13 @@ export func generate_metadata_json(config, meta, check_results, provider_meta) {
 		"allow_external": config["allow_external"],
 		"check_links": config["check_links"],
 		"timeout": config["timeout"],
-		"out_dir": meta["out_dir"],
+		"out_dir": redact_text(to_string(meta["out_dir"])),
 		"hostname": "",
 		"os": "",
 		"provider": provider_meta
 	}
 	
-	return to_json(md)
+	return redact_text(to_json(md))
 }
 
 # Helper: count findings of a given severity across all checks.

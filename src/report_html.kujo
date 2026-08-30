@@ -8,7 +8,7 @@
 # reach the page.
 
 from src.common import is_trueish, is_falseish, str_join, str_starts_with, str_ends_with
-from src.redact import redact_url
+from src.redact import redact_url, redact_text
 
 # Inline stylesheet as a top-level constant (not a function) so report builders
 # do not pay an extra call frame for it — the Kujo VM has a shallow native
@@ -105,7 +105,7 @@ export func generate_html_report(config, meta, check_results) {
 		h = append(h, "<section class=\"shots\"><h2>Screenshots</h2><div class=\"gallery\">")
 		mut si := 0
 		while si < len(shots) {
-			sp := html_escape(to_string(shots[si]))
+			sp := html_escape(redact_text(to_string(shots[si])))
 			h = append(h, "<figure><img loading=\"lazy\" src=\"" + sp + "\" alt=\"" + sp + "\"><figcaption>" + sp + "</figcaption></figure>")
 			si = si + 1
 		}
@@ -128,7 +128,7 @@ export func generate_html_report(config, meta, check_results) {
 	h = append(h, "<section class=\"artifacts\"><h2>Artifacts</h2><ul>")
 	mut bi := 0
 	while bi < len(artifacts) {
-		h = append(h, "<li><code>" + html_escape(to_string(artifacts[bi])) + "</code></li>")
+		h = append(h, "<li><code>" + html_escape(redact_text(to_string(artifacts[bi]))) + "</code></li>")
 		bi = bi + 1
 	}
 	h = append(h, "</ul></section>")
@@ -197,7 +197,7 @@ func status_class(status) {
 # redacted upstream.
 export func generate_walkthrough_html(flow, meta, step_results, video_rel, passed, failed, blocked, skipped) {
 	status := to_string(meta["status"])
-	flow_name := to_string(flow["name"])
+	flow_name := redact_text(to_string(flow["name"]))
 
 	mut h := array()
 	h = append(h, "<!doctype html>")
@@ -224,7 +224,7 @@ export func generate_walkthrough_html(flow, meta, step_results, video_rel, passe
 	# webm fallback source; a download link below guarantees the artifact is
 	# never a dead end.
 	if video_rel != "" {
-		vr := html_escape(video_rel)
+		vr := html_escape(redact_text(video_rel))
 		is_mp4 := str_ends_with(video_rel, ".mp4")
 		h = append(h, "<section class=\"shots\"><h2>Recording</h2>")
 		h = append(h, "<video controls preload=\"metadata\" style=\"width:100%;border:1px solid var(--border);border-radius:8px\">")
@@ -244,15 +244,15 @@ export func generate_walkthrough_html(flow, meta, step_results, video_rel, passe
 	mut idx := 0
 	while idx < len(step_results) {
 		sr := step_results[idx]
-		st := to_string(sr["status"])
+		st := redact_text(to_string(sr["status"]))
 		cls := step_class(st)
 		msg := ""
 		if is_trueish(has_key(sr, "error")) {
-			msg = to_string(sr["error"])
+			msg = redact_text(to_string(sr["error"]))
 		}
 		h = append(h, "<article class=\"finding " + cls + "\">")
 		h = append(h, "<div class=\"finding-head\"><span class=\"sev\">" + html_escape(st) + "</span> step " + to_string(sr["index"]) + "</div>")
-		h = append(h, "<h3>" + html_escape(to_string(sr["type"])) + "</h3>")
+		h = append(h, "<h3>" + html_escape(redact_text(to_string(sr["type"]))) + "</h3>")
 		if msg != "" {
 			h = append(h, "<p>" + html_escape(msg) + "</p>")
 		}
@@ -306,4 +306,3 @@ func sev_card(label, count, cls) {
 func meta_row(label, value) {
 	return "<dt>" + html_escape(label) + "</dt><dd>" + html_escape(value) + "</dd>"
 }
-

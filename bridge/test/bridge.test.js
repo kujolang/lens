@@ -24,6 +24,7 @@ test('browser-bridge resolveViewport: presets', () => {
 
 test('browser-bridge resolveViewport: custom WxH', () => {
   assert.deepStrictEqual(browser.resolveViewport('1024x768'), { name: '1024x768', width: 1024, height: 768 });
+  assert.deepStrictEqual(browser.resolveViewport('99999x99999'), { name: '99999x99999', width: 1440, height: 900 });
 });
 
 test('browser-bridge resolveViewport: unknown falls back to desktop size, keeps name', () => {
@@ -62,9 +63,23 @@ test('browser-bridge mapWithConcurrency preserves input order', async () => {
   assert.deepStrictEqual(out, [10, 20, 30, 40, 50]);
 });
 
+test('browser bridges bound evidence arrays without silent growth', () => {
+  const browserItems = [];
+  assert.strictEqual(browser.pushBounded(browserItems, 1, 2), true);
+  assert.strictEqual(browser.pushBounded(browserItems, 2, 2), true);
+  assert.strictEqual(browser.pushBounded(browserItems, 3, 2), false);
+  assert.deepStrictEqual(browserItems, [1, 2]);
+
+  const flowItems = [];
+  assert.strictEqual(flow.pushBounded(flowItems, 'a', 1), true);
+  assert.strictEqual(flow.pushBounded(flowItems, 'b', 1), false);
+  assert.deepStrictEqual(flowItems, ['a']);
+});
+
 test('flow-bridge resolveViewport: preset + custom', () => {
   assert.deepStrictEqual(flow.resolveViewport('desktop'), { width: 1440, height: 900 });
   assert.deepStrictEqual(flow.resolveViewport('800x600'), { width: 800, height: 600 });
+  assert.deepStrictEqual(flow.resolveViewport('5000x5000'), { width: 1440, height: 900 });
 });
 
 test('flow-bridge parseArgs reads program/screenshot/video dirs', () => {
@@ -85,6 +100,11 @@ test('flow-bridge screenshot names cannot escape the screenshot directory', () =
 test('flow-bridge applies the flow timeout to steps without overrides', () => {
   assert.strictEqual(flow.resolveStepTimeout({}, 42000), 42000);
   assert.strictEqual(flow.resolveStepTimeout({ timeout_ms: 1500 }, 42000), 1500);
+});
+
+test('flow-bridge detects oversized recordings before artifact publication', () => {
+  assert.strictEqual(flow.recordingExceedsLimit(__filename, 1), true);
+  assert.strictEqual(flow.recordingExceedsLimit(__filename, Number.MAX_SAFE_INTEGER), false);
 });
 
 test('inspect-bridge parseArgs: url/timeout/max-elements', () => {
@@ -122,6 +142,18 @@ test('browser-bridge excludes display-none links from captured link evidence', a
     await page.setContent('<a href="/visible">Visible</a><a href="/hidden" style="display:none">Hidden</a>');
     const links = await page.evaluate(browser.COLLECT_LINKS);
     assert.deepStrictEqual(links.map((entry) => entry.href), ['/visible']);
+  } finally {
+    await instance.close();
+  }
+});
+
+test('browser-bridge caps captured links while preserving DOM order', async () => {
+  const instance = await chromium.launch({ headless: true });
+  try {
+    const page = await instance.newPage();
+    await page.setContent('<a href="/one">One</a><a href="/two">Two</a><a href="/three">Three</a>');
+    const links = await page.evaluate(browser.COLLECT_LINKS, 2);
+    assert.deepStrictEqual(links.map((entry) => entry.href), ['/one', '/two']);
   } finally {
     await instance.close();
   }

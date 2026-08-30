@@ -36,18 +36,18 @@ from src.runner import step_required_field_error
 from src.config import lens_version
 from src.accessibility import map_a11y_severity, is_a11y_enabled
 
-LENS_VERSION := "1.0.0"
+LENS_VERSION := "1.0.1"
 from src.common import is_trueish, is_falseish
 from src.validate import extract_host, is_localhost_host, is_localhost_url
-from src.validate import validate_url, has_valid_scheme, validate_auth_storage_state
+from src.validate import validate_url, has_valid_scheme, validate_auth_storage_state, validate_config_write_paths, validate_directory_write_path, validate_file_write_path
 from src.redact import is_sensitive_header, is_sensitive_query_param
 from src.redact import redact_url, redact_console_entry, redact_header_value
 from src.redact import redact_text, redact_finding, redact_check_results
 from src.redact import redact_console_message, redact_network_event, redact_dom_summary, redact_accessibility_scans
 from src.checks import new_check_result, new_finding, add_finding, worst_severity
-from src.checks import count_findings_by_severity, check_page_load
+from src.checks import count_findings_by_severity, check_page_load, check_capture_limits
 from src.provider import provider_failed, redacted_bridge_command_for_display, parse_provider_output
-from src.visual import copy_file_binary
+from src.visual import copy_file_binary, baseline_dir_for_check, baseline_dir_for_flow
 from src.accessibility import check_accessibility
 from src.report import generate_markdown_report, generate_json_report
 # Exit code constants (must be defined locally; Kujo from-import
@@ -504,7 +504,7 @@ func test_parse_out_dir_custom() {
 
 func test_version_defined() {
 	check(LENS_VERSION != "", "LENS_VERSION is defined")
-	check_eq(LENS_VERSION, "1.0.0", "LENS_VERSION is 1.0.0")
+	check_eq(LENS_VERSION, "1.0.1", "LENS_VERSION is 1.0.1")
 }
 
 # ============================================================
@@ -690,6 +690,9 @@ func test_parse_viewport_custom() {
 	check_eq(parse_viewport("desktop"), "desktop", "parse_viewport: preset desktop")
 	check_eq(parse_viewport("1024x768"), "1024x768", "parse_viewport: custom size")
 	check_eq(parse_viewport("768X1024"), "768x1024", "parse_viewport: normalizes case")
+	check_eq(parse_viewport("4096x4096"), "4096x4096", "parse_viewport: maximum bounded size")
+	check_eq(parse_viewport("4097x100"), "", "parse_viewport: oversized width rejected")
+	check_eq(parse_viewport("100x4097"), "", "parse_viewport: oversized height rejected")
 	check_eq(parse_viewport("garbage"), "", "parse_viewport: invalid → empty")
 }
 
@@ -903,6 +906,25 @@ func test_generate_html_report() {
 	check(is_trueish(contains(html, "screenshots/desktop.png")), "html report: references screenshot")
 }
 
+func test_html_reports_escape_user_controlled_fields() {
+	payload := "<script>alert('lens')</script>"
+	config := { "url": "http://localhost/?q=" + payload, "viewports": array(payload), "version": payload }
+	meta := { "status": payload, "started_at": payload, "finished_at": payload, "duration_ms": 1, "exit_code": 1, "artifacts": array("screenshots/" + payload + ".png", payload) }
+	checks := array({
+		"findings": array({ "id": payload, "severity": "error", "title": payload, "description": payload, "evidence": payload, "suggested_repair_task": payload })
+	})
+	html := generate_html_report(config, meta, checks)
+	check(is_falseish(contains(html, payload)), "html report: no raw user-controlled script payload")
+	check(is_trueish(contains(html, "&lt;script&gt;alert")), "html report: user-controlled fields are escaped")
+
+	flow := { "name": payload }
+	flow_meta := { "status": "FAIL", "started_at": payload, "finished_at": payload, "duration_ms": 1, "final_url": "http://localhost/?q=" + payload }
+	steps := array({ "index": 1, "type": payload, "status": "fail", "error": payload })
+	walk := generate_walkthrough_html(flow, flow_meta, steps, "video/" + payload + ".webm", 0, 1, 0, 0)
+	check(is_falseish(contains(walk, payload)), "walkthrough: no raw user-controlled script payload")
+	check(is_trueish(contains(walk, "&lt;script&gt;alert")), "walkthrough: flow, step, URL, and artifact fields are escaped")
+}
+
 # ============================================================
 # Phase 4: interactive flows, video, walkthrough
 # ============================================================
@@ -915,8 +937,8 @@ func test_phase4_flags() {
 }
 
 func test_lens_version_consistent() {
-	check_eq(lens_version(), "1.0.0", "lens_version: single source is 1.0.0")
-	check_eq(LENS_VERSION, "1.0.0", "test-local LENS_VERSION matches")
+	check_eq(lens_version(), "1.0.1", "lens_version: single source is 1.0.1")
+	check_eq(LENS_VERSION, "1.0.1", "test-local LENS_VERSION matches")
 }
 
 func test_flow_step_cap() {
@@ -1012,6 +1034,15 @@ func test_redact_flow_for_output() {
 	check(is_trueish(contains(red_json, "[REDACTED]")), "flow redact: placeholder present")
 	# Structure preserved.
 	check_eq(len(red["steps"]), 2, "flow redact: step count preserved")
+	secret_flow := {
+		"name": "token=FLOWNAMESECRET123",
+		"url": "http://localhost:3000/?api_key=FLOWURLSECRET123",
+		"steps": array({ "visit": "http://localhost:3000/?token=FLOWSTEPSECRET123" })
+	}
+	secret_red := to_json(redact_flow_for_output(secret_flow))
+	check(is_falseish(contains(secret_red, "FLOWNAMESECRET123")), "flow redact: secret flow name removed")
+	check(is_falseish(contains(secret_red, "FLOWURLSECRET123")), "flow redact: secret top-level URL removed")
+	check(is_falseish(contains(secret_red, "FLOWSTEPSECRET123")), "flow redact: secret step URL removed")
 }
 
 func test_build_program_step_click() {
@@ -1512,6 +1543,44 @@ func test_validate_auth_storage_state() {
 	check(valid["valid"] == true, "auth state: Playwright envelope is accepted")
 }
 
+func test_validate_write_paths() {
+	check(validate_directory_write_path("", "--out")["valid"] == true, "write paths: optional directory may be empty")
+	check(validate_directory_write_path(".", "--out")["valid"] == false, "write paths: current directory is rejected")
+	check(validate_directory_write_path("/", "--out")["valid"] == false, "write paths: filesystem root is rejected")
+	check(validate_directory_write_path("/tmp/..", "--out")["valid"] == false, "write paths: parent traversal to root is rejected")
+	check(validate_directory_write_path("README.md", "--out")["valid"] == false, "write paths: existing file cannot be output directory")
+	check(validate_directory_write_path("/tmp/lens-dedicated-output", "--out")["valid"] == true, "write paths: dedicated output directory is accepted")
+
+	check(validate_file_write_path("", "--eval-out")["valid"] == true, "write paths: optional file may be empty")
+	check(validate_file_write_path("/tmp", "--eval-out")["valid"] == false, "write paths: existing directory cannot be output file")
+	check(validate_file_write_path("/tmp/../lens-eval.json", "--eval-out")["valid"] == false, "write paths: parent traversal is rejected")
+	check(validate_file_write_path("/tmp/lens-eval.json", "--eval-out")["valid"] == true, "write paths: file under existing parent is accepted")
+	check(validate_file_write_path("/tmp/lens-missing-parent-93842/eval.json", "--eval-out")["valid"] == false, "write paths: missing file parent is rejected")
+	broken_link := "/tmp/lens-write-path-broken-link"
+	spawn_process(array("ln", "-sfn", "/tmp/lens-write-path-missing-target", broken_link))
+	check(validate_directory_write_path(broken_link, "--out")["valid"] == false, "write paths: broken directory symlink is rejected")
+	check(validate_file_write_path(broken_link, "--eval-out")["valid"] == false, "write paths: broken file symlink is rejected")
+	delete_file(broken_link)
+
+	valid := validate_config_write_paths({
+		"out_dir": "/tmp/lens-run-safe",
+		"baseline_dir": "/tmp/lens-baseline-safe",
+		"eval_out": "/tmp/lens-eval-safe.json",
+		"ledger": "/tmp/lens-ledger-safe.jsonl",
+		"howl": "/tmp/lens-howl-safe.json"
+	})
+	check(valid["valid"] == true, "write paths: distinct configured destinations are accepted")
+
+	collision := validate_config_write_paths({
+		"out_dir": "/tmp/lens-run-safe",
+		"baseline_dir": "/tmp/lens-baseline-safe",
+		"eval_out": "/tmp/lens-shared.json",
+		"ledger": "/tmp/lens-shared.json",
+		"howl": ""
+	})
+	check(collision["valid"] == false, "write paths: colliding direct outputs are rejected")
+}
+
 # ── Page-load classification ─────────────────────────────────────────
 
 func test_check_page_load_partial_error() {
@@ -1538,6 +1607,20 @@ func test_check_page_load_clean() {
 	)}}
 	cr := check_page_load({}, bd)
 	check_eq(cr["status"], "pass", "page_load: clean navigation -> pass")
+}
+
+func test_check_capture_limits() {
+	clean := check_capture_limits({}, { "provider_result": { "viewports": array(
+		{ "evidence_limits": { "dropped_console_messages": 0, "dropped_network_events": 0, "dropped_links": 0 } }
+	) } })
+	check_eq(clean["status"], "pass", "evidence limits: no drops passes")
+
+	bounded := check_capture_limits({}, { "provider_result": { "viewports": array(
+		{ "evidence_limits": { "dropped_console_messages": 3, "dropped_network_events": 2, "dropped_links": 1 } }
+	) } })
+	check_eq(bounded["severity"], "warning", "evidence limits: dropped data warns")
+	check_eq(bounded["finding_count"], 1, "evidence limits: one aggregate finding")
+	check(is_trueish(contains(to_string(bounded["findings"][0]["description"]), "3 console")), "evidence limits: dropped counts are actionable")
 }
 
 # ── Accessibility: honest engine handling ────────────────────────────
@@ -1582,6 +1665,20 @@ func test_copy_file_binary() {
 	check(missing == false, "copy_file_binary: false when source missing")
 }
 
+func test_visual_baseline_paths_redact_secrets() {
+	check_path := baseline_dir_for_check({
+		"baseline_dir": "/tmp/lens-baselines",
+		"url": "http://localhost:3000/?token=BASELINE_SECRET_123&view=main"
+	})
+	check(is_falseish(contains(check_path, "BASELINE_SECRET_123")), "visual path: URL secret omitted from baseline directory")
+	check(is_trueish(contains(check_path, "REDACTED")), "visual path: redaction marker retained for stable identity")
+
+	flow_path := baseline_dir_for_flow({ "baseline_dir": "/tmp/lens-baselines" }, {
+		"name": "password=FLOW_NAME_SECRET_456"
+	})
+	check(is_falseish(contains(flow_path, "FLOW_NAME_SECRET_456")), "visual path: flow-name secret omitted from baseline directory")
+}
+
 # Run hardening tests.
 test_redact_text_bearer()
 test_redact_text_query_params()
@@ -1602,12 +1699,15 @@ test_parse_provider_output_rejects_malformed_json()
 test_parse_provider_output_rejects_non_object()
 test_parse_provider_output_accepts_object()
 test_validate_auth_storage_state()
+test_validate_write_paths()
 test_check_page_load_partial_error()
 test_check_page_load_all_failed()
 test_check_page_load_clean()
+test_check_capture_limits()
 test_a11y_engine_unavailable_is_skipped()
 test_a11y_real_violation_fails()
 test_copy_file_binary()
+test_visual_baseline_paths_redact_secrets()
 
 # Run all tests.
 test_is_accessibility_flag()
@@ -1717,6 +1817,7 @@ test_check_performance_no_metrics()
 test_phase3_flags()
 test_html_escape()
 test_generate_html_report()
+test_html_reports_escape_user_controlled_fields()
 test_phase4_flags()
 test_lens_version_consistent()
 test_flow_step_cap()

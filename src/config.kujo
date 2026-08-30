@@ -8,7 +8,7 @@ from src.common import is_trueish, is_falseish, str_starts_with, str_contains, p
 # Single source of truth for the Lens version string. Keep kennel.toml and
 # lens.spec.yml in sync with this when releasing.
 export func lens_version() {
-	return "1.0.0"
+	return "1.0.1"
 }
 
 # Severity levels ordered from least to most severe.
@@ -52,6 +52,10 @@ DEFAULT_SETTLE_MS := 400
 # 0 means "no explicit cap" → the provider uses the viewport count.
 DEFAULT_MAX_CONCURRENCY := 0
 
+# Bound custom screenshot dimensions so a typo or hostile config cannot force
+# the browser to allocate unbounded bitmap memory. Presets are well below this.
+MAX_VIEWPORT_DIMENSION := 4096
+
 # Check whether a token looks like a custom viewport size "<width>x<height>"
 # (e.g. "1024x768"). Returns true only when both sides are positive integers.
 export func is_size_token(raw) {
@@ -68,7 +72,9 @@ export func is_size_token(raw) {
 	if is_falseish(is_digits(w_str)) || is_falseish(is_digits(h_str)) {
 		return false
 	}
-	return to_int(w_str) > 0 && to_int(h_str) > 0
+	w := to_int(w_str)
+	h := to_int(h_str)
+	return w > 0 && h > 0 && w <= MAX_VIEWPORT_DIMENSION && h <= MAX_VIEWPORT_DIMENSION
 }
 
 # Check whether a string is non-empty and all ASCII digits.
