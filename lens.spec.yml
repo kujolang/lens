@@ -35,7 +35,7 @@ scope: |
   - JSON report with schema_version 1, summary, repair_brief, checks arrays
   - Link check opt-in with same-origin detection, unsafe scheme skipping,
     HTTP-based verification with normalized link results
-  - 372-test suite covering CLI parsing, URL validation, checks, findings,
+  - 448-assertion suite covering CLI parsing, URL validation, checks, findings,
     report generation, redaction, provider shapes, error/exit-code paths,
     artifact writing, flows, integrations, accessibility, and verbose-log
     sanitization

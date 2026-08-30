@@ -1,6 +1,6 @@
 {
   "name": "lens-browser-bridge",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Minimal Playwright browser automation bridge for Lens (Kujo ecosystem). Captures screenshots, console logs, network events, and DOM summaries.",
   "main": "browser-bridge.js",

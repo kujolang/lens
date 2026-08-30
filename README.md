@@ -207,6 +207,7 @@ accessibility in depth.
 - [Examples](examples/) — canonical, copyable `.lens.toml`, flows, and specs
 - [Enhancement checklist](docs/enhancements.md) — where Lens is headed next
 - [Enterprise readiness next session](docs/enterprise-readiness-next-session.md) — the next improvement list
+- [Release readiness](docs/release-readiness.md) — version, verification, tag, and GitHub publication gates
 - [CLI reference](docs/reference.md#cli-command-reference)
 - [Safe browser flows](docs/reference.md#safe-browser-flows-phase-8)
 - [Visual regression](docs/reference.md#visual-regression-phase-9)

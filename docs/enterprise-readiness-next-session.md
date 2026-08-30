@@ -23,11 +23,10 @@ deferred with rationale.
 1. Build an install path that does not assume a sibling `../kujo` checkout.
    Support a packaged Kujo binary, clear `KUJO_BIN` fallback, and install docs
    for macOS/Linux CI.
-2. Add a release checklist that verifies version consistency across
-   `src/config.kujo`, `kennel.toml`, `kujo.toml`, `lens.spec.yml`, README badge,
-   and changelog.
-3. Decide whether `bridge/package.json` should track Lens's version or remain an
-   internal bridge package at `0.1.0`; document that choice.
+2. **Completed (2026-08-30):** `docs/release-readiness.md` defines version,
+   verification, tag, publication, and post-release consistency gates.
+3. **Completed (2026-08-30):** the private bridge package tracks Lens's release
+   version so repository-wide version checks remain unambiguous.
 4. Add a `make doctor` or `./lens doctor` command that checks Kujo, Node,
    Playwright browsers, Python visual-diff dependencies, and writable output
    directories.
@@ -95,7 +94,8 @@ deferred with rationale.
    Percy/Chromatic, and why the agent-ready repair brief matters.
 4. Add a `docs/architecture.md` with the pipeline, invariants, data redaction
    layers, and module ownership.
-5. Add a `docs/release-readiness.md` checklist for 1.0.
+5. **Completed (2026-08-30):** added `docs/release-readiness.md` and used it
+   for the v1.0.1 release.
 
 ## Definition of done for the next session
 
