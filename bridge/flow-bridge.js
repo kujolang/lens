@@ -16,7 +16,8 @@
  * Output: JSON results to stdout.
  */
 
-const { chromium } = require('playwright-core');
+const { Timings, launchBrowser, closeContext, withDeadline } = require('./runtime');
+const { observeReadiness } = require('./readiness');
 const fs = require('fs');
 const path = require('path');
 
@@ -50,63 +51,6 @@ function parseArgs() {
 
 const VIEWPORT_SIZES = { desktop: { width: 1440, height: 900 }, mobile: { width: 390, height: 844 } };
 
-// Draw/position a visible cursor overlay at viewport coords (x, y). Done with
-// page.evaluate (not an init-script event listener — that proved unreliable),
-// and re-created if a navigation wiped it. Pure visual aid for the recording;
-// it changes nothing the checks observe.
-async function setCursor(page, x, y) {
-  await page.evaluate(([x, y]) => {
-    let c = document.getElementById('__lens_cursor');
-    if (!c && document.body) {
-      c = document.createElement('div');
-      c.id = '__lens_cursor';
-      c.style.cssText = 'position:fixed;z-index:2147483647;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:rgba(255,59,48,.35);border:3px solid #ff3b30;pointer-events:none;box-shadow:0 0 0 3px rgba(255,255,255,.85),0 2px 8px rgba(0,0,0,.4);';
-      document.body.appendChild(c);
-    }
-    if (c) { c.style.left = x + 'px'; c.style.top = y + 'px'; }
-  }, [x, y]).catch(() => {});
-}
-
-// Draw an expanding click ripple at (x, y) for the recording.
-async function drawRipple(page, x, y) {
-  await page.evaluate(([x, y]) => {
-    if (!document.body) return;
-    const r = document.createElement('div');
-    r.style.cssText = 'position:fixed;left:' + x + 'px;top:' + y + 'px;z-index:2147483646;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;border:3px solid #ff3b30;background:rgba(255,59,48,.25);pointer-events:none;';
-    document.body.appendChild(r);
-    r.animate([{ transform: 'scale(1)', opacity: .9 }, { transform: 'scale(5)', opacity: 0 }], { duration: 600 }).onfinish = () => r.remove();
-  }, [x, y]).catch(() => {});
-}
-
-// Visibly glide the mouse to an element's center (for the recording). Playwright
-// mouse.move `steps` dispatch with no inter-step delay (instant), so we
-// interpolate manually with frame pauses, drawing the cursor each frame, and
-// track the position so the next move starts where this one ended.
-let _mouseX = null, _mouseY = null;
-async function moveCursorTo(page, locator) {
-  try {
-    const box = await locator.boundingBox();
-    if (!box) return null;
-    const tx = box.x + box.width / 2, ty = box.y + box.height / 2;
-    if (_mouseX === null) {
-      const vp = page.viewportSize() || { width: 1440, height: 900 };
-      _mouseX = vp.width / 2; _mouseY = vp.height / 2;
-    }
-    const frames = 22;
-    const sx = _mouseX, sy = _mouseY;
-    for (let k = 1; k <= frames; k++) {
-      const e = k / frames;
-      const t = 1 - Math.pow(1 - e, 2); // ease-out
-      const x = sx + (tx - sx) * t, y = sy + (ty - sy) * t;
-      await page.mouse.move(x, y);
-      await setCursor(page, x, y);
-      await page.waitForTimeout(16);
-    }
-    _mouseX = tx; _mouseY = ty;
-    await page.waitForTimeout(250);
-    return { x: tx, y: ty };
-  } catch (_) { return null; }
-}
 function resolveViewport(token) {
   const preset = VIEWPORT_SIZES[token];
   if (preset) return { width: preset.width, height: preset.height };
@@ -142,33 +86,26 @@ async function executeStep(page, step, opts, defaultTimeoutMs) {
   try {
     if (type === 'visit') {
       await page.goto(step.url, { waitUntil: 'load', timeout });
-      // Cap the network-idle wait: sites with analytics/long-polling never go
-      // idle, and waiting the full timeout per navigation can exceed the
-      // runtime's process limit. A few seconds is plenty to settle.
-      try { await page.waitForLoadState('networkidle', { timeout: Math.min(timeout, 3500) }); } catch (_) {}
+      if (opts.readiness) await opts.readiness.wait({ timeoutMs: timeout });
       return { status: 'pass', message: 'Navigated to ' + step.url };
     }
     if (type === 'click') {
-      const loc = page.locator(step.selector).first();
-      await loc.scrollIntoViewIfNeeded({ timeout }).catch(() => {});
+      const loc = page.locator(step.selector).first().describe('Lens click target');
       // Keep a `target="_blank"` link in the SAME tab so the destination loads
       // in the recorded page (otherwise it opens an un-recorded new tab and the
       // ending screen never appears in the video). Benign: only the nav target
       // changes, no page state is mutated.
-      await loc.evaluate((el) => { if (el && el.tagName === 'A' && el.target === '_blank') el.removeAttribute('target'); }).catch(() => {});
-      const at = await moveCursorTo(page, loc);
-      if (at) { await drawRipple(page, at.x, at.y); await page.waitForTimeout(120); }
-      await loc.click({ timeout });
-      // If the click navigated, let the destination paint so it's visibly
-      // captured in the recording — a bounded wait, kept short so long journeys
-      // don't trip the runtime's process time limit.
-      try { await page.waitForLoadState('domcontentloaded', { timeout: Math.min(timeout, 4000) }); } catch (_) {}
-      await page.waitForTimeout(1200);
+      await loc.evaluate((el) => { if (el && el.tagName === 'A' && el.target === '_blank') el.removeAttribute('target'); }, undefined, { timeout });
+      // Native annotations are click-only: fill titles can contain typed values.
+      if (opts.recording) await page.screencast.showActions({ duration: 500, cursor: 'pointer' });
+      try { await loc.click({ timeout }); }
+      finally { if (opts.recording) await page.screencast.hideActions(); }
+      await page.waitForLoadState('domcontentloaded', { timeout });
       return { status: 'pass', message: 'Clicked ' + step.selector };
     }
     if (type === 'type') {
       const loc = page.locator(step.selector).first();
-      await moveCursorTo(page, loc);
+      if (step.secret) await loc.evaluate(el => el.style.setProperty('-webkit-text-security', 'disc', 'important'), undefined, { timeout });
       await loc.fill(step.value != null ? String(step.value) : '', { timeout });
       // Never echo the typed value (it may be sensitive).
       return { status: 'pass', message: 'Typed into ' + step.selector };
@@ -180,14 +117,11 @@ async function executeStep(page, step, opts, defaultTimeoutMs) {
     if (type === 'scroll') {
       if (step.selector) {
         const loc = page.locator(step.selector).first();
-        await loc.evaluate((el) => el.scrollIntoView({ behavior: 'smooth', block: 'center' }))
-          .catch(async () => { await loc.scrollIntoViewIfNeeded(); });
-        await page.waitForTimeout(900);
+        await loc.scrollIntoViewIfNeeded({ timeout });
         return { status: 'pass', message: 'Scrolled to ' + step.selector };
       }
       if (step.y != null) {
-        await page.evaluate((y) => window.scrollTo({ top: y, behavior: 'smooth' }), step.y);
-        await page.waitForTimeout(900);
+        await withDeadline(() => page.evaluate((y) => window.scrollTo({ top: y, behavior: 'instant' }), step.y), timeout);
         return { status: 'pass', message: 'Scrolled to y=' + step.y };
       }
       return { status: 'skipped', message: 'scroll: no selector or y given' };
@@ -200,37 +134,37 @@ async function executeStep(page, step, opts, defaultTimeoutMs) {
       await page.getByText(step.text, { exact: false }).first().waitFor({ timeout, state: 'visible' });
       return { status: 'pass', message: 'Text appeared: ' + step.text };
     }
-    if (type === 'assert_selector') {
-      const el = await page.$(step.selector);
-      return el ? { status: 'pass', message: 'Selector present: ' + step.selector }
-                : { status: 'fail', message: 'Selector NOT found: ' + step.selector };
-    }
-    if (type === 'assert_not_selector') {
-      const el = await page.$(step.selector);
-      return el ? { status: 'fail', message: 'Selector unexpectedly present: ' + step.selector }
-                : { status: 'pass', message: 'Selector absent as expected: ' + step.selector };
+    if (type === 'assert_selector' || type === 'assert_not_selector') {
+      const absent = type === 'assert_not_selector';
+      try {
+        await page.locator(step.selector).first().waitFor({ state: absent ? 'detached' : 'attached', timeout });
+        return { status: 'pass', message: (absent ? 'Selector absent as expected: ' : 'Selector present: ') + step.selector };
+      } catch (_) {
+        return { status: 'fail', message: (absent ? 'Selector unexpectedly present: ' : 'Selector NOT found: ') + step.selector };
+      }
     }
     if (type === 'assert_text') {
-      const body = await page.evaluate(() => document.body ? document.body.innerText : '');
-      return body.includes(step.text) ? { status: 'pass', message: 'Text present: ' + step.text }
-                                      : { status: 'fail', message: 'Text NOT found: ' + step.text };
+      try {
+        await page.waitForFunction(text => !!document.body && document.body.innerText.includes(text), step.text, { timeout });
+        return { status: 'pass', message: 'Text present: ' + step.text };
+      } catch (_) { return { status: 'fail', message: 'Text NOT found: ' + step.text }; }
     }
     if (type === 'screenshot') {
       const name = sanitizeScreenshotName(step.name) + '.png';
       const p = path.join(opts.screenshotDir, name);
-      await page.screenshot({ path: p, fullPage: false });
+      await page.screenshot({ path: p, fullPage: false, timeout });
       return { status: 'pass', message: 'Captured ' + name, screenshot: 'screenshots/' + name };
     }
     return { status: 'skipped', message: 'Unsupported step type: ' + type };
   } catch (err) {
-    return { status: 'fail', message: type + ' failed: ' + err.message };
+    // Playwright fill errors may echo the value in their call log.
+    return { status: 'fail', message: type === 'type' ? 'type failed: input action did not complete' : type + ' failed: ' + err.message };
   }
 }
 
-async function main() {
-  const opts = parseArgs();
-  if (!opts.program) { console.error('Error: --program is required'); process.exit(1); }
-  const program = JSON.parse(fs.readFileSync(opts.program, 'utf8'));
+async function runFlow(program, opts) {
+  const timings = new Timings();
+  timings.values.process_boot_ms = process.uptime() * 1000;
 
   const size = resolveViewport(program.viewport);
   const result = {
@@ -250,104 +184,124 @@ async function main() {
     artifact_warnings: [],
   };
 
-  const browser = await chromium.launch({ headless: true });
-  const contextOptions = { viewport: { width: size.width, height: size.height } };
-  if (program.record && opts.videoDir) {
-    contextOptions.recordVideo = { dir: opts.videoDir, size: { width: size.width, height: size.height } };
-  }
-  if (program.auth_file) contextOptions.storageState = program.auth_file;
-  const context = await browser.newContext(contextOptions);
-  const page = await context.newPage();
-
-  page.on('console', (msg) => {
-    if (msg.type() === 'error' || msg.type() === 'warning') {
-      const entry = { type: msg.type(), text: msg.text(), timestamp: nowISO() };
-      if (!pushBounded(result.console_messages, entry, MAX_CONSOLE_MESSAGES)) {
-        result.evidence_limits.dropped_console_messages++;
-      }
+  await timings.measure('runtime_load_ms', async () => require('playwright-core'));
+  const browser = await timings.measure('browser_launch_ms', () => launchBrowser());
+  let context, readiness;
+  try {
+    const contextOptions = { viewport: { width: size.width, height: size.height } };
+    if (program.auth_file) contextOptions.storageState = program.auth_file;
+    context = await timings.measure('context_create_ms', () => browser.newContext(contextOptions), program.timeout || 30000);
+    const page = await timings.measure('page_create_ms', () => context.newPage(), program.timeout || 30000);
+    readiness = await withDeadline(() => observeReadiness(page), program.timeout || 30000);
+    opts = { ...opts, readiness, recording: !!(program.record && opts.videoDir) };
+    const videoPath = opts.recording ? path.join(opts.videoDir, 'walkthrough.webm') : '';
+    if (opts.recording) {
+      fs.mkdirSync(opts.videoDir, { recursive: true });
+      if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
+      await timings.measure('recording_start_ms', () => page.screencast.start({ path: videoPath, size }), program.timeout || 30000);
     }
-  });
-  page.on('response', (r) => {
-    if (r.status() >= 400) {
-      const entry = { url: r.url(), status: r.status(), method: r.request().method(), timestamp: nowISO() };
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'error' || msg.type() === 'warning') {
+        const entry = { type: msg.type(), text: msg.text(), timestamp: nowISO() };
+        if (!pushBounded(result.console_messages, entry, MAX_CONSOLE_MESSAGES)) {
+          result.evidence_limits.dropped_console_messages++;
+        }
+      }
+    });
+    page.on('pageerror', err => {
+      if (!pushBounded(result.console_messages, { type: 'error', text: err.message, timestamp: nowISO() }, MAX_CONSOLE_MESSAGES)) result.evidence_limits.dropped_console_messages++;
+    });
+    page.on('response', (r) => {
+      if (r.status() >= 400) {
+        const entry = { url: r.url(), status: r.status(), method: r.request().method(), timestamp: nowISO() };
+        if (!pushBounded(result.network_events, entry, MAX_NETWORK_EVENTS)) {
+          result.evidence_limits.dropped_network_events++;
+        }
+      }
+    });
+    page.on('requestfailed', (r) => {
+      const entry = { url: r.url(), status: null, failure_text: (r.failure() && r.failure().errorText) || 'failed', timestamp: nowISO() };
       if (!pushBounded(result.network_events, entry, MAX_NETWORK_EVENTS)) {
         result.evidence_limits.dropped_network_events++;
       }
+    });
+
+    for (const step of program.steps) {
+      const startOffset = timings.finish().total_bridge_ms;
+      const r = await timings.measure('step_execution_ms', () => executeStep(page, step, opts, program.timeout));
+      result.steps.push({ index: step.index, type: step.type, start_offset_ms: startOffset, end_offset_ms: timings.finish().total_bridge_ms, status: r.status, message: r.message, screenshot: r.screenshot || '' });
+
     }
-  });
-  page.on('requestfailed', (r) => {
-    const entry = { url: r.url(), status: null, failure_text: (r.failure() && r.failure().errorText) || 'failed', timestamp: nowISO() };
-    if (!pushBounded(result.network_events, entry, MAX_NETWORK_EVENTS)) {
-      result.evidence_limits.dropped_network_events++;
-    }
-  });
 
-  const recording = program.record && opts.videoDir;
-  for (const step of program.steps) {
-    const r = await executeStep(page, step, opts, program.timeout);
-    result.steps.push({ index: step.index, type: step.type, status: r.status, message: r.message, screenshot: r.screenshot || '' });
-    // A short, watchable pause between steps so the recording is followable.
-    if (recording) await page.waitForTimeout(450);
-  }
-
-  try { result.final_url = page.url(); } catch (_) {}
-  try {
-    result.dom_summary = await page.evaluate(() => ({
-      title: document.title || '',
-      body_text_length: document.body ? document.body.innerText.length : 0,
-      document_width: document.documentElement.scrollWidth,
-      viewport_width: window.innerWidth,
-    }));
-  } catch (_) {}
-
-  // Playwright finalizes (flushes) videos on context close.
-  await context.close();
-  await browser.close();
-
-  // Finalize the recording robustly. A `target="_blank"` link can open a second
-  // tab with its own short video, and page.video().path() before close is racy,
-  // so instead we scan the video dir AFTER close, promote the largest .webm
-  // (the primary session) to the stable name walkthrough.webm, and drop the
-  // stray tab clips. This guarantees the path the walkthrough.html references
-  // actually exists.
-  if (program.record && opts.videoDir) {
+    try { result.final_url = page.url(); } catch (_) {}
     try {
-      const dest = path.join(opts.videoDir, 'walkthrough.webm');
-      const webms = fs.readdirSync(opts.videoDir)
-        .filter((f) => f.endsWith('.webm') && f !== 'walkthrough.webm')
-        .map((f) => path.join(opts.videoDir, f))
-        .sort((a, b) => fs.statSync(b).size - fs.statSync(a).size);
-      if (webms.length > 0) {
-        if (fs.existsSync(dest)) fs.unlinkSync(dest);
-        fs.renameSync(webms[0], dest);
-        for (let i = 1; i < webms.length; i++) { try { fs.unlinkSync(webms[i]); } catch (_) {} }
-        result.video = 'video/walkthrough.webm';
-      }
-      if (fs.existsSync(dest)) {
-        if (recordingExceedsLimit(dest)) {
-          fs.unlinkSync(dest);
-          result.artifact_warnings.push('Recording exceeded the 100 MiB artifact limit and was removed.');
-        } else {
-          result.video = 'video/walkthrough.webm';
-        }
-        // mp4 transcode (for universal inline playback) is done on the Kujo side
-        // after this bridge returns — keeping the bridge fast so it never trips
-        // the runtime's process time limit on longer recordings.
-      }
-    } catch (_) { result.video = ''; }
-  }
+      result.dom_summary = await withDeadline(() => page.evaluate(() => ({
+        title: document.title || '',
+        body_text_length: document.body ? document.body.innerText.length : 0,
+        document_width: document.documentElement.scrollWidth,
+        viewport_width: window.innerWidth,
+      })), program.timeout || 30000);
+    } catch (_) {}
 
+    if (opts.recording) {
+      // RECORDING-ONLY: hold the final screen long enough to be read and encoded.
+      // A closed/crashed page must not discard completed step evidence.
+      await page.waitForTimeout(300).catch(() => {});
+      let recordingStopped = false;
+      try {
+        await timings.measure('recording_stop_ms', () => page.screencast.stop(), program.timeout || 30000);
+        recordingStopped = true;
+      } catch (_) {
+        result.artifact_warnings.push('Recording finalization did not complete; the incomplete video was removed.');
+        try { fs.rmSync(videoPath, { force: true }); }
+        catch (_) { result.artifact_warnings.push('Incomplete recording cleanup failed.'); }
+      }
+      if (recordingStopped) await timings.measure('artifact_finalize_ms', async () => {
+        if (fs.existsSync(videoPath) && !recordingExceedsLimit(videoPath)) result.video = 'video/walkthrough.webm';
+        else if (fs.existsSync(videoPath)) {
+          fs.unlinkSync(videoPath);
+          result.artifact_warnings.push('Recording exceeded the 100 MiB artifact limit and was removed.');
+        }
+      }).catch(() => { result.artifact_warnings.push('Recording artifact finalization failed.'); });
+    }
+  } finally {
+    if (readiness) readiness.dispose();
+    if (context) result.context_cleanup_failed = !(await timings.measure('context_close_ms', () => closeContext(context)));
+    await timings.measure('browser_close_ms', () => browser.close().catch(() => {}));
+  }
+  result.timings = timings.finish();
   result.finished_at = nowISO();
-  process.stdout.write(JSON.stringify(result));
-  process.exit(0);
+  return redactTypedValues(result, program);
+}
+
+function redactTypedValues(result, program) {
+  const secrets = program.steps.filter(s => s.type === 'type' && s.secret && s.value != null && String(s.value)).flatMap(s => { const value = String(s.value); return [value, encodeURIComponent(value), JSON.stringify(value).slice(1, -1)]; }).sort((a,b) => b.length-a.length);
+  function scrub(value) {
+    if (typeof value === 'string') {
+      for (const secret of secrets) value = value.split(secret).join('[REDACTED]');
+      return value;
+    }
+    if (Array.isArray(value)) return value.map(scrub);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrub(item)]));
+    return value;
+  }
+  return scrub(result);
+}
+
+async function main() {
+  const opts = parseArgs();
+  if (!opts.program) throw new Error("Program is required");
+  const program = JSON.parse(fs.readFileSync(opts.program === "-" ? 0 : opts.program, "utf8"));
+  process.stdout.write(JSON.stringify(await runFlow(program, opts)));
 }
 
 if (require.main === module) {
-  main().catch((err) => { console.error('Flow bridge fatal: ' + err.message); process.exit(1); });
+  main().catch(() => { console.error('Flow bridge failed before structured completion'); process.exitCode = 1; });
 } else {
   module.exports = {
     parseArgs, resolveViewport, sanitizeScreenshotName, resolveStepTimeout,
-    executeStep, VIEWPORT_SIZES, pushBounded, MAX_CONSOLE_MESSAGES,
+    runFlow, redactTypedValues, executeStep, VIEWPORT_SIZES, pushBounded, MAX_CONSOLE_MESSAGES,
     MAX_NETWORK_EVENTS, MAX_VIEWPORT_DIMENSION, MAX_VIDEO_BYTES,
     recordingExceedsLimit,
   };

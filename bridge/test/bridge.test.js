@@ -120,7 +120,7 @@ test('inspect-bridge parseArgs: defaults', () => {
   assert.strictEqual(opts.maxElements, 250);
 });
 
-test('inspect-bridge suggests the test attribute that actually exists', async () => {
+test('inspect-bridge suggests the test attribute that actually exists', { skip: process.env.LENS_SKIP_BROWSER_TESTS === '1' }, async () => {
   const instance = await chromium.launch({ headless: true });
   try {
     const page = await instance.newPage();
@@ -135,7 +135,7 @@ test('inspect-bridge suggests the test attribute that actually exists', async ()
   }
 });
 
-test('browser-bridge excludes display-none links from captured link evidence', async () => {
+test('browser-bridge excludes display-none links from captured link evidence', { skip: process.env.LENS_SKIP_BROWSER_TESTS === '1' }, async () => {
   const instance = await chromium.launch({ headless: true });
   try {
     const page = await instance.newPage();
@@ -147,7 +147,7 @@ test('browser-bridge excludes display-none links from captured link evidence', a
   }
 });
 
-test('browser-bridge caps captured links while preserving DOM order', async () => {
+test('browser-bridge caps captured links while preserving DOM order', { skip: process.env.LENS_SKIP_BROWSER_TESTS === '1' }, async () => {
   const instance = await chromium.launch({ headless: true });
   try {
     const page = await instance.newPage();

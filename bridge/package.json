@@ -1,6 +1,6 @@
 {
   "name": "lens-browser-bridge",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
   "description": "Minimal Playwright browser automation bridge for Lens (Kujo ecosystem). Captures screenshots, console logs, network events, and DOM summaries.",
   "main": "browser-bridge.js",
@@ -9,10 +9,10 @@
   },
   "scripts": {
     "test": "node --test",
-    "install-browser": "playwright-core install chromium"
+    "install-browser": "playwright-core install chromium --only-shell"
   },
   "dependencies": {
-    "axe-core": "^4.11.4",
-    "playwright-core": "^1.52.0"
+    "axe-core": "4.11.4",
+    "playwright-core": "1.61.1"
   }
 }
