@@ -2,6 +2,13 @@ name: Performance regression check
 
 on:
   workflow_dispatch:
+    inputs:
+      iterations:
+        description: Repetitions per benchmark case
+        required: true
+        default: "3"
+        type: choice
+        options: ["3", "8"]
   pull_request:
     types: [labeled]
 
@@ -12,6 +19,9 @@ jobs:
   benchmark:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'performance'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BENCH_ITERATIONS: ${{ github.event.inputs.iterations || '3' }}
     steps:
       - name: Checkout Lens
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -62,14 +72,26 @@ jobs:
           npm ci
           PLAYWRIGHT_SKIP_BROWSER_GC=1 npx playwright-core install chromium --only-shell
 
+      - name: Verify runtime contracts before measuring
+        working-directory: lens
+        env:
+          KUJO_BIN: ${{ github.workspace }}/kujo/target/release/kujo
+        run: |
+          node --version
+          "$KUJO_BIN" --version
+          "$KUJO_BIN" run tests/lens_tests.kujo
+          npm test --prefix bridge
+          python3 scripts/runtime-e2e.py
+          python3 scripts/test-benchmark-harness.py
+
       - name: Compare same-runner medians
         working-directory: lens
         env:
           KUJO_BIN: ${{ github.workspace }}/kujo/target/release/kujo
         run: |
           set -euo pipefail
-          LENS_BENCH_TARGET_ROOT="$RUNNER_TEMP/lens-base" scripts/bench.sh 3 "$RUNNER_TEMP/before.json"
-          scripts/bench.sh 3 "$RUNNER_TEMP/after.json"
+          LENS_BENCH_TARGET_ROOT="$RUNNER_TEMP/lens-base" scripts/bench.sh "$BENCH_ITERATIONS" "$RUNNER_TEMP/before.json"
+          scripts/bench.sh "$BENCH_ITERATIONS" "$RUNNER_TEMP/after.json"
           python3 scripts/compare-benchmarks.py \
             "$RUNNER_TEMP/before.json" "$RUNNER_TEMP/after.json" \
             --threshold-percent 20 --warn-only
@@ -79,8 +101,8 @@ jobs:
         env:
           KUJO_BIN: ${{ github.workspace }}/kujo/target/release/kujo
         run: |
-          python3 scripts/bench-runtime.py 3 "$RUNNER_TEMP/runtime-before.json" "$RUNNER_TEMP/lens-base"
-          python3 scripts/bench-runtime.py 3 "$RUNNER_TEMP/runtime-after.json"
+          python3 scripts/bench-runtime.py "$BENCH_ITERATIONS" "$RUNNER_TEMP/runtime-before.json" "$RUNNER_TEMP/lens-base"
+          python3 scripts/bench-runtime.py "$BENCH_ITERATIONS" "$RUNNER_TEMP/runtime-after.json"
           python3 scripts/compare-benchmarks.py "$RUNNER_TEMP/runtime-before.json" "$RUNNER_TEMP/runtime-after.json" --threshold-percent 20 --warn-only
 
       - name: Measure bounded viewport concurrency
