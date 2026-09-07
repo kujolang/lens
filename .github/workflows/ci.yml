@@ -34,11 +34,14 @@ jobs:
         run: npm ci
 
       - name: Syntax and unit tests
+        env:
+          LENS_SKIP_BROWSER_TESTS: "1"
         run: |
           node --check bridge/browser-bridge.js
           node --check bridge/flow-bridge.js
           node --check bridge/inspect-bridge.js
           npm test --prefix bridge
+          python3 scripts/test-benchmark-harness.py
 
   test:
     name: Tests + checks
@@ -87,6 +90,8 @@ jobs:
 
       - name: Bridge unit tests
         working-directory: lens/bridge
+        env:
+          LENS_SKIP_BROWSER_TESTS: "1"
         run: node --test
 
       - name: Run test suite
@@ -121,7 +126,7 @@ jobs:
 
       - name: Build Kujo
         working-directory: kujo
-        run: cargo build
+        run: cargo build --release
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -135,16 +140,27 @@ jobs:
           npx playwright-core install-deps chromium
           npm run install-browser
 
+      - name: Browser runtime regression tests
+        working-directory: lens
+        run: npm test --prefix bridge
+
+      - name: Runtime CLI lifecycle and privacy checks
+        working-directory: lens
+        env:
+          KUJO_BIN: ${{ github.workspace }}/kujo/target/release/kujo
+        run: python3 scripts/runtime-e2e.py
+
       - name: Run Lens against a real server
         working-directory: lens
         env:
-          KUJO_BIN: ${{ github.workspace }}/kujo/target/debug/kujo
+          KUJO_BIN: ${{ github.workspace }}/kujo/target/release/kujo
         run: |
           set -euo pipefail
           python3 scripts/benchmark-fixture-server.py --port 8099 >/tmp/lens-e2e-fixture.log 2>&1 &
           fixture_pid=$!
           trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
-          sleep 1
+          curl --silent --fail --retry 20 --retry-connrefused --retry-delay 1 --max-time 1 \
+            --output /dev/null http://127.0.0.1:8099/trivial
 
           echo "::group::lens check (--html --check-links --accessibility)"
           ./lens check 'http://127.0.0.1:8099/trivial?token=CI_SECRET_MUST_NOT_LEAK_123' \
@@ -251,7 +267,11 @@ jobs:
         run: |
           npm ci
           npx playwright-core install-deps "${{ matrix.browser }}"
-          npx playwright-core install "${{ matrix.browser }}"
+          if [ "${{ matrix.browser }}" = chromium ]; then
+            npm run install-browser
+          else
+            npx playwright-core install "${{ matrix.browser }}"
+          fi
 
       - name: Verify installed and missing-engine behavior
         working-directory: lens
@@ -262,7 +282,8 @@ jobs:
           python3 scripts/benchmark-fixture-server.py --port 8098 >/tmp/lens-engine-fixture.log 2>&1 &
           fixture_pid=$!
           trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
-          sleep 1
+          curl --silent --fail --retry 20 --retry-connrefused --retry-delay 1 --max-time 1 \
+            --output /dev/null http://127.0.0.1:8098/trivial
 
           ./lens check http://127.0.0.1:8098/trivial \
             --browser "${{ matrix.browser }}" --out "/tmp/${{ matrix.browser }}-run"

@@ -12,6 +12,8 @@ def load_medians(path: str) -> dict[str, float]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if payload.get("schema_version") != 1 or payload.get("unit") != "seconds":
         raise ValueError(f"unsupported benchmark receipt: {path}")
+    if payload.get("completed") is False:
+        raise ValueError(f"incomplete benchmark receipt: {path}")
     medians = payload.get("medians")
     if not isinstance(medians, dict) or not medians:
         raise ValueError(f"benchmark receipt has no medians: {path}")

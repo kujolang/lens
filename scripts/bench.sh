@@ -6,6 +6,8 @@ set -euo pipefail
 
 ITERS="${1:-8}"
 JSON_OUT="${2:-}"
+RESUME="${3:-}"
+[[ "$ITERS" =~ ^[1-9][0-9]*$ ]] || { echo "Iterations must be positive" >&2; exit 2; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HARNESS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ROOT="${LENS_BENCH_TARGET_ROOT:-$HARNESS_ROOT}"
@@ -16,6 +18,8 @@ if [[ -z "${KUJO_BIN:-}" ]]; then
     export KUJO_BIN="$ROOT/../kujo/target/debug/kujo"
   fi
 fi
+
+cd "$ROOT"
 
 PORT="${LENS_BENCH_PORT:-9972}"
 WORK="$(mktemp -d)"
@@ -36,11 +40,12 @@ time_run() {
   shift
   t0=$(python3 -c 'import time; print(time.perf_counter())')
   set +e
-  "$@" >/dev/null 2>&1
+  "$@" >"$WORK/command.log" 2>&1
   status=$?
   set -e
   if (( status > allowed_exit )); then
     echo "benchmark command failed with exit $status: $*" >&2
+    if [[ -n "$JSON_OUT" ]]; then cp "$WORK/command.log" "${JSON_OUT}.failure.log"; fi
     return "$status"
   fi
   t1=$(python3 -c 'import time; print(time.perf_counter())')
@@ -52,8 +57,18 @@ PY
 
 python3 "$SCRIPT_DIR/benchmark-fixture-server.py" --port "$PORT" >/dev/null 2>&1 &
 FIXTURE_PID=$!
-sleep 1
 BASE_URL="http://127.0.0.1:$PORT"
+python3 - "$BASE_URL/trivial" <<'PYREADY'
+import sys, time, urllib.request
+end = time.monotonic() + 10
+while True:
+    try:
+        with urllib.request.urlopen(sys.argv[1], timeout=1) as response:
+            if response.status == 200: break
+    except OSError:
+        if time.monotonic() >= end: raise
+        time.sleep(0.05)
+PYREADY
 
 node "$ROOT/bridge/browser-bridge.js" --url "$BASE_URL/trivial" \
   --viewports desktop --timeout 30 --screenshot-dir "$WORK/warm" --format json >/dev/null 2>&1 || true
@@ -62,34 +77,70 @@ bench_bridge() {
   local path="$1"
   for _ in $(seq 1 "$ITERS"); do
     time_run 0 node "$ROOT/bridge/browser-bridge.js" --url "$BASE_URL/$path" \
-      --viewports desktop,mobile --timeout 30 --screenshot-dir "$WORK/shots" --format json
+      --viewports desktop,mobile --timeout 30 --screenshot-dir "$WORK/shots" --format json || return "$?"
   done | median
 }
 
 bench_cli() {
   local path="$1"
   for _ in $(seq 1 "$ITERS"); do
-    time_run 1 "$ROOT/lens" check "$BASE_URL/$path" --out "$WORK/run"
+    time_run 1 "$ROOT/lens" check "$BASE_URL/$path" --out "$WORK/run" || return "$?"
   done | median
 }
 
 bench_quick() {
   local path="$1"
   for _ in $(seq 1 "$ITERS"); do
-    time_run 1 "$ROOT/lens" check "$BASE_URL/$path" --quick --out "$WORK/quick-run"
+    time_run 1 "$ROOT/lens" check "$BASE_URL/$path" --quick --out "$WORK/quick-run" || return "$?"
   done | median
 }
 
-bridge_trivial="$(bench_bridge trivial)"
-bridge_realistic="$(bench_bridge realistic)"
-cli_trivial="$(bench_cli trivial)"
-cli_realistic="$(bench_cli realistic)"
-quick_trivial="$(bench_quick trivial)"
-quick_realistic="$(bench_quick realistic)"
-quick_spa="$(bench_quick spa)"
-quick_images="$(bench_quick image-heavy)"
-quick_late="$(bench_quick late-network)"
-quick_links="$(bench_quick many-links)"
+# Completed groups survive interrupted runs; timings retain the original method.
+# Resume only with the same checkout, browser revision and iteration count.
+if [[ -n "$JSON_OUT" ]]; then
+  python3 - "$JSON_OUT" "$ITERS" "$RESUME" <<'PYINIT'
+import json,sys
+from pathlib import Path
+p=Path(sys.argv[1]);iterations=int(sys.argv[2])
+if sys.argv[3]=='--resume' and p.exists():
+    assert json.loads(p.read_text())['iterations']==iterations, 'Resume iterations differ'
+else:
+    p.write_text(json.dumps({'schema_version':1,'iterations':iterations,'completed':False,'unit':'seconds','medians':{}})+'\n')
+PYINIT
+fi
+checkpoint_case() {
+  local name="$1" value=""
+  shift
+  if [[ -n "$JSON_OUT" && "$RESUME" == --resume ]]; then
+    value=$(python3 - "$JSON_OUT" "$name" <<'PYREAD'
+import json,sys
+print(json.load(open(sys.argv[1])).get('medians',{}).get(sys.argv[2],''))
+PYREAD
+)
+  fi
+  if [[ -z "$value" ]]; then
+    value="$("$@")" || return "$?"
+    if [[ -n "$JSON_OUT" ]]; then
+      python3 - "$JSON_OUT" "$name" "$value" <<'PYSAVE'
+import json,sys
+from pathlib import Path
+p=Path(sys.argv[1]);data=json.loads(p.read_text());data['medians'][sys.argv[2]]=float(sys.argv[3]);p.write_text(json.dumps(data,indent=2)+'\n')
+PYSAVE
+    fi
+  fi
+  echo "$name: $value s" >&2
+  echo "$value"
+}
+bridge_trivial="$(checkpoint_case bridge_trivial bench_bridge trivial)"
+bridge_realistic="$(checkpoint_case bridge_realistic bench_bridge realistic)"
+cli_trivial="$(checkpoint_case cli_trivial bench_cli trivial)"
+cli_realistic="$(checkpoint_case cli_realistic bench_cli realistic)"
+quick_trivial="$(checkpoint_case quick_trivial bench_quick trivial)"
+quick_realistic="$(checkpoint_case quick_realistic bench_quick realistic)"
+quick_spa="$(checkpoint_case quick_spa bench_quick spa)"
+quick_images="$(checkpoint_case quick_image_heavy bench_quick image-heavy)"
+quick_late="$(checkpoint_case quick_late_network bench_quick late-network)"
+quick_links="$(checkpoint_case quick_many_links bench_quick many-links)"
 
 echo "Lens benchmark — median of $ITERS iterations (seconds, lower is better)"
 echo "----------------------------------------------------------------"
@@ -120,6 +171,7 @@ names = [
 ]
 payload = {
     "schema_version": 1,
+    "completed": True,
     "iterations": int(sys.argv[2]),
     "unit": "seconds",
     "lower_is_better": True,

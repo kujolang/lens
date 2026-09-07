@@ -58,7 +58,9 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || 'origin/main' }}
         run: |
           git worktree add "$RUNNER_TEMP/lens-base" "$BASE_SHA"
-          npm ci --prefix "$RUNNER_TEMP/lens-base/bridge"
+          cd "$RUNNER_TEMP/lens-base/bridge"
+          npm ci
+          PLAYWRIGHT_SKIP_BROWSER_GC=1 npx playwright-core install chromium --only-shell
 
       - name: Compare same-runner medians
         working-directory: lens
@@ -72,6 +74,26 @@ jobs:
             "$RUNNER_TEMP/before.json" "$RUNNER_TEMP/after.json" \
             --threshold-percent 20 --warn-only
 
+      - name: Compare flows, crawl and repeated checks
+        working-directory: lens
+        env:
+          KUJO_BIN: ${{ github.workspace }}/kujo/target/release/kujo
+        run: |
+          python3 scripts/bench-runtime.py 3 "$RUNNER_TEMP/runtime-before.json" "$RUNNER_TEMP/lens-base"
+          python3 scripts/bench-runtime.py 3 "$RUNNER_TEMP/runtime-after.json"
+          python3 scripts/compare-benchmarks.py "$RUNNER_TEMP/runtime-before.json" "$RUNNER_TEMP/runtime-after.json" --threshold-percent 20 --warn-only
+
+      - name: Measure bounded viewport concurrency
+        working-directory: lens
+        run: |
+          set -euo pipefail
+          python3 scripts/benchmark-fixture-server.py --port 9973 >/tmp/lens-concurrency-fixture.log 2>&1 &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true' EXIT
+          curl --silent --fail --retry 20 --retry-connrefused --retry-delay 1 --max-time 1 \
+            --output /dev/null http://127.0.0.1:9973/trivial
+          node scripts/bench-concurrency.js http://127.0.0.1:9973 "$RUNNER_TEMP/concurrency.json" 3
+
       - name: Upload benchmark receipts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -80,3 +102,6 @@ jobs:
           path: |
             ${{ runner.temp }}/before.json
             ${{ runner.temp }}/after.json
+            ${{ runner.temp }}/runtime-before.json
+            ${{ runner.temp }}/runtime-after.json
+            ${{ runner.temp }}/concurrency.json

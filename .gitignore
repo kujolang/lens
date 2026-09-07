@@ -160,3 +160,6 @@ proof/
 # /fence.toml
 # /.lens.toml
 # /packwrite.toml
+
+# Python benchmark/test bytecode
+__pycache__/
