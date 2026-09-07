@@ -3,6 +3,11 @@ name: Performance regression check
 on:
   workflow_dispatch:
     inputs:
+      phases_only:
+        description: Run only alternating browser startup/readiness diagnostics
+        required: true
+        default: false
+        type: boolean
       iterations:
         description: Repetitions per benchmark case
         required: true
@@ -17,7 +22,7 @@ permissions:
 
 jobs:
   benchmark:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'performance'
+    if: github.event.inputs.phases_only != 'true' && (github.event_name == 'workflow_dispatch' || github.event.label.name == 'performance')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -134,3 +139,46 @@ jobs:
             ${{ runner.temp }}/runtime-before.json
             ${{ runner.temp }}/runtime-after.json
             ${{ runner.temp }}/concurrency.json
+
+  phases:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.phases_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Lens
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: bridge/package-lock.json
+
+      - name: Install matching candidate and baseline engines
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_GC: "1"
+        run: |
+          set -euo pipefail
+          node --version
+          git rev-parse HEAD origin/main
+          npm ci --prefix bridge
+          cd bridge
+          npx playwright-core install-deps chromium
+          npm run install-browser
+          cd ..
+          git worktree add "$RUNNER_TEMP/lens-base" origin/main
+          cd "$RUNNER_TEMP/lens-base/bridge"
+          npm ci
+          npx playwright-core install chromium --only-shell
+
+      - name: Profile alternating browser phases
+        run: python3 scripts/bench-phase-comparison.py "$RUNNER_TEMP/lens-base" "$RUNNER_TEMP/phases.json" 8
+
+      - name: Upload phase receipts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lens-phase-receipts
+          path: ${{ runner.temp }}/phases.json
