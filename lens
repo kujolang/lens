@@ -22,4 +22,19 @@ else
   KUJO_BIN="${SCRIPT_DIR}/../kujo/target/debug/kujo"
 fi
 
+export KUJO_BIN
+info_only=0
+session_needed=0
+for arg in "$@"; do
+  case "$arg" in
+    --help|-h|--version|-v) info_only=1 ;;
+    --crawl|--watch|--config) session_needed=1 ;;
+  esac
+done
+# A configuration file may enable crawl; Kujo remains its only parser.
+if [[ -f .lens.toml ]]; then session_needed=1; fi
+if [[ "$session_needed" == "1" && "$info_only" == "0" && "${1:-}" == "check" && -z "${LENS_SESSION_SOCKET:-}" && "${LENS_ONESHOT:-0}" != "1" ]] && command -v node >/dev/null 2>&1; then
+  exec node "${SCRIPT_DIR}/bridge/session.js" "${KUJO_BIN}" run "${SCRIPT_DIR}/lens.kujo" -- "$@"
+fi
+
 exec "${KUJO_BIN}" run "${SCRIPT_DIR}/lens.kujo" -- "$@"

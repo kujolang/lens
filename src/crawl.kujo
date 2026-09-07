@@ -32,19 +32,48 @@ export func collect_crawl_candidates(provider_result, base_url) {
 		if is_trueish(has_key(link, "href")) {
 			href = to_string(link["href"])
 		}
-		# Check the unsafe scheme on the RAW href: normalization would rewrite
-		# e.g. "mailto:" into a same-origin path and hide the scheme.
-		if is_falseish(has_unsafe_scheme(href)) {
-			normalized := normalize_url(href, base_url)
-			if normalized != "" {
-				if is_falseish(is_destructive_path(normalized)) {
-					if is_trueish(is_same_origin(normalized, base_url)) {
-						out = append(out, normalized)
+		normalized := safe_candidate(href, base_url)
+		if normalized != "" { out = append(out, normalized) }
+		idx = idx + 1
+	}
+	return out
+}
+
+# Shared safety policy for unbounded inspection and bounded queue discovery.
+func safe_candidate(href, base_url) {
+	if is_trueish(has_unsafe_scheme(href)) { return "" }
+	normalized := normalize_url(href, base_url)
+	if normalized == "" { return "" }
+	if is_trueish(is_destructive_path(normalized)) { return "" }
+	if is_falseish(is_same_origin(normalized, base_url)) { return "" }
+	return normalized
+}
+
+# Stop processing links once the lifetime BFS budget is full. Preserve the same
+# safe, unique prefix as collect + enqueue, without normalizing unused links.
+export func collect_queue_candidates(provider_result, base_url, visited, frontier, max_pages) {
+	mut out := array()
+	remaining := max_pages - 1 - len(frontier)
+	if remaining <= 0 { return out }
+	viewports := provider_result["viewports"]
+	mut vi := 0
+	while vi < len(viewports) && len(out) < remaining {
+		vp := viewports[vi]
+		if is_trueish(has_key(vp, "links")) {
+			raw_links := vp["links"]
+			mut idx := 0
+			while idx < len(raw_links) && len(out) < remaining {
+				link := raw_links[idx]
+				if is_trueish(has_key(link, "href")) {
+					url := safe_candidate(to_string(link["href"]), base_url)
+					if url != "" && is_falseish(contains_url(visited, url)) && is_falseish(frontier_has(frontier, url)) && is_falseish(contains_url(out, url)) {
+						out = append(out, url)
 					}
 				}
+				idx = idx + 1
 			}
 		}
-		idx = idx + 1
+		vi = vi + 1
 	}
 	return out
 }
@@ -133,14 +162,16 @@ func frontier_has(frontier, url) {
 }
 
 # Append candidate URLs to the frontier at the given depth, skipping any that
-# are already visited or already queued, and respecting the depth bound.
-func enqueue_candidates(frontier, candidates, depth, visited, max_depth) {
+# are already visited or already queued, and respecting the depth/page bounds.
+# The frontier retains consumed entries, so max_pages - 1 is the lifetime queue
+# budget (the start page is already visited). Do not enqueue unreachable work.
+export func enqueue_candidates(frontier, candidates, depth, visited, max_depth, max_pages) {
 	mut out := frontier
 	if depth > max_depth {
 		return out
 	}
 	mut idx := 0
-	while idx < len(candidates) {
+	while idx < len(candidates) && len(out) < max_pages - 1 {
 		url := to_string(candidates[idx])
 		if is_falseish(contains_url(visited, url)) && is_falseish(frontier_has(out, url)) {
 			out = append(out, { "url": url, "depth": depth })
@@ -189,6 +220,12 @@ func page_summary(url, depth, status, assessment) {
 #
 # Returns: { "pages": [...], "worst_severity": str, "visited_count": int }.
 export func run_crawl(start_url, start_result, config, out_dir) {
+	started_ms := current_timestamp()
+	mut capture_ms := 0
+	if is_trueish(has_key(start_result, "duration_ms")) { capture_ms = start_result["duration_ms"] }
+	initial_capture_ms := capture_ms
+	mut runtime_meta := {}
+	if is_trueish(has_key(start_result, "metadata")) { runtime_meta = start_result["metadata"] }
 	max_depth := to_int(to_string(config["max_depth"]))
 	max_pages := to_int(to_string(config["max_pages"]))
 
@@ -209,7 +246,10 @@ export func run_crawl(start_url, start_result, config, out_dir) {
 	}
 
 	# BFS frontier: arrays of {url, depth}.
-	mut frontier := enqueue_candidates(array(), collect_crawl_candidates(start_result, start_url), 1, visited, max_depth)
+	mut frontier := array()
+	if max_depth > 0 {
+		frontier = enqueue_candidates(frontier, collect_queue_candidates(start_result, start_url, visited, frontier, max_pages), 1, visited, max_depth, max_pages)
+	}
 
 	mut fi := 0
 	while fi < len(frontier) {
@@ -224,17 +264,24 @@ export func run_crawl(start_url, start_result, config, out_dir) {
 			if is_falseish(contains_url(visited, page_url)) {
 				visited = append(visited, page_url)
 				result := crawl_capture_page(page_url, depth, config, out_dir, len(visited))
+				page_provider := result["provider_result"]
+				if is_trueish(has_key(page_provider, "duration_ms")) { capture_ms = capture_ms + page_provider["duration_ms"] }
+				if is_trueish(has_key(page_provider, "metadata")) { runtime_meta = page_provider["metadata"] }
 				pages = append(pages, result["summary"])
 				worst = worse_of(worst, to_string(result["worst"]))
 				if is_trueish(result["ok"]) && depth < max_depth {
-					cands := collect_crawl_candidates(result["provider_result"], start_url)
-					frontier = enqueue_candidates(frontier, cands, depth + 1, visited, max_depth)
+					cands := collect_queue_candidates(result["provider_result"], page_url, visited, frontier, max_pages)
+					frontier = enqueue_candidates(frontier, cands, depth + 1, visited, max_depth, max_pages)
 				}
 			}
 		}
 	}
 
-	return { "pages": pages, "worst_severity": worst, "visited_count": len(visited) }
+	mut runtime := { "crawl_total_ms": current_timestamp() - started_ms + initial_capture_ms, "average_page_capture_ms": capture_ms / len(visited) }
+	if is_trueish(has_key(runtime_meta, "session")) {
+		runtime["session"] = runtime_meta["session"]
+	}
+	return { "pages": pages, "worst_severity": worst, "visited_count": len(visited), "runtime": runtime }
 }
 
 # Capture and assess a single crawl page. Kept as its own function so the

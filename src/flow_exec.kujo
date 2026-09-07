@@ -31,6 +31,7 @@ export func build_program_step(step, index) {
 		d := get_step_dict(step, "type")
 		ps["selector"] = to_string(d["selector"])
 		ps["value"] = to_string(d["value"])
+		if is_trueish(has_key(d, "secret")) { ps["secret"] = d["secret"] }
 		return ps
 	}
 	if st == "wait" {
@@ -89,30 +90,25 @@ export func build_program_step(step, index) {
 # program: { url, viewport, timeout, record, auth_file, steps: [...] }
 # Returns the parsed bridge result, or { error: true, ... } on failure.
 export func run_flow_bridge(program, out_dir) {
-	program_path := out_dir + "/flow-program.json"
-	if is_trueish(file_exists(program_path)) {
-		delete_file(program_path)
-	}
-	write_file(program_path, to_json(program), true)
-
 	screenshots_dir := out_dir + "/screenshots"
 	video_dir := out_dir + "/video"
 	if is_trueish(program["record"]) && is_falseish(path_exists(video_dir)) {
 		create_dir(video_dir)
 	}
 
-	args := array("node", "bridge/flow-bridge.js", "--program", program_path, "--screenshot-dir", screenshots_dir, "--video-dir", video_dir)
+	args := array("node", "bridge/flow-bridge.js", "--program", "-", "--screenshot-dir", screenshots_dir, "--video-dir", video_dir)
 	# spawn_process kills the child after 30s by default; an interactive,
 	# recorded journey through several real pages can run longer, so raise the
 	# ceiling. Per-step Playwright timeouts still bound individual actions.
-	res := spawn_process(args, { "timeout_ms": 300000 })
-
-	# The program file can contain real typed values (e.g. credentials for a
-	# secret field). It is an internal handoff, never a persisted artifact —
-	# delete it immediately once the bridge has consumed it.
-	if is_trueish(file_exists(program_path)) {
-		delete_file(program_path)
+	mut res := {}
+	try {
+		res = spawn_process(args, { "timeout_ms": 300000, "stdin": to_json(program) })
+	} except e {
+		return { "error": true, "message": "Flow bridge could not start using private input (Kujo >=1.2.3 required)." }
 	}
+
+	# Kujo supplies private, unlinked stdin storage; no flow-program.json
+	# artifact exists, including when the browser or parent is interrupted.
 
 	out := to_string(res.stdout)
 	if is_trueish(str_blank(out)) {

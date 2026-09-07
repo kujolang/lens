@@ -602,6 +602,7 @@ export func run(argv) {
 		write_file(out_dir + "/crawl.json", to_json({
 			"start_url": redact_url(url),
 			"visited_count": crawl_result["visited_count"],
+			"runtime": crawl_result["runtime"],
 			"max_depth": config["max_depth"],
 			"max_pages": config["max_pages"],
 			"pages": redacted_pages
@@ -1385,7 +1386,9 @@ export func run_flow_exec(config) {
 		write_file(out_dir + "/walkthrough.html", walk_html, true)
 	}
 
-	return finalize_flow_run(config, flow, red_steps, true, array(), {}, flow_video, true, nav_url, started_at, started_ms, out_dir)
+	mut flow_runtime := {}
+	if is_trueish(has_key(bridge_res, "timings")) { flow_runtime["timings"] = bridge_res["timings"] }
+	return finalize_flow_run(config, flow, red_steps, true, array(), flow_runtime, flow_video, true, nav_url, started_at, started_ms, out_dir)
 }
 
 # Safety-gate every step and build the executable program for the bridge.
@@ -1738,6 +1741,8 @@ func map_flow_results(flow_steps, bridge_res, blocked) {
 			bs := exec_map[key]
 			sr["status"] = to_string(bs["status"])
 			sr["error"] = to_string(bs["message"])
+			if is_trueish(has_key(bs, "start_offset_ms")) { sr["start_offset_ms"] = bs["start_offset_ms"] }
+			if is_trueish(has_key(bs, "end_offset_ms")) { sr["end_offset_ms"] = bs["end_offset_ms"] }
 			if is_trueish(has_key(bs, "screenshot")) && to_string(bs["screenshot"]) != "" {
 				sr["screenshot"] = to_string(bs["screenshot"])
 			}
@@ -2157,6 +2162,12 @@ func run_watch(argv, interval_seconds) {
 			"",
 			"── watch run #" + to_string(iteration) + " ──────────────────────────────"
 		))
+		# A killed supervisor must not leave an orphaned watch loop.
+		owner := env("LENS_SESSION_OWNER")
+		if owner != "" {
+			alive := spawn_process(array("/bin/kill", "-0", owner))
+			if is_falseish(alive.success) { return EXIT_BROWSER_FAIL }
+		}
 		run(stripped)
 		# Sleep between runs via the system sleep (Unix); avoids busy-waiting.
 		spawn_process(array("sleep", to_string(interval_seconds)))
