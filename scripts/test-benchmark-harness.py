@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix='lens-bench-test-') as directory:
         port = reservation.getsockname()[1]
     env = {**os.environ, 'PATH': str(binaries) + os.pathsep + os.environ['PATH'],
            'LENS_BENCH_TARGET_ROOT': str(target), 'LENS_BENCH_PORT': str(port),
-           'KUJO_BIN': '/unused-by-this-harness-test'}
+           'LENS_FIXTURE_STARTUP_TRACE': '1', 'KUJO_BIN': '/unused-by-this-harness-test'}
     # Fixture probes must stay local even on runners with inherited proxies.
     env.update({key: 'http://127.0.0.1:1' for key in ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']})
     env.update({'NO_PROXY': '', 'no_proxy': ''})

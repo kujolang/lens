@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import faulthandler
+import os
 import http.server
 import json
 import time
@@ -94,7 +96,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=9972)
     args = parser.parse_args()
+    trace = os.environ.get("LENS_FIXTURE_STARTUP_TRACE") == "1"
+    if trace: faulthandler.dump_traceback_later(5)
     server = http.server.ThreadingHTTPServer(("127.0.0.1", args.port), FixtureHandler)
+    if trace:
+        faulthandler.cancel_dump_traceback_later()
+        print("Fixture listening on loopback port", args.port, flush=True)
     server.serve_forever()
 
 
