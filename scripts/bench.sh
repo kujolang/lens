@@ -63,7 +63,7 @@ import sys, time, urllib.request
 end = time.monotonic() + 10
 while True:
     try:
-        with urllib.request.urlopen(sys.argv[1], timeout=1) as response:
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(sys.argv[1], timeout=1) as response:
             if response.status == 200: break
     except OSError:
         if time.monotonic() >= end: raise

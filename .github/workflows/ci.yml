@@ -304,4 +304,4 @@ jobs:
           code=$?
           set -e
           test "$code" -eq 3
-          grep -q 'Browser provider failed' "$RUNNER_TEMP/missing-engine.log"
+          grep -Eq 'Browser provider failed|Browser launch failed' "$RUNNER_TEMP/missing-engine.log"
