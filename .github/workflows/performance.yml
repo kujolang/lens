@@ -175,7 +175,7 @@ jobs:
           npx playwright-core install chromium --only-shell
 
       - name: Profile alternating browser phases
-        run: python3 scripts/bench-phase-comparison.py "$RUNNER_TEMP/lens-base" "$RUNNER_TEMP/phases.json" 8
+        run: python3 scripts/bench-phase-comparison.py "$RUNNER_TEMP/lens-base" "$RUNNER_TEMP/phases.json" 24
 
       - name: Upload phase receipts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
