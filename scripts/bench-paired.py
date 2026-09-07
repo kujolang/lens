@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Alternate baseline/candidate checks; checkpoint successful pairs and failures."""
-import http.server
 import argparse
 import importlib.util
 import json
@@ -31,7 +30,7 @@ def main():
     iterations=args.iterations
     if args.case: cases=[args.case]
     if iterations < 1: raise ValueError('iterations must be positive')
-    server=http.server.ThreadingHTTPServer(('127.0.0.1',0),fixture.FixtureHandler)
+    server=fixture.FixtureServer(('127.0.0.1',0),fixture.FixtureHandler)
     threading.Thread(target=server.serve_forever,daemon=True).start()
     results={};failures=[]
     if args.resume and output.exists():

@@ -20,7 +20,8 @@ Lens 1.1.0 requires Kujo >=1.2.3 for private flow-program stdin.
 
 - Align release manifests and pin the compatibility fixture Python runtime;
   keep local fixture probes independent of runner proxy settings and accept
-  structured browser-launch errors in missing-engine CI checks.
+  structured browser-launch errors in missing-engine CI checks. Local fixture
+  servers skip reverse DNS so macOS resolver stalls cannot block startup.
 
 - Share browser processes across crawl pages and watch iterations with fresh
   contexts; retain Kujo's queue, safety checks, evidence and verdict policies.

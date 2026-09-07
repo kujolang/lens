@@ -7,8 +7,16 @@ from pathlib import Path
 import socket
 import subprocess
 import tempfile
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location('fixture', ROOT / 'scripts/benchmark-fixture-server.py')
+fixture = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(fixture)
+with patch('socket.getfqdn', side_effect=AssertionError('Fixture must not perform DNS')):
+    server = fixture.FixtureServer(('127.0.0.1', 0), fixture.FixtureHandler)
+    assert server.server_name == 'localhost' and server.server_port > 0
+    server.server_close()
 with tempfile.TemporaryDirectory(prefix='lens-bench-test-') as directory:
     work = Path(directory)
     binaries = work / 'bin'
@@ -26,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix='lens-bench-test-') as directory:
         port = reservation.getsockname()[1]
     env = {**os.environ, 'PATH': str(binaries) + os.pathsep + os.environ['PATH'],
            'LENS_BENCH_TARGET_ROOT': str(target), 'LENS_BENCH_PORT': str(port),
-           'LENS_FIXTURE_STARTUP_TRACE': '1', 'KUJO_BIN': '/unused-by-this-harness-test'}
+           'KUJO_BIN': '/unused-by-this-harness-test'}
     # Fixture probes must stay local even on runners with inherited proxies.
     env.update({key: 'http://127.0.0.1:1' for key in ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']})
     env.update({'NO_PROXY': '', 'no_proxy': ''})
@@ -52,4 +60,4 @@ with tempfile.TemporaryDirectory(prefix='lens-bench-test-') as directory:
         assert 'excluded' in str(error)
     else:
         raise AssertionError('Excluded diagnostic accepted as performance evidence')
-print('Benchmark failure rejection, resume and exclusion: 3 passed, 0 failed')
+print('Benchmark fixture DNS isolation, failure rejection, resume and exclusion: 4 passed, 0 failed')

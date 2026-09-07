@@ -2,7 +2,6 @@
 """Identical fixture-backed flow/crawl/inspect/repeated-loop medians, raw samples.
 Usage: python3 scripts/bench-runtime.py 8 /tmp/runtime.json [target root]
 """
-import http.server
 import importlib.util
 import json
 from pathlib import Path
@@ -30,7 +29,7 @@ def main():
     iterations = int(sys.argv[1])
     if iterations < 1: raise ValueError('iterations must be positive')
     target = Path(sys.argv[3]).resolve() if len(sys.argv) > 3 and sys.argv[3] != '--resume' else ROOT
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server = fixture.FixtureServer(('127.0.0.1', 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     url = f'http://127.0.0.1:{server.server_port}'
     samples = {}

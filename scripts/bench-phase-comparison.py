@@ -3,7 +3,6 @@
 Usage: bench-phase-comparison.py /path/to/baseline /tmp/phases.json [iterations]
 The preload is confined to these child processes; it changes no repository code.
 """
-import http.server
 import importlib.util
 import json
 import os
@@ -56,7 +55,7 @@ def main():
     output = Path(sys.argv[2])
     iterations = int(sys.argv[3]) if len(sys.argv) > 3 else 8
     if iterations < 1: raise ValueError('iterations must be positive')
-    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), fixture.FixtureHandler)
+    server = fixture.FixtureServer(('127.0.0.1', 0), fixture.FixtureHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     samples = {}
     try:

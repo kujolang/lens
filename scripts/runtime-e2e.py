@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Real CLI contracts: crawl lifecycle, artifacts/redaction, flow safety and watch cleanup."""
-import http.server
 import importlib.util
 import json
 import os
@@ -35,7 +34,7 @@ def main():
     dependencies=subprocess.run(['python3','-c','import PIL, numpy'],capture_output=True)
     if dependencies.returncode:
         raise SystemExit('Full visual E2E requires Pillow and numpy; install .github/visual-test-requirements.txt in a Python environment.')
-    server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler)
+    server=bench.fixture.FixtureServer(('127.0.0.1',0),Handler)
     threading.Thread(target=server.serve_forever,daemon=True).start()
     url=f'http://127.0.0.1:{server.server_port}'
     passed=0

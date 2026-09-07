@@ -4,10 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import faulthandler
-import os
 import http.server
 import json
+import socketserver
 import time
 from urllib.parse import urlparse
 
@@ -92,16 +91,19 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
         self.send(404, "text/plain; charset=utf-8", b"not found")
 
 
+class FixtureServer(http.server.ThreadingHTTPServer):
+    """Loopback fixtures have a known hostname and never need reverse DNS."""
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = "localhost"
+        self.server_port = self.server_address[1]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=9972)
     args = parser.parse_args()
-    trace = os.environ.get("LENS_FIXTURE_STARTUP_TRACE") == "1"
-    if trace: faulthandler.dump_traceback_later(5)
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", args.port), FixtureHandler)
-    if trace:
-        faulthandler.cancel_dump_traceback_later()
-        print("Fixture listening on loopback port", args.port, flush=True)
+    server = FixtureServer(("127.0.0.1", args.port), FixtureHandler)
     server.serve_forever()
 
 
