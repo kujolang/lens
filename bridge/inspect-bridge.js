@@ -12,7 +12,8 @@
  * Output: JSON to stdout.
  */
 
-const { chromium } = require('playwright-core');
+const { Timings, launchBrowser, withDeadline, closeContext } = require('./runtime');
+const { observeReadiness } = require('./readiness');
 
 function nowISO() { return new Date().toISOString(); }
 
@@ -31,6 +32,12 @@ function parseArgs() {
 // a best-effort stable selector and a kind classification.
 const COLLECT = (maxElements) => {
   const esc = (s) => String(s).replace(/(["\\])/g, '\\$1');
+  // Form values may be credentials; only button labels are selector evidence.
+  function controlText(el) {
+    if (el.tagName === 'INPUT') return /^(button|submit|reset)$/i.test(el.type || '') ? (el.value || '') : '';
+    if (el.tagName === 'TEXTAREA' || el.isContentEditable) return '';
+    return el.innerText || '';
+  }
   function suggest(el) {
     if (el.id) return '#' + (window.CSS && CSS.escape ? CSS.escape(el.id) : el.id);
     const testAttr = ['data-testid', 'data-test', 'data-cy'].find((name) => el.hasAttribute(name));
@@ -43,7 +50,7 @@ const COLLECT = (maxElements) => {
     if (nm && /^(input|select|textarea|button)$/.test(tag)) return tag + '[name="' + esc(nm) + '"]';
     const ph = el.getAttribute('placeholder');
     if (ph && /^(input|textarea)$/.test(tag)) return tag + '[placeholder="' + esc(ph) + '"]';
-    const txt = (el.innerText || el.value || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+    const txt = (controlText(el) || '').trim().replace(/\s+/g, ' ').slice(0, 40);
     if (txt) return tag + ':has-text("' + esc(txt) + '")';
     return tag;
   }
@@ -74,7 +81,7 @@ const COLLECT = (maxElements) => {
     if (out.length >= maxElements) break;
     if (!visible(el)) continue;
     const selector = suggest(el);
-    const text = (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    const text = (controlText(el) || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 80);
     const key = kindOf(el) + '|' + selector + '|' + text;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -92,28 +99,36 @@ const COLLECT = (maxElements) => {
 async function main() {
   const opts = parseArgs();
   if (!opts.url) { console.error('Error: --url is required'); process.exit(1); }
+  const timings = new Timings();
+  timings.values.process_boot_ms = process.uptime() * 1000;
   const timeoutMs = opts.timeout * 1000;
   const result = { url: opts.url, final_url: opts.url, started_at: nowISO(), title: '', elements: [], error: null };
 
-  let browser = null;
+  let browser = null, context = null, readiness = null;
   try {
-    browser = await chromium.launch({ headless: true });
-    const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+    await timings.measure('runtime_load_ms', async () => require('playwright-core'));
+    browser = await timings.measure('browser_launch_ms', () => launchBrowser());
+    context = await timings.measure('context_create_ms', () => browser.newContext({ viewport: { width: 1440, height: 900 } }), timeoutMs);
+    const page = await timings.measure('page_create_ms', () => context.newPage(), timeoutMs);
+    readiness = await withDeadline(() => observeReadiness(page), timeoutMs);
     try {
-      await page.goto(opts.url, { waitUntil: 'load', timeout: timeoutMs });
-      try { await page.waitForLoadState('networkidle', { timeout: Math.min(timeoutMs, 3500) }); } catch (_) {}
+      await timings.measure('navigation_ms', () => page.goto(opts.url, { waitUntil: 'load', timeout: timeoutMs }));
+      result.readiness = await timings.measure('readiness_ms', () => readiness.wait({ timeoutMs }));
     } catch (err) { result.error = 'navigation: ' + err.message; }
-    try { result.final_url = page.url(); result.title = await page.title(); } catch (_) {}
-    try { result.elements = await page.evaluate(COLLECT, opts.maxElements); } catch (err) { result.error = 'collect: ' + err.message; }
+    try { result.final_url = page.url(); result.title = await withDeadline(() => page.title(), timeoutMs); } catch (_) {}
+    try { result.elements = await timings.measure('dom_capture_ms', () => page.evaluate(COLLECT, opts.maxElements), timeoutMs); } catch (err) { result.error = 'collect: ' + err.message; }
   } catch (err) {
     result.error = 'launch: ' + err.message;
   } finally {
-    if (browser) { try { await browser.close(); } catch (_) {} }
+    if (readiness) readiness.dispose();
+    if (context) result.context_cleanup_failed = !(await closeContext(context));
+    if (browser) await timings.measure('browser_close_ms', () => browser.close().catch(() => {}));
   }
 
+  result.timings = timings.finish();
   result.finished_at = nowISO();
   process.stdout.write(JSON.stringify(result));
-  process.exit(result.elements.length > 0 || !result.error ? 0 : 1);
+  process.exitCode = result.elements.length > 0 || !result.error ? 0 : 1;
 }
 
 if (require.main === module) {

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "completed": true,
+  "iterations": 3,
+  "unit": "seconds",
+  "lower_is_better": true,
+  "environment": {
+    "system": "Linux",
+    "machine": "x86_64"
+  },
+  "medians": {
+    "bridge_trivial": 1.5480959709999524,
+    "bridge_realistic": 1.7580027719999407,
+    "cli_trivial": 1.7477098699999942,
+    "cli_realistic": 1.9749643369999603,
+    "quick_trivial": 1.307621665000056,
+    "quick_realistic": 1.5297817900000155,
+    "quick_spa": 1.419672429000002,
+    "quick_image_heavy": 1.441211414999998,
+    "quick_late_network": 2.1045171360000268,
+    "quick_many_links": 1.33901206500002
+  }
+}

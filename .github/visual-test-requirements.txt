@@ -1,0 +1,3 @@
+# Optional visual-diff dependencies used by the complete CI E2E gauntlet.
+Pillow==12.3.0
+numpy==2.2.6

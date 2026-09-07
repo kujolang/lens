@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "completed": true,
+  "iterations": 8,
+  "unit": "seconds",
+  "lower_is_better": true,
+  "environment": {
+    "system": "Darwin",
+    "machine": "x86_64"
+  },
+  "medians": {
+    "bridge_trivial": 2.6821,
+    "bridge_realistic": 2.91421,
+    "cli_trivial": 3.89362,
+    "cli_realistic": 4.05783,
+    "quick_trivial": 4.4325,
+    "quick_realistic": 3.60938,
+    "quick_spa": 3.26725,
+    "quick_image_heavy": 3.52904,
+    "quick_late_network": 4.16462,
+    "quick_many_links": 4.65551
+  },
+  "excluded_reason": "Codex desktop process exhaustion and severalfold startup latency shifts; diagnostics only, not performance acceptance evidence."
+}

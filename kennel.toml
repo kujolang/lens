@@ -1,6 +1,6 @@
 [package]
 name = "lens"
-version = "1.0.1"
+version = "1.1.0"
 description = "Deterministic browser/visual QA tool for AI-built software. Gives agents eyes by opening a local app or URL, collecting evidence, and producing agent-ready repair reports."
 license = "MIT"
 authors = ["Kujolang <contact@kujolang.ai>"]
@@ -16,7 +16,7 @@ public_api = true
 notes = "Stable deterministic browser checks, safety-gated flows, visual baselines, accessibility scanning, and redacted artifact contracts."
 
 [kujo]
-minimum_version = "0.1.0"
+minimum_version = "1.2.3"
 entry = "lens.kujo"
 sources = ["src", "."]
 includes = ["README.md", "tests", "docs"]

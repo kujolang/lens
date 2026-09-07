@@ -1,6 +1,6 @@
 # Lens
 
-[![Version](https://img.shields.io/badge/version-1.0.1-black)](https://github.com/kujolang/lens)
+[![Version](https://img.shields.io/badge/version-1.1.0-black)](https://github.com/kujolang/lens)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 [![built with Kujo](https://img.shields.io/badge/built%20with-Kujo-white.svg)](https://github.com/kujolang/kujo)
 [![CI](https://github.com/kujolang/lens/actions/workflows/ci.yml/badge.svg)](https://github.com/kujolang/lens/actions/workflows/ci.yml)
@@ -24,8 +24,8 @@ whether the page loads, renders, and behaves.
 ## See it
 
 Lens produces artifacts you can read *and* show. A self-contained HTML report,
-and — for executed flows — a `walkthrough.html` that pairs the recording with a
-synchronized step timeline and a tamper-evident verdict.
+and — for executed flows — a `walkthrough.html` that pairs the recording with an
+ordered step timeline and a tamper-evident verdict.
 
 <table>
 <tr>
@@ -35,9 +35,10 @@ synchronized step timeline and a tamper-evident verdict.
 </table>
 
 Executed flows (`lens flow --execute --record`) drive the page for real — and
-the recording shows a cursor gliding to each target and clicking it:
+the recording uses native Playwright pointer and action highlights:
 
-<p><img src="docs/assets/flow-cursor.png" alt="Recorded flow with a visible cursor clicking a link" width="60%"></p>
+Unrecorded flows run without recording animation or pacing. Typed values never
+appear in action annotations.
 
 ## Contents
 
@@ -75,7 +76,7 @@ cd /path/to/lens
 ./lens check http://localhost:3000
 ```
 
-> **Prerequisites:** the [Kujo](https://github.com/kujolang/kujo) runtime, Node.js ≥ 18, and bash.
+> **Prerequisites:** the [Kujo](https://github.com/kujolang/kujo) runtime ≥1.2.3, Node.js ≥18, and bash.
 >
 > New to Lens? The [**Getting Started guide**](docs/getting-started.md) walks you
 > from a clean machine to your first report and the test suite, step by step.
@@ -128,6 +129,17 @@ lens check <url>
    ├─ 4. Run deterministic checks in pure Kujo
    └─ 5. Write Markdown + JSON reports and an Agent Repair Brief
 ```
+
+Unconfigured single checks stay one-shot. Crawl/watch and configuration-driven
+checks use an owned host with isolated contexts, reusing its browser for
+crawl pages and watch iterations. The session ends with the command; an idle
+browser closes after 60 seconds. No cross-command daemon is installed.
+
+Readiness uses bounded DOM/network activity observation, preserving the existing
+500ms quick-mode evidence horizon plus the configured settle window. Applications
+can opt into `--ready-selector '#app-ready'` for an explicit visible condition.
+See the [runtime engineering report](docs/browser-runtime-upgrade.md) for measured
+performance, limitations, and the sleep/lifecycle audit.
 
 The bridge only does what Kujo can't do natively (drive a browser). Every
 decision — checks, findings, redaction, reports — happens in Kujo.

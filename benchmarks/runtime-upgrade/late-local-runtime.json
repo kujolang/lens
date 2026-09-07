@@ -1,0 +1,588 @@
+{
+  "schema_version": 1,
+  "iterations": 8,
+  "completed": true,
+  "unit": "seconds",
+  "lower_is_better": true,
+  "environment": {
+    "system": "Darwin",
+    "machine": "x86_64"
+  },
+  "medians": {
+    "flow_1_click": 3.394326698005898,
+    "flow_5_click": 3.1661503675059066,
+    "flow_5_recorded": 7.005286543004331,
+    "flow_navigation": 4.127812177001033,
+    "inspect": 3.284381529505481,
+    "crawl_5": 9.107999503503379,
+    "crawl_10": 19.78781098150648,
+    "loop_5": 31.64740470349352
+  },
+  "samples": {
+    "flow_1_click": [
+      3.389862144002109,
+      4.300404872992658,
+      3.445905821994529,
+      3.102721596005722,
+      2.875380199009669,
+      3.1959168930043234,
+      3.398791252009687,
+      3.4133743650018005
+    ],
+    "flow_5_click": [
+      2.860654470001464,
+      3.4592087420023745,
+      3.2614051629934693,
+      3.157509871001821,
+      3.208200613997178,
+      3.0841104889987037,
+      3.174790864009992,
+      2.5567830960062565
+    ],
+    "flow_5_recorded": [
+      6.383352666001883,
+      8.157298490012181,
+      6.739379942999221,
+      6.668099582995637,
+      6.53966950699396,
+      8.642521825997392,
+      7.271193143009441,
+      8.781967135990271
+    ],
+    "flow_navigation": [
+      4.899153247009963,
+      4.043622319994029,
+      4.085535366990371,
+      3.6982396690000314,
+      4.714637861005031,
+      4.170088987011695,
+      3.649523019004846,
+      5.903791635995731
+    ],
+    "inspect": [
+      3.336278721995768,
+      3.260346990005928,
+      2.895644506003009,
+      3.3260036629944807,
+      2.8900670330040157,
+      2.991385420988081,
+      4.115631849010242,
+      3.308416069005034
+    ],
+    "crawl_5": [
+      14.393487485998776,
+      11.465788486995734,
+      9.173407084002974,
+      8.859609903011005,
+      8.596638809991418,
+      8.70309324900154,
+      9.042591923003783,
+      9.806096012995113
+    ],
+    "crawl_10": [
+      17.50725148600759,
+      15.082060037006158,
+      15.555437791990698,
+      19.020597758004442,
+      20.55502420500852,
+      26.055047097004717,
+      22.535728503993596,
+      20.853166954999324
+    ],
+    "loop_5": [
+      25.192143894993933,
+      22.112102585015236,
+      21.270245822015568,
+      19.283350546989823,
+      38.10266551199311,
+      97.97790798298956,
+      62.10319850400265,
+      61.902711266986444
+    ]
+  },
+  "phase_samples_ms": {
+    "flow_1_click": [
+      {
+        "process_boot_ms": 80.82,
+        "runtime_load_ms": 796.88,
+        "browser_launch_ms": 483.76,
+        "context_create_ms": 24.63,
+        "page_create_ms": 178.66,
+        "step_execution_ms": 1435.61,
+        "context_close_ms": 21.42,
+        "browser_close_ms": 118.85,
+        "total_bridge_ms": 3079.43
+      },
+      {
+        "process_boot_ms": 103.49,
+        "runtime_load_ms": 2257.76,
+        "browser_launch_ms": 484.72,
+        "context_create_ms": 19.4,
+        "page_create_ms": 289.13,
+        "step_execution_ms": 795.61,
+        "context_close_ms": 36.83,
+        "browser_close_ms": 106.53,
+        "total_bridge_ms": 4014.01
+      },
+      {
+        "process_boot_ms": 119.22,
+        "runtime_load_ms": 1180.96,
+        "browser_launch_ms": 517.03,
+        "context_create_ms": 32.81,
+        "page_create_ms": 288.06,
+        "step_execution_ms": 780.7,
+        "context_close_ms": 13.97,
+        "browser_close_ms": 269.05,
+        "total_bridge_ms": 3111.04
+      },
+      {
+        "process_boot_ms": 82.6,
+        "runtime_load_ms": 947.82,
+        "browser_launch_ms": 424.76,
+        "context_create_ms": 24.13,
+        "page_create_ms": 357.11,
+        "step_execution_ms": 841.42,
+        "context_close_ms": 36.75,
+        "browser_close_ms": 145.36,
+        "total_bridge_ms": 2810.71
+      },
+      {
+        "process_boot_ms": 67.22,
+        "runtime_load_ms": 959.59,
+        "browser_launch_ms": 454.17,
+        "context_create_ms": 30.48,
+        "page_create_ms": 254.57,
+        "step_execution_ms": 781.7,
+        "context_close_ms": 15.04,
+        "browser_close_ms": 72.61,
+        "total_bridge_ms": 2599.73
+      },
+      {
+        "process_boot_ms": 132.98,
+        "runtime_load_ms": 1143.73,
+        "browser_launch_ms": 572.43,
+        "context_create_ms": 51.99,
+        "page_create_ms": 187.28,
+        "step_execution_ms": 768.38,
+        "context_close_ms": 18.15,
+        "browser_close_ms": 79.03,
+        "total_bridge_ms": 2835.78
+      },
+      {
+        "process_boot_ms": 70.35,
+        "runtime_load_ms": 1267.48,
+        "browser_launch_ms": 510.97,
+        "context_create_ms": 71.88,
+        "page_create_ms": 255.7,
+        "step_execution_ms": 879.23,
+        "context_close_ms": 11.28,
+        "browser_close_ms": 63.7,
+        "total_bridge_ms": 3085.65
+      },
+      {
+        "process_boot_ms": 72.89,
+        "runtime_load_ms": 1284.88,
+        "browser_launch_ms": 473.29,
+        "context_create_ms": 74.29,
+        "page_create_ms": 309.8,
+        "step_execution_ms": 856.51,
+        "context_close_ms": 11.55,
+        "browser_close_ms": 100.81,
+        "total_bridge_ms": 3147.14
+      }
+    ],
+    "flow_5_click": [
+      {
+        "process_boot_ms": 105.9,
+        "runtime_load_ms": 792.19,
+        "browser_launch_ms": 456.58,
+        "context_create_ms": 14.87,
+        "page_create_ms": 196.05,
+        "step_execution_ms": 958.89,
+        "context_close_ms": 13.67,
+        "browser_close_ms": 80.39,
+        "total_bridge_ms": 2529.76
+      },
+      {
+        "process_boot_ms": 187.77,
+        "runtime_load_ms": 1264.74,
+        "browser_launch_ms": 415.98,
+        "context_create_ms": 21.37,
+        "page_create_ms": 210.42,
+        "step_execution_ms": 964.5,
+        "context_close_ms": 19.87,
+        "browser_close_ms": 116.14,
+        "total_bridge_ms": 3037.35
+      },
+      {
+        "process_boot_ms": 81.34,
+        "runtime_load_ms": 1032.73,
+        "browser_launch_ms": 571.32,
+        "context_create_ms": 33.19,
+        "page_create_ms": 186.74,
+        "step_execution_ms": 974.42,
+        "context_close_ms": 23.45,
+        "browser_close_ms": 79.56,
+        "total_bridge_ms": 2914.99
+      },
+      {
+        "process_boot_ms": 115.76,
+        "runtime_load_ms": 997.92,
+        "browser_launch_ms": 456.09,
+        "context_create_ms": 18.82,
+        "page_create_ms": 204.43,
+        "step_execution_ms": 982.88,
+        "context_close_ms": 11.86,
+        "browser_close_ms": 104.58,
+        "total_bridge_ms": 2792.02
+      },
+      {
+        "process_boot_ms": 78.94,
+        "runtime_load_ms": 1083.29,
+        "browser_launch_ms": 451.1,
+        "context_create_ms": 17.25,
+        "page_create_ms": 198.24,
+        "step_execution_ms": 967.63,
+        "context_close_ms": 21.77,
+        "browser_close_ms": 67.59,
+        "total_bridge_ms": 2825.53
+      },
+      {
+        "process_boot_ms": 75.14,
+        "runtime_load_ms": 862.78,
+        "browser_launch_ms": 545.84,
+        "context_create_ms": 18.94,
+        "page_create_ms": 192.98,
+        "step_execution_ms": 1122.55,
+        "context_close_ms": 13.91,
+        "browser_close_ms": 76.78,
+        "total_bridge_ms": 2849.89
+      },
+      {
+        "process_boot_ms": 87.64,
+        "runtime_load_ms": 1104.44,
+        "browser_launch_ms": 472.78,
+        "context_create_ms": 15.09,
+        "page_create_ms": 188.52,
+        "step_execution_ms": 1000.31,
+        "context_close_ms": 18.47,
+        "browser_close_ms": 48.08,
+        "total_bridge_ms": 2873.01
+      },
+      {
+        "process_boot_ms": 67.47,
+        "runtime_load_ms": 738.1,
+        "browser_launch_ms": 383.1,
+        "context_create_ms": 14.38,
+        "page_create_ms": 182.4,
+        "step_execution_ms": 941.98,
+        "context_close_ms": 10.34,
+        "browser_close_ms": 56.62,
+        "total_bridge_ms": 2345.27
+      }
+    ],
+    "flow_5_recorded": [
+      {
+        "process_boot_ms": 68.76,
+        "runtime_load_ms": 896.84,
+        "browser_launch_ms": 354.26,
+        "context_create_ms": 18.35,
+        "page_create_ms": 173.94,
+        "recording_start_ms": 5.34,
+        "step_execution_ms": 3750.23,
+        "recording_stop_ms": 487.79,
+        "artifact_finalize_ms": 0.29,
+        "context_close_ms": 15.87,
+        "browser_close_ms": 70.68,
+        "total_bridge_ms": 6092.69
+      },
+      {
+        "process_boot_ms": 78.93,
+        "runtime_load_ms": 801.87,
+        "browser_launch_ms": 486.86,
+        "context_create_ms": 14.69,
+        "page_create_ms": 205.86,
+        "recording_start_ms": 3.48,
+        "step_execution_ms": 4084.72,
+        "recording_stop_ms": 971.41,
+        "artifact_finalize_ms": 0.32,
+        "context_close_ms": 11.02,
+        "browser_close_ms": 952.94,
+        "total_bridge_ms": 7866.23
+      },
+      {
+        "process_boot_ms": 79.61,
+        "runtime_load_ms": 895.69,
+        "browser_launch_ms": 422.94,
+        "context_create_ms": 23.65,
+        "page_create_ms": 243.17,
+        "recording_start_ms": 5.4,
+        "step_execution_ms": 3845.75,
+        "recording_stop_ms": 573.84,
+        "artifact_finalize_ms": 0.33,
+        "context_close_ms": 16.57,
+        "browser_close_ms": 92.7,
+        "total_bridge_ms": 6453.54
+      },
+      {
+        "process_boot_ms": 62.79,
+        "runtime_load_ms": 951.46,
+        "browser_launch_ms": 418.8,
+        "context_create_ms": 27.99,
+        "page_create_ms": 310.1,
+        "recording_start_ms": 3.62,
+        "step_execution_ms": 3819.71,
+        "recording_stop_ms": 526.5,
+        "artifact_finalize_ms": 0.27,
+        "context_close_ms": 14.76,
+        "browser_close_ms": 54.72,
+        "total_bridge_ms": 6456.91
+      },
+      {
+        "process_boot_ms": 68,
+        "runtime_load_ms": 830.86,
+        "browser_launch_ms": 459.62,
+        "context_create_ms": 21.98,
+        "page_create_ms": 269.79,
+        "recording_start_ms": 4.63,
+        "step_execution_ms": 3791.66,
+        "recording_stop_ms": 527.66,
+        "artifact_finalize_ms": 0.24,
+        "context_close_ms": 13.52,
+        "browser_close_ms": 45.7,
+        "total_bridge_ms": 6290.85
+      },
+      {
+        "process_boot_ms": 68.65,
+        "runtime_load_ms": 930.96,
+        "browser_launch_ms": 460.93,
+        "context_create_ms": 25.17,
+        "page_create_ms": 269.36,
+        "recording_start_ms": 3.78,
+        "step_execution_ms": 3778.93,
+        "recording_stop_ms": 2360.82,
+        "artifact_finalize_ms": 0.48,
+        "context_close_ms": 16.91,
+        "browser_close_ms": 237.99,
+        "total_bridge_ms": 8409.71
+      },
+      {
+        "process_boot_ms": 79.51,
+        "runtime_load_ms": 1178.99,
+        "browser_launch_ms": 589.35,
+        "context_create_ms": 19.07,
+        "page_create_ms": 266.27,
+        "recording_start_ms": 11.77,
+        "step_execution_ms": 3838.08,
+        "recording_stop_ms": 649.24,
+        "artifact_finalize_ms": 0.31,
+        "context_close_ms": 17.42,
+        "browser_close_ms": 83.33,
+        "total_bridge_ms": 6977.55
+      },
+      {
+        "process_boot_ms": 240.39,
+        "runtime_load_ms": 1257.6,
+        "browser_launch_ms": 637.82,
+        "context_create_ms": 21.09,
+        "page_create_ms": 276.28,
+        "recording_start_ms": 5.04,
+        "step_execution_ms": 4258.97,
+        "recording_stop_ms": 1287.89,
+        "artifact_finalize_ms": 0.36,
+        "context_close_ms": 15.36,
+        "browser_close_ms": 126.99,
+        "total_bridge_ms": 8209.9
+      }
+    ],
+    "flow_navigation": [
+      {
+        "process_boot_ms": 85.93,
+        "runtime_load_ms": 1597.49,
+        "browser_launch_ms": 492.66,
+        "context_create_ms": 15.91,
+        "page_create_ms": 210.28,
+        "step_execution_ms": 1594.69,
+        "context_close_ms": 63.3,
+        "browser_close_ms": 584.67,
+        "total_bridge_ms": 4579.88
+      },
+      {
+        "process_boot_ms": 87.88,
+        "runtime_load_ms": 1211.32,
+        "browser_launch_ms": 478.58,
+        "context_create_ms": 17.73,
+        "page_create_ms": 212.15,
+        "step_execution_ms": 1551.7,
+        "context_close_ms": 16.46,
+        "browser_close_ms": 155.5,
+        "total_bridge_ms": 3668.63
+      },
+      {
+        "process_boot_ms": 171.87,
+        "runtime_load_ms": 1119.18,
+        "browser_launch_ms": 591.25,
+        "context_create_ms": 31.61,
+        "page_create_ms": 264.65,
+        "step_execution_ms": 1527.26,
+        "context_close_ms": 15.05,
+        "browser_close_ms": 65.02,
+        "total_bridge_ms": 3665.84
+      },
+      {
+        "process_boot_ms": 90.05,
+        "runtime_load_ms": 1064.06,
+        "browser_launch_ms": 567.28,
+        "context_create_ms": 19.29,
+        "page_create_ms": 225.35,
+        "step_execution_ms": 1448.47,
+        "context_close_ms": 11.49,
+        "browser_close_ms": 62.68,
+        "total_bridge_ms": 3414.88
+      },
+      {
+        "process_boot_ms": 85.68,
+        "runtime_load_ms": 1334.44,
+        "browser_launch_ms": 654.44,
+        "context_create_ms": 31.94,
+        "page_create_ms": 701.05,
+        "step_execution_ms": 1509.55,
+        "context_close_ms": 26.56,
+        "browser_close_ms": 85.42,
+        "total_bridge_ms": 4364.83
+      },
+      {
+        "process_boot_ms": 292.44,
+        "runtime_load_ms": 1173.92,
+        "browser_launch_ms": 489.89,
+        "context_create_ms": 24.08,
+        "page_create_ms": 359.37,
+        "step_execution_ms": 1467.93,
+        "context_close_ms": 13.92,
+        "browser_close_ms": 74.42,
+        "total_bridge_ms": 3621.51
+      },
+      {
+        "process_boot_ms": 76.78,
+        "runtime_load_ms": 1122.67,
+        "browser_launch_ms": 491,
+        "context_create_ms": 19.01,
+        "page_create_ms": 204.78,
+        "step_execution_ms": 1376.84,
+        "context_close_ms": 21.3,
+        "browser_close_ms": 65.17,
+        "total_bridge_ms": 3321.26
+      },
+      {
+        "process_boot_ms": 71.98,
+        "runtime_load_ms": 1177.76,
+        "browser_launch_ms": 523.92,
+        "context_create_ms": 24.32,
+        "page_create_ms": 328.72,
+        "step_execution_ms": 1457.84,
+        "context_close_ms": 15.96,
+        "browser_close_ms": 2015.79,
+        "total_bridge_ms": 5593.03
+      }
+    ],
+    "inspect": [
+      {
+        "process_boot_ms": 105.5,
+        "runtime_load_ms": 1328.74,
+        "browser_launch_ms": 719.6,
+        "context_create_ms": 21.24,
+        "page_create_ms": 203.97,
+        "navigation_ms": 85.04,
+        "readiness_ms": 517.42,
+        "dom_capture_ms": 10.87,
+        "browser_close_ms": 107.82,
+        "total_bridge_ms": 3037.83
+      },
+      {
+        "process_boot_ms": 68.61,
+        "runtime_load_ms": 1263.5,
+        "browser_launch_ms": 545.82,
+        "context_create_ms": 21.85,
+        "page_create_ms": 277.98,
+        "navigation_ms": 107.95,
+        "readiness_ms": 524.82,
+        "dom_capture_ms": 11.01,
+        "browser_close_ms": 212.5,
+        "total_bridge_ms": 3001.36
+      },
+      {
+        "process_boot_ms": 68.58,
+        "runtime_load_ms": 964.07,
+        "browser_launch_ms": 471.22,
+        "context_create_ms": 54.98,
+        "page_create_ms": 427.07,
+        "navigation_ms": 76.39,
+        "readiness_ms": 519.38,
+        "dom_capture_ms": 10.75,
+        "browser_close_ms": 79.12,
+        "total_bridge_ms": 2634.55
+      },
+      {
+        "process_boot_ms": 94.29,
+        "runtime_load_ms": 1163.71,
+        "browser_launch_ms": 496.06,
+        "context_create_ms": 34.12,
+        "page_create_ms": 353.26,
+        "navigation_ms": 93.88,
+        "readiness_ms": 518.12,
+        "dom_capture_ms": 10.27,
+        "browser_close_ms": 264.54,
+        "total_bridge_ms": 2971.9
+      },
+      {
+        "process_boot_ms": 91.13,
+        "runtime_load_ms": 942.15,
+        "browser_launch_ms": 491.21,
+        "context_create_ms": 36.65,
+        "page_create_ms": 286.88,
+        "navigation_ms": 127.71,
+        "readiness_ms": 518.23,
+        "dom_capture_ms": 17.2,
+        "browser_close_ms": 72.88,
+        "total_bridge_ms": 2530.99
+      },
+      {
+        "process_boot_ms": 90.74,
+        "runtime_load_ms": 1004.53,
+        "browser_launch_ms": 618.13,
+        "context_create_ms": 26.4,
+        "page_create_ms": 218.96,
+        "navigation_ms": 83.38,
+        "readiness_ms": 515.97,
+        "dom_capture_ms": 10.38,
+        "browser_close_ms": 157.81,
+        "total_bridge_ms": 2669.03
+      },
+      {
+        "process_boot_ms": 111.34,
+        "runtime_load_ms": 2171.47,
+        "browser_launch_ms": 628.4,
+        "context_create_ms": 24.92,
+        "page_create_ms": 215.01,
+        "navigation_ms": 76.82,
+        "readiness_ms": 519.57,
+        "dom_capture_ms": 12.73,
+        "browser_close_ms": 58.51,
+        "total_bridge_ms": 3740.08
+      },
+      {
+        "process_boot_ms": 90.33,
+        "runtime_load_ms": 1333.71,
+        "browser_launch_ms": 556.68,
+        "context_create_ms": 19.23,
+        "page_create_ms": 326.79,
+        "navigation_ms": 72.11,
+        "readiness_ms": 518.56,
+        "dom_capture_ms": 12.73,
+        "browser_close_ms": 94.78,
+        "total_bridge_ms": 2965.73
+      }
+    ]
+  },
+  "excluded_reason": "Codex desktop process exhaustion and severalfold startup latency shifts; diagnostics only, not performance acceptance evidence."
+}

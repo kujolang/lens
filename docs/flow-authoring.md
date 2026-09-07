@@ -81,7 +81,7 @@ Each step is a one-key object. Interactive steps run only with `--execute`.
 | Visit | `{ "visit": "http://localhost:3000/x" }` | Navigates. |
 | Click | `{ "click": { "selector": "#save", "safe": true } }` | **`safe: true` is required.** |
 | Type | `{ "type": { "selector": "#email", "value": "me@x.com" } }` | Add `"secret": true` for passwords/tokens (value redacted everywhere). |
-| Scroll | `{ "scroll": { "selector": "h2:has-text('Plans')" } }` | Or `{ "scroll": { "y": 1200 } }`. Smooth-scrolls into view. |
+| Scroll | `{ "scroll": { "selector": "h2:has-text('Plans')" } }` | Or `{ "scroll": { "y": 1200 } }`. Scrolls into view without fixed pacing. |
 | Wait for selector | `{ "wait_for_selector": "[role=dialog]" }` | Waits until visible. |
 | Wait for text | `{ "wait_for_text": "Saved" }` | Waits until the text appears. |
 | Assert selector | `{ "assert_selector": "[role=dialog]" }` | Fails if absent. |
@@ -277,3 +277,12 @@ A shell-capable agent should run the full loop itself: `lens inspect <url>
 branch on the exit code and read `flow-steps.json`, iterating ≤3 times using the
 [failure taxonomy](#for-autonomous-agents-the-full-loop). A chat-only model just
 returns the JSON; you run the commands.
+
+### Runtime recording behavior
+
+Recording uses Playwright's native pointer/action visualization. Unrecorded
+clicks and typing have no recording pauses. Add explicit selector/text waits for
+asynchronous outcomes. An explicit `wait` step still waits as requested.
+Recordings retain a short final-screen hold; the WebM and optional MP4 filenames
+are unchanged. Typed values and selectors are not used as recording labels.
+Flow programs are passed through private stdin instead of a persisted program file.

@@ -19,8 +19,8 @@
  * Exit codes: 0 on success, 1 on bridge/runtime error.
  */
 
-const { chromium, firefox, webkit, devices } = require('playwright-core');
-const fs = require('fs');
+const { Timings, launchBrowser, closeContext, withDeadline } = require('./runtime');
+const { observeReadiness } = require('./readiness');
 const path = require('path');
 
 // Explicit evidence bounds keep hostile/noisy pages from growing bridge memory
@@ -58,10 +58,14 @@ function parseArgs() {
     device: '',
     perf: false,
     authFile: '',
+    readySelector: '',
   };
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
+      case '--ready-selector':
+        opts.readySelector = args[++i] || '';
+        break;
       case '--url':
         opts.url = args[++i] || '';
         break;
@@ -301,6 +305,8 @@ const COLLECT_LINKS = (maxLinks = 5000) => {
 // ── Main capture logic per viewport ───────────────────────────────────
 
 async function captureViewport(browser, url, viewportName, timeoutMs, screenshotDir, opts) {
+  const { devices } = require('playwright-core');
+  const timings = new Timings();
   const size = resolveViewport(viewportName);
 
   // Build context options. A device descriptor (Phase 2.2) sets its own
@@ -318,255 +324,254 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
     contextOptions.storageState = opts.authFile;
   }
 
-  const context = await browser.newContext(contextOptions);
+  const context = await timings.measure('context_create_ms', () => browser.newContext(contextOptions), timeoutMs);
+  if (opts?.captureStats) opts.captureStats.contexts_created++;
+  let readiness, closed = false;
+  try {
+    const page = await timings.measure('page_create_ms', () => context.newPage(), timeoutMs);
+    if (opts?.captureStats) opts.captureStats.pages_created++;
+    readiness = await withDeadline(() => observeReadiness(page), timeoutMs);
 
-  const page = await context.newPage();
-
-  // Network throttling (Phase 2.2) — Chromium/CDP only. Other engines ignore
-  // it (reported in metadata). Applied to the page we actually navigate.
-  if (opts && opts.throttle && THROTTLE_PROFILES[opts.throttle] && opts.browser === 'chromium') {
-    try {
-      const cdp = await context.newCDPSession(page);
-      await cdp.send('Network.enable');
-      await cdp.send('Network.emulateNetworkConditions', { offline: false, ...THROTTLE_PROFILES[opts.throttle] });
-    } catch (_) { /* throttling is best-effort */ }
-  }
-
-  // Collect console messages
-  const consoleMessages = [];
-  let droppedConsoleMessages = 0;
-  page.on('console', (msg) => {
-    const entry = {
-      type: msg.type(),
-      text: msg.text(),
-      timestamp: nowISO(),
-      viewport: viewportName,
-    };
-    // Capture location if available
-    const loc = msg.location();
-    if (loc && loc.url) {
-      entry.location = `${loc.url}:${loc.lineNumber || 0}:${loc.columnNumber || 0}`;
+    // Network throttling (Phase 2.2) — Chromium/CDP only. Other engines ignore
+    // it (reported in metadata). Applied to the page we actually navigate.
+    if (opts && opts.throttle && THROTTLE_PROFILES[opts.throttle] && opts.browser === 'chromium') {
+      try {
+        const cdp = await context.newCDPSession(page);
+        await cdp.send('Network.enable');
+        await cdp.send('Network.emulateNetworkConditions', { offline: false, ...THROTTLE_PROFILES[opts.throttle] });
+      } catch (_) { /* throttling is best-effort */ }
     }
-    if (!pushBounded(consoleMessages, entry, MAX_CONSOLE_MESSAGES)) droppedConsoleMessages++;
-  });
 
-  // Collect network events (only failures and HTTP errors)
-  const networkEvents = [];
-  let droppedNetworkEvents = 0;
-  page.on('response', (response) => {
-    const status = response.status();
-    // Capture 4xx and 5xx responses
-    if (status >= 400) {
+    // Collect console messages
+    const consoleMessages = [];
+    let droppedConsoleMessages = 0;
+    page.on('console', (msg) => {
       const entry = {
-        url: response.url(),
-        method: response.request().method(),
-        status: status,
-        status_text: response.statusText(),
-        resource_type: response.request().resourceType(),
+        type: msg.type(),
+        text: msg.text(),
+        timestamp: nowISO(),
+        viewport: viewportName,
+      };
+      // Capture location if available
+      const loc = msg.location();
+      if (loc && loc.url) {
+        entry.location = `${loc.url}:${loc.lineNumber || 0}:${loc.columnNumber || 0}`;
+      }
+      if (!pushBounded(consoleMessages, entry, MAX_CONSOLE_MESSAGES)) droppedConsoleMessages++;
+    });
+
+    page.on('pageerror', err => {
+      if (!pushBounded(consoleMessages, { type: 'error', text: err.message, timestamp: nowISO(), viewport: viewportName }, MAX_CONSOLE_MESSAGES)) droppedConsoleMessages++;
+    });
+
+    // Collect network events (only failures and HTTP errors)
+    const networkEvents = [];
+    let droppedNetworkEvents = 0;
+    page.on('response', (response) => {
+      const status = response.status();
+      // Capture 4xx and 5xx responses
+      if (status >= 400) {
+        const entry = {
+          url: response.url(),
+          method: response.request().method(),
+          status: status,
+          status_text: response.statusText(),
+          resource_type: response.request().resourceType(),
+          timestamp: nowISO(),
+          viewport: viewportName,
+        };
+        if (!pushBounded(networkEvents, entry, MAX_NETWORK_EVENTS)) droppedNetworkEvents++;
+      }
+    });
+
+    page.on('requestfailed', (request) => {
+      const entry = {
+        url: request.url(),
+        method: request.method(),
+        status: null,
+        failure_text: request.failure()?.errorText || 'Unknown failure',
+        resource_type: request.resourceType(),
         timestamp: nowISO(),
         viewport: viewportName,
       };
       if (!pushBounded(networkEvents, entry, MAX_NETWORK_EVENTS)) droppedNetworkEvents++;
-    }
-  });
-
-  page.on('requestfailed', (request) => {
-    const entry = {
-      url: request.url(),
-      method: request.method(),
-      status: null,
-      failure_text: request.failure()?.errorText || 'Unknown failure',
-      resource_type: request.resourceType(),
-      timestamp: nowISO(),
-      viewport: viewportName,
-    };
-    if (!pushBounded(networkEvents, entry, MAX_NETWORK_EVENTS)) droppedNetworkEvents++;
-  });
-
-  // Navigate
-  let finalUrl = url;
-  let navigationError = null;
-  try {
-    const response = await page.goto(url, {
-      waitUntil: 'load',
-      timeout: timeoutMs,
     });
-    finalUrl = page.url();
-  } catch (err) {
-    navigationError = err.message;
-  }
 
-  // Phase 1.2: event-driven readiness. Wait for the network to go idle so we
-  // capture late console/network events on real apps without paying a flat
-  // delay on fast pages. The wait is capped well below the page timeout:
-  // sites with analytics/long-polling never go idle, and waiting the full
-  // timeout there can exceed the runtime's process-spawn limit (a real failure
-  // seen on heavy public sites). A few seconds is plenty to settle.
-  if (!navigationError) {
-    const idleCap = Math.min(timeoutMs, 3500);
+    // Navigate
+    let finalUrl = url;
+    let navigationError = null;
     try {
-      await page.waitForLoadState('networkidle', { timeout: idleCap });
-    } catch (_) {
-      // networkidle didn't settle within the cap — proceed anyway.
-    }
-  }
-
-  // Short settle window for any final stragglers (configurable, small).
-  const settleMs = opts && Number.isFinite(opts.settleMs) ? opts.settleMs : 400;
-  if (settleMs > 0) {
-    await page.waitForTimeout(settleMs);
-  }
-
-  // Take screenshot
-  let screenshotPath = '';
-  if (screenshotDir) {
-    const filename = `${viewportName}.png`;
-    screenshotPath = path.join(screenshotDir, filename);
-    try {
-      await page.screenshot({ path: screenshotPath, fullPage: false });
+      await timings.measure('navigation_ms', () => page.goto(url, {
+        waitUntil: 'load',
+        timeout: timeoutMs,
+      }));
+      finalUrl = page.url();
     } catch (err) {
-      // Screenshot failure is non-fatal per-viewport
-      screenshotPath = '';
+      navigationError = err.message;
     }
-  }
 
-  // Capture DOM summary
-  let domSummary = null;
-  try {
-    domSummary = await page.evaluate(() => {
-      const body = document.body;
-      return {
-        viewport: '', // filled by caller
-        url: window.location.href,
-        final_url: window.location.href,
-        title: document.title || '',
-        body_text_length: body ? body.innerText.length : 0,
-        visible_element_count: document.querySelectorAll('*').length,
-        document_width: document.documentElement.scrollWidth,
-        document_height: document.documentElement.scrollHeight,
-        viewport_width: window.innerWidth,
-        viewport_height: window.innerHeight,
-        has_body: body !== null,
-        has_main: document.querySelector('main') !== null,
-        heading_count: document.querySelectorAll('h1,h2,h3,h4,h5,h6').length,
-        link_count: document.querySelectorAll('a[href]').length,
-        button_count: document.querySelectorAll('button').length,
-        input_count: document.querySelectorAll('input').length,
-        // Phase 4.4: identify elements wider than the viewport (overflow
-        // culprits). Returns up to 5 compact CSS-ish selectors — never inner
-        // HTML or text, so no rendered secret can leak.
-        overflow_elements: (() => {
-          try {
-            const vw = window.innerWidth;
-            const out = [];
-            const all = document.body ? document.body.querySelectorAll('*') : [];
-            for (const el of all) {
-              const r = el.getBoundingClientRect();
-              if (r.width > vw + 1 || r.right > vw + 1) {
-                let sel = el.tagName.toLowerCase();
-                if (el.id) sel += '#' + el.id;
-                else if (el.classList && el.classList.length) sel += '.' + Array.from(el.classList).slice(0, 2).join('.');
-                out.push({ selector: sel, width: Math.round(r.width) });
-                if (out.length >= 5) break;
+    const ready = await timings.measure('readiness_ms', () => readiness.wait({ timeoutMs, ...opts }));
+
+    // Take screenshot
+    let screenshotPath = '';
+    if (screenshotDir) {
+      const filename = `${viewportName}.png`;
+      screenshotPath = path.join(screenshotDir, filename);
+      try {
+        await timings.measure('screenshot_ms', () => page.screenshot({ path: screenshotPath, fullPage: false, timeout: timeoutMs }));
+      } catch (err) {
+        // Screenshot failure is non-fatal per-viewport
+        screenshotPath = '';
+      }
+    }
+
+    // Capture DOM summary
+    let domSummary = null;
+    try {
+      domSummary = await timings.measure('dom_capture_ms', () => page.evaluate(() => {
+        const body = document.body;
+        const bodyText = body ? body.innerText : '';
+        return {
+          viewport: '', // filled by caller
+          url: window.location.href,
+          final_url: window.location.href,
+          title: document.title || '',
+          body_text_length: bodyText.length,
+          visible_element_count: document.querySelectorAll('*').length,
+          document_width: document.documentElement.scrollWidth,
+          document_height: document.documentElement.scrollHeight,
+          viewport_width: window.innerWidth,
+          viewport_height: window.innerHeight,
+          has_body: body !== null,
+          has_main: document.querySelector('main') !== null,
+          heading_count: document.querySelectorAll('h1,h2,h3,h4,h5,h6').length,
+          link_count: document.querySelectorAll('a[href]').length,
+          button_count: document.querySelectorAll('button').length,
+          input_count: document.querySelectorAll('input').length,
+          // Phase 4.4: identify elements wider than the viewport (overflow
+          // culprits). Returns up to 5 compact CSS-ish selectors — never inner
+          // HTML or text, so no rendered secret can leak.
+          overflow_elements: (() => {
+            try {
+              const vw = window.innerWidth;
+              const out = [];
+              const all = document.body ? document.body.querySelectorAll('*') : [];
+              for (const el of all) {
+                const r = el.getBoundingClientRect();
+                if (r.width > vw + 1 || r.right > vw + 1) {
+                  let sel = el.tagName.toLowerCase();
+                  if (el.id) sel += '#' + el.id;
+                  else if (el.classList && el.classList.length) sel += '.' + Array.from(el.classList).slice(0, 2).join('.');
+                  out.push({ selector: sel, width: Math.round(r.width) });
+                  if (out.length >= 5) break;
+                }
               }
-            }
-            return out;
-          } catch (_) { return []; }
-        })(),
-        // Phase 7: text samples and selector presence for Spec assertions
-        visible_text_sample: (body ? body.innerText.substring(0, 2000) : ''),
-        page_text_contains: (() => {
-          const full = (body ? body.innerText.toLowerCase() : '');
-          return {
-            // Truncated; full check is done server-side in Lens
-            _note: 'Full text available via body_text_length. Use Spec assertions for substring checks.'
-          };
-        })(),
+              return out;
+            } catch (_) { return []; }
+          })(),
+          // Phase 7: text samples and selector presence for Spec assertions
+          visible_text_sample: bodyText.substring(0, 2000),
+          page_text_contains: (() => {
+            return {
+              // Truncated; full check is done server-side in Lens
+              _note: 'Full text available via body_text_length. Use Spec assertions for substring checks.'
+            };
+          })(),
+        };
+      }), timeoutMs);
+      domSummary.viewport = viewportName;
+      domSummary.url = url;
+    } catch (err) {
+      domSummary = {
+        viewport: viewportName,
+        url: url,
+        final_url: finalUrl,
+        title: null,
+        body_text_length: null,
+        visible_element_count: null,
+        document_width: null,
+        document_height: null,
+        viewport_width: null,
+        viewport_height: null,
+        has_body: null,
+        has_main: null,
+        heading_count: null,
+        link_count: null,
+        button_count: null,
+        input_count: null,
+        visible_text_sample: null,
+        error: err.message,
       };
-    });
-    domSummary.viewport = viewportName;
-    domSummary.url = url;
-  } catch (err) {
-    domSummary = {
-      viewport: viewportName,
-      url: url,
+    }
+
+    // Capture links
+    let links = [];
+    try {
+      links = await timings.measure('link_capture_ms', () => page.evaluate(COLLECT_LINKS, MAX_CAPTURED_LINKS), timeoutMs);
+    } catch (_) {
+      links = [];
+    }
+
+    // Performance metrics (Phase 2.1), only when requested and navigated.
+    let metrics = null;
+    if (opts && opts.perf && !navigationError) {
+      metrics = await timings.measure('perf_capture_ms', () => collectMetrics(page), timeoutMs).catch(() => null);
+    }
+
+    // Accessibility scan (axe-core), only when requested and the page
+    // actually navigated. Never throws — degrades to engine_available:false.
+    let accessibility = null;
+    if (opts && opts.accessibility && !navigationError) {
+      accessibility = await timings.measure('accessibility_ms', () => runAxeScan(page, opts), timeoutMs).catch(() => ({ engine_available: false, error: 'Accessibility capture deadline reached' }));
+    }
+
+    // Close errors must not discard evidence already captured.
+    readiness.dispose();
+    const contextClosed = await timings.measure('context_close_ms', () => closeContext(context, timeoutMs));
+    closed = true;
+
+    return {
+      timings: timings.finish(),
+      context_cleanup_failed: !contextClosed,
+      readiness: ready,
+      name: viewportName,
+      width: size.width,
+      height: size.height,
       final_url: finalUrl,
-      title: null,
-      body_text_length: null,
-      visible_element_count: null,
-      document_width: null,
-      document_height: null,
-      viewport_width: null,
-      viewport_height: null,
-      has_body: null,
-      has_main: null,
-      heading_count: null,
-      link_count: null,
-      button_count: null,
-      input_count: null,
-      visible_text_sample: null,
-      error: err.message,
+      screenshot: screenshotPath,
+      console_messages: consoleMessages,
+      network_events: networkEvents,
+      dom_summary: domSummary,
+      links: links,
+      navigation_error: navigationError,
+      accessibility: accessibility,
+      metrics: metrics,
+      evidence_limits: {
+        max_console_messages: MAX_CONSOLE_MESSAGES,
+        max_network_events: MAX_NETWORK_EVENTS,
+        max_captured_links: MAX_CAPTURED_LINKS,
+        dropped_console_messages: droppedConsoleMessages,
+        dropped_network_events: droppedNetworkEvents,
+        dropped_links: domSummary && Number.isFinite(domSummary.link_count)
+          ? Math.max(0, domSummary.link_count - links.length)
+          : 0,
+      },
     };
+  } finally {
+    if (readiness) readiness.dispose();
+    if (!closed) await closeContext(context, timeoutMs);
   }
-
-  // Capture links
-  let links = [];
-  try {
-    links = await page.evaluate(COLLECT_LINKS, MAX_CAPTURED_LINKS);
-  } catch (_) {
-    links = [];
-  }
-
-  // Performance metrics (Phase 2.1), only when requested and navigated.
-  let metrics = null;
-  if (opts && opts.perf && !navigationError) {
-    metrics = await collectMetrics(page);
-  }
-
-  // Accessibility scan (axe-core), only when requested and the page
-  // actually navigated. Never throws — degrades to engine_available:false.
-  let accessibility = null;
-  if (opts && opts.accessibility && !navigationError) {
-    accessibility = await runAxeScan(page, opts);
-  }
-
-  // Clean up
-  await context.close();
-
-  return {
-    name: viewportName,
-    width: size.width,
-    height: size.height,
-    final_url: finalUrl,
-    screenshot: screenshotPath,
-    console_messages: consoleMessages,
-    network_events: networkEvents,
-    dom_summary: domSummary,
-    links: links,
-    navigation_error: navigationError,
-    accessibility: accessibility,
-    metrics: metrics,
-    evidence_limits: {
-      max_console_messages: MAX_CONSOLE_MESSAGES,
-      max_network_events: MAX_NETWORK_EVENTS,
-      max_captured_links: MAX_CAPTURED_LINKS,
-      dropped_console_messages: droppedConsoleMessages,
-      dropped_network_events: droppedNetworkEvents,
-      dropped_links: domSummary && Number.isFinite(domSummary.link_count)
-        ? Math.max(0, domSummary.link_count - links.length)
-        : 0,
-    },
-  };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────
 
-async function main() {
-  const opts = parseArgs();
+async function capture(opts, host = null) {
+  const stats = { contexts_created: 0, pages_created: 0 };
+  const timings = new Timings();
+  timings.values.process_boot_ms = host ? 0 : process.uptime() * 1000;
 
   if (!opts.url) {
-    console.error('Error: --url is required');
-    process.exit(1);
+    throw new Error('URL is required');
   }
 
   const startedAt = nowISO();
@@ -582,7 +587,7 @@ async function main() {
     provider_errors: [],
     metadata: {
       bridge: 'lens-browser-bridge',
-      version: '0.1.0',
+      version: require('./package.json').version,
       playwright_version: require('playwright-core/package.json').version,
       node_version: process.version,
       browser: opts.browser,
@@ -593,21 +598,18 @@ async function main() {
     },
   };
 
-  // Select the browser engine (Phase 2.3). chromium is the default; firefox
-  // and webkit require the corresponding Playwright browser to be installed.
-  const engines = { chromium, firefox, webkit };
-  const engine = engines[opts.browser] || chromium;
-
   let browser = null;
 
   try {
-    browser = await engine.launch({ headless: true });
+    await timings.measure('runtime_load_ms', async () => require('playwright-core'));
+    browser = await timings.measure('browser_launch_ms', () => host ? host.acquire(opts.browser) : launchBrowser(opts.browser));
   } catch (err) {
+    result.metadata.failure_kind = 'browser-launch';
     result.provider_errors.push(`Browser launch failed: ${err.message}`);
     result.finished_at = nowISO();
     result.duration_ms = formatMs(Date.now() - startMs);
-    process.stdout.write(JSON.stringify(result));
-    process.exit(1);
+    result.metadata.timings = timings.finish();
+    return result;
   }
 
   const timeoutMs = opts.timeout * 1000;
@@ -620,9 +622,9 @@ async function main() {
   // results in viewport order, never in completion order.
   const captures = await mapWithConcurrency(
     opts.viewports,
-    opts.maxConcurrency,
+    Math.min(opts.maxConcurrency || 4, 16),
     (vpName) =>
-      captureViewport(browser, opts.url, vpName, timeoutMs, opts.screenshotDir, opts)
+      captureViewport(browser, opts.url, vpName, timeoutMs, opts.screenshotDir, { ...opts, captureStats: stats })
         .then((vpResult) => ({ vpName, vpResult, error: null }))
         .catch((err) => ({ vpName, vpResult: null, error: err }))
   );
@@ -673,9 +675,15 @@ async function main() {
     dropped_links: 0,
   });
 
+  if (!browser.isConnected()) result.metadata.failure_kind = 'browser-crash';
+  if (host && (browser.contexts().length || captures.some(c => c.error) || result.viewports.some(v => v.context_cleanup_failed))) {
+    result.metadata.context_cleanup_failed = true;
+    await host.close();
+  }
+
   // Close browser
   try {
-    await browser.close();
+    if (!host) await timings.measure('browser_close_ms', () => browser.close());
   } catch (_) {
     // Ignore close errors
   }
@@ -683,18 +691,26 @@ async function main() {
   result.finished_at = nowISO();
   result.duration_ms = formatMs(Date.now() - startMs);
 
-  process.stdout.write(JSON.stringify(result));
+  result.metadata.timings = timings.finish();
+  result.metadata.browser_launches = host ? host.launches : 1;
+  result.metadata.contexts_created = stats.contexts_created;
+  result.metadata.pages_created = stats.pages_created;
+  result.metadata.pages_captured = result.viewports.filter(v => v.dom_summary && !v.dom_summary.error).length;
+  result.metadata.viewport_timings = result.viewports.map((v, index) => ({ viewport_index: index, timings: v.timings || {}, readiness: v.readiness || null }));
+  return result;
+}
 
-  // Determinism: a transient navigation error on one viewport must not
-  // discard the evidence captured from the others. We exit 0 whenever at
-  // least one viewport produced usable data (a DOM summary, a screenshot,
-  // or a clean navigation). Kujo then classifies any per-viewport
-  // navigation errors into findings via the page-load check. We exit 1
-  // only on total failure (no usable viewport data at all).
-  const hasUsableData = result.viewports.some(
-    (vp) => vp && (vp.dom_summary || vp.screenshot || !vp.navigation_error)
-  );
-  process.exit(hasUsableData ? 0 : 1);
+async function main() {
+  const opts = parseArgs();
+  const result = process.env.LENS_SESSION_SOCKET
+    ? await require('./session-client').captureInSession(opts).catch(() => ({
+      viewports: [], provider_errors: ['Browser session unavailable'],
+      metadata: { failure_kind: 'browser-session' },
+    }))
+    : await capture(opts);
+  process.stdout.write(JSON.stringify(result));
+  const usable = result.viewports.some(v => v && (v.dom_summary || v.screenshot || !v.navigation_error));
+  process.exitCode = usable ? 0 : 1;
 }
 
 // Only drive a browser when invoked directly as a CLI. When required as a
@@ -706,7 +722,7 @@ if (require.main === module) {
   });
 } else {
   module.exports = {
-    parseArgs, resolveViewport, mapWithConcurrency, COLLECT_LINKS,
+    capture, captureViewport, parseArgs, resolveViewport, mapWithConcurrency, COLLECT_LINKS,
     VIEWPORT_SIZES, THROTTLE_PROFILES, pushBounded,
     MAX_CONSOLE_MESSAGES, MAX_NETWORK_EVENTS, MAX_CAPTURED_LINKS,
     MAX_VIEWPORT_DIMENSION,

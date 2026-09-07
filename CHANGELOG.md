@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Keep unconfigured single checks one-shot; activate owned hosts for crawl/watch/configuration-driven checks.
+- Flow text/presence/absence assertions wait for the declared state within their step timeout.
+- Bound crawl frontier work to the page budget while preserving BFS order.
+- Inspect excludes prefilled editable form values from selector/text evidence.
+
+The upcoming Lens 1.1.0 requires Kujo >=1.2.3 for private flow-program stdin.
+
+### Performance and reliability
+
+- Share browser processes across crawl pages and watch iterations with fresh
+  contexts; retain Kujo's queue, safety checks, evidence and verdict policies.
+- Add numeric phase timings, readiness reasons and browser/context/page counters.
+- Replace networkidle with bounded DOM/network quiet observation while preserving
+  existing late-evidence horizons; add an optional explicit readiness selector.
+- Remove custom cursor interpolation, click ripples and unrecorded action sleeps.
+  Native page screencasting writes the known WebM path directly, with click-only
+  annotations, retained recording bounds and MP4 handling.
+- Pin Playwright Core 1.61.1 and axe-core 4.11.4; install only the default Chromium
+  headless shell. Node >=18 and the Node 20 development default remain supported.
+- Bound context creation and cleanup, retain successful viewport and flow step
+  evidence on teardown failure, capture uncaught page errors, and drain bridge stdout.
+- Pass flow programs through private stdin; mask secret inputs and scrub known
+  typed secrets from structured evidence and error logs.
+- Extend fixture benchmarks and CI coverage for lifecycle, readiness, crawl,
+  recording, watch, redaction and repeated development loops. Fix benchmark
+  checkout selection to run Kujo from the selected checkout.
+- Resolve nested crawl candidates against the page that supplied the links.
+- Eight-run Linux medians: five-click flows 89.3% faster, recorded flows 70.6%
+  faster, ten-page crawls 46.2% faster. Fresh default browser dependencies use
+  63.6% less disk space. Small cold-check overheads and raw receipts are included
+  in the [engineering report](docs/browser-runtime-upgrade.md).
+
 ## [1.0.1] - 2026-08-30
 
 ### Security

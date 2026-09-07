@@ -1,0 +1,3031 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-08-31T03:25:17Z",
+  "baseline": {
+    "sha": "da8740cc6c82631821ae6258af0fc554bc32e468",
+    "root": "/private/tmp/codex-lens-eval-baseline"
+  },
+  "current": {
+    "sha": "504ff55a63440b895bd4ea515612ddde94ea9cdb",
+    "root": "/private/tmp/codex-lens-eval-current"
+  },
+  "method": {
+    "warmups": 3,
+    "samples": 10,
+    "order": "alternating per workload/round",
+    "fixture_url": "http://127.0.0.1:9984"
+  },
+  "environment": {
+    "platform": "macOS-26.3.1-x86_64-i386-64bit",
+    "machine": "x86_64",
+    "python": "3.10.5",
+    "node": "v24.20.0",
+    "npm": "11.19.0",
+    "kujo": "kujo 1.1.0",
+    "kujo_binary": "/Users/robertdevore/2026/Kujolang/kujo-repos/kujo/target/release/kujo"
+  },
+  "workloads": {
+    "startup_version": {
+      "kind": "minimal",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 0.19,
+          "max": 0.26,
+          "mean": 0.21600000000000003,
+          "median": 0.215,
+          "standard_deviation": 0.02270584848790187,
+          "p95": 0.251
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 0.12,
+          "max": 0.16,
+          "mean": 0.135,
+          "median": 0.13,
+          "standard_deviation": 0.01433720877840438,
+          "p95": 0.15549999999999997
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.05,
+          "max": 0.07,
+          "mean": 0.05600000000000001,
+          "median": 0.055,
+          "standard_deviation": 0.00699205898780101,
+          "p95": 0.06549999999999999
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 21843968.0,
+          "max": 23547904.0,
+          "mean": 22643097.6,
+          "median": 22599680.0,
+          "standard_deviation": 640725.3455505981,
+          "p95": 23518412.8
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 544768.0,
+          "max": 1085440.0,
+          "mean": 636928.0,
+          "median": 577536.0,
+          "standard_deviation": 164070.23822741283,
+          "p95": 906649.5999999996
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 67.0,
+          "max": 67.0,
+          "mean": 67.0,
+          "median": 67.0,
+          "standard_deviation": 0.0,
+          "p95": 67.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 2.0,
+          "max": 2.0,
+          "mean": 2.0,
+          "median": 2.0,
+          "standard_deviation": 0.0,
+          "p95": 2.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {}
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 0.19,
+          "max": 0.24,
+          "mean": 0.20800000000000002,
+          "median": 0.21,
+          "standard_deviation": 0.014757295747452432,
+          "p95": 0.23099999999999998
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 0.12,
+          "max": 0.15,
+          "mean": 0.13,
+          "median": 0.13,
+          "standard_deviation": 0.010540925533894602,
+          "p95": 0.1455
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.05,
+          "max": 0.06,
+          "mean": 0.05500000000000001,
+          "median": 0.055,
+          "standard_deviation": 0.0052704627669472965,
+          "p95": 0.06
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 22589440.0,
+          "max": 23752704.0,
+          "mean": 23174758.4,
+          "median": 23142400.0,
+          "standard_deviation": 312816.0129757498,
+          "p95": 23601561.6
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 544768.0,
+          "max": 1077248.0,
+          "mean": 762265.6,
+          "median": 655360.0,
+          "standard_deviation": 240689.71817360393,
+          "p95": 1077248.0
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 67.0,
+          "max": 67.0,
+          "mean": 67.0,
+          "median": 67.0,
+          "standard_deviation": 0.0,
+          "p95": 67.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 2.0,
+          "max": 2.0,
+          "mean": 2.0,
+          "median": 2.0,
+          "standard_deviation": 0.0,
+          "p95": 2.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {}
+      },
+      "wall_median_change_percent": -2.325581395348839
+    },
+    "minimal_bridge": {
+      "kind": "minimal",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 3.02,
+          "max": 4.23,
+          "mean": 3.511,
+          "median": 3.4450000000000003,
+          "standard_deviation": 0.36716481312892724,
+          "p95": 4.1085
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 2.16,
+          "max": 2.33,
+          "mean": 2.254,
+          "median": 2.25,
+          "standard_deviation": 0.055617742972304506,
+          "p95": 2.3255
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.81,
+          "max": 0.86,
+          "mean": 0.8400000000000001,
+          "median": 0.84,
+          "standard_deviation": 0.015634719199411423,
+          "p95": 0.86
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 130060288.0,
+          "max": 133869568.0,
+          "mean": 131133849.6,
+          "median": 130881536.0,
+          "standard_deviation": 1085493.1522415872,
+          "p95": 132927692.8
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 287518720.0,
+          "max": 312430592.0,
+          "mean": 294193152.0,
+          "median": 289232896.0,
+          "standard_deviation": 9536938.89839926,
+          "p95": 311405772.79999995
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 1311.0,
+          "max": 1311.0,
+          "mean": 1311.0,
+          "median": 1311.0,
+          "standard_deviation": 0.0,
+          "p95": 1311.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 10564.0,
+          "max": 10564.0,
+          "mean": 10564.0,
+          "median": 10564.0,
+          "standard_deviation": 0.0,
+          "p95": 10564.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 0,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 3.11,
+          "max": 5.03,
+          "mean": 3.85,
+          "median": 3.58,
+          "standard_deviation": 0.7233870947762955,
+          "p95": 4.868
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 2.19,
+          "max": 2.36,
+          "mean": 2.2689999999999997,
+          "median": 2.2649999999999997,
+          "standard_deviation": 0.05195083145522196,
+          "p95": 2.3419999999999996
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.82,
+          "max": 0.87,
+          "mean": 0.842,
+          "median": 0.84,
+          "standard_deviation": 0.016193277068654838,
+          "p95": 0.8654999999999999
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 129908736.0,
+          "max": 134258688.0,
+          "mean": 131190374.4,
+          "median": 130705408.0,
+          "standard_deviation": 1515447.9800304887,
+          "p95": 133982208.0
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 287948800.0,
+          "max": 310132736.0,
+          "mean": 298906419.2,
+          "median": 298336256.0,
+          "standard_deviation": 9985980.57313851,
+          "p95": 310084812.8
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 1698.0,
+          "max": 1698.0,
+          "mean": 1698.0,
+          "median": 1698.0,
+          "standard_deviation": 0.0,
+          "p95": 1698.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 10564.0,
+          "max": 10564.0,
+          "mean": 10564.0,
+          "median": 10564.0,
+          "standard_deviation": 0.0,
+          "p95": 10564.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 0,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "wall_median_change_percent": 3.9187227866473084
+    },
+    "typical_quick_cli": {
+      "kind": "typical",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 4.01,
+          "max": 4.85,
+          "mean": 4.303,
+          "median": 4.244999999999999,
+          "standard_deviation": 0.24262682823170598,
+          "p95": 4.67
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 3.55,
+          "max": 3.73,
+          "mean": 3.595,
+          "median": 3.57,
+          "standard_deviation": 0.05759050847723668,
+          "p95": 3.6985
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.96,
+          "max": 1.05,
+          "mean": 1.0050000000000001,
+          "median": 1.0150000000000001,
+          "standard_deviation": 0.02838231060987736,
+          "p95": 1.0365
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 140222464.0,
+          "max": 145383424.0,
+          "mean": 141558169.6,
+          "median": 141451264.0,
+          "standard_deviation": 1474109.1814557924,
+          "p95": 143921766.39999998
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 315809792.0,
+          "max": 343629824.0,
+          "mean": 323859251.2,
+          "median": 317097984.0,
+          "standard_deviation": 10977581.048475567,
+          "p95": 341233664.0
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 272.0,
+          "max": 272.0,
+          "mean": 272.0,
+          "median": 272.0,
+          "standard_deviation": 0.0,
+          "p95": 272.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 7.0,
+          "max": 7.0,
+          "mean": 7.0,
+          "median": 7.0,
+          "standard_deviation": 0.0,
+          "p95": 7.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 58184.0,
+          "max": 58184.0,
+          "mean": 58184.0,
+          "median": 58184.0,
+          "standard_deviation": 0.0,
+          "p95": 58184.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 0,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 0,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 4.41,
+          "max": 5.52,
+          "mean": 4.9,
+          "median": 4.83,
+          "standard_deviation": 0.3211091887677945,
+          "p95": 5.362499999999999
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 3.91,
+          "max": 4.37,
+          "mean": 4.114,
+          "median": 4.074999999999999,
+          "standard_deviation": 0.13785660827267013,
+          "p95": 4.324999999999999
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.98,
+          "max": 1.14,
+          "mean": 1.032,
+          "median": 1.02,
+          "standard_deviation": 0.04917090377222872,
+          "p95": 1.1084999999999998
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 140701696.0,
+          "max": 144429056.0,
+          "mean": 141817036.8,
+          "median": 141219840.0,
+          "standard_deviation": 1273687.0415996406,
+          "p95": 143975628.8
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 317386752.0,
+          "max": 352669696.0,
+          "mean": 333062553.6,
+          "median": 339386368.0,
+          "standard_deviation": 13606215.540246883,
+          "p95": 350127923.2
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 272.0,
+          "max": 272.0,
+          "mean": 272.0,
+          "median": 272.0,
+          "standard_deviation": 0.0,
+          "p95": 272.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 7.0,
+          "max": 7.0,
+          "mean": 7.0,
+          "median": 7.0,
+          "standard_deviation": 0.0,
+          "p95": 7.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 58529.0,
+          "max": 58529.0,
+          "mean": 58529.0,
+          "median": 58529.0,
+          "standard_deviation": 0.0,
+          "p95": 58529.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 0,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 0,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "wall_median_change_percent": 13.780918727915218
+    },
+    "typical_full_cli": {
+      "kind": "typical",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 5.04,
+          "max": 6.8,
+          "mean": 5.6240000000000006,
+          "median": 5.609999999999999,
+          "standard_deviation": 0.5032163219398459,
+          "p95": 6.376999999999999
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 4.17,
+          "max": 4.47,
+          "mean": 4.311999999999999,
+          "median": 4.325,
+          "standard_deviation": 0.0995322393331258,
+          "p95": 4.452
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 1.18,
+          "max": 1.26,
+          "mean": 1.223,
+          "median": 1.23,
+          "standard_deviation": 0.02359378449224854,
+          "p95": 1.251
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 139866112.0,
+          "max": 144564224.0,
+          "mean": 142033305.6,
+          "median": 142540800.0,
+          "standard_deviation": 1453942.7550879405,
+          "p95": 143874867.2
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 373551104.0,
+          "max": 412815360.0,
+          "mean": 394129408.0,
+          "median": 396709888.0,
+          "standard_deviation": 15244048.103319772,
+          "p95": 411447705.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 141.0,
+          "max": 141.0,
+          "mean": 141.0,
+          "median": 141.0,
+          "standard_deviation": 0.0,
+          "p95": 141.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 2.0,
+          "max": 2.0,
+          "mean": 2.0,
+          "median": 2.0,
+          "standard_deviation": 0.0,
+          "p95": 2.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 8.0,
+          "max": 8.0,
+          "mean": 8.0,
+          "median": 8.0,
+          "standard_deviation": 0.0,
+          "p95": 8.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 100602.0,
+          "max": 100602.0,
+          "mean": 100602.0,
+          "median": 100602.0,
+          "standard_deviation": 0.0,
+          "p95": 100602.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {}
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 5.46,
+          "max": 6.85,
+          "mean": 6.243,
+          "median": 6.415,
+          "standard_deviation": 0.5173232387331282,
+          "p95": 6.8275
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 4.69,
+          "max": 5.09,
+          "mean": 4.864,
+          "median": 4.865,
+          "standard_deviation": 0.13057139383834762,
+          "p95": 5.0675
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 1.2,
+          "max": 1.29,
+          "mean": 1.24,
+          "median": 1.24,
+          "standard_deviation": 0.034318767136623365,
+          "p95": 1.2855
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 140521472.0,
+          "max": 143998976.0,
+          "mean": 142531788.8,
+          "median": 142292992.0,
+          "standard_deviation": 994715.9402072533,
+          "p95": 143774105.6
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 378908672.0,
+          "max": 406425600.0,
+          "mean": 398734950.4,
+          "median": 401952768.0,
+          "standard_deviation": 9121556.920944327,
+          "p95": 406184140.79999995
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 141.0,
+          "max": 141.0,
+          "mean": 141.0,
+          "median": 141.0,
+          "standard_deviation": 0.0,
+          "p95": 141.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 2.0,
+          "max": 2.0,
+          "mean": 2.0,
+          "median": 2.0,
+          "standard_deviation": 0.0,
+          "p95": 2.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 8.0,
+          "max": 8.0,
+          "mean": 8.0,
+          "median": 8.0,
+          "standard_deviation": 0.0,
+          "p95": 8.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 100947.0,
+          "max": 100947.0,
+          "mean": 100947.0,
+          "median": 100947.0,
+          "standard_deviation": 0.0,
+          "p95": 100947.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {}
+      },
+      "wall_median_change_percent": 14.349376114082007
+    },
+    "large_links_bridge": {
+      "kind": "large",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 3.38,
+          "max": 7.46,
+          "mean": 4.6,
+          "median": 4.449999999999999,
+          "standard_deviation": 1.2016562644025028,
+          "p95": 6.496999999999998
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 2.97,
+          "max": 3.29,
+          "mean": 3.162,
+          "median": 3.225,
+          "standard_deviation": 0.1169805301938935,
+          "p95": 3.2765
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.97,
+          "max": 1.09,
+          "mean": 1.046,
+          "median": 1.06,
+          "standard_deviation": 0.042478752858864016,
+          "p95": 1.0855000000000001
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 148729856.0,
+          "max": 157540352.0,
+          "mean": 153729433.6,
+          "median": 153604096.0,
+          "standard_deviation": 3069684.2500094804,
+          "p95": 157121945.6
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 329351168.0,
+          "max": 358850560.0,
+          "mean": 342416179.2,
+          "median": 339748864.0,
+          "standard_deviation": 10954490.097398954,
+          "p95": 356883865.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 69123.0,
+          "max": 69123.0,
+          "mean": 69123.0,
+          "median": 69123.0,
+          "standard_deviation": 0.0,
+          "p95": 69123.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 396704.0,
+          "max": 396704.0,
+          "mean": 396704.0,
+          "median": 396704.0,
+          "standard_deviation": 0.0,
+          "p95": 396704.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 1000,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 3.34,
+          "max": 4.93,
+          "mean": 4.241,
+          "median": 4.305,
+          "standard_deviation": 0.4516254593748624,
+          "p95": 4.795
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 3.04,
+          "max": 3.33,
+          "mean": 3.184,
+          "median": 3.2,
+          "standard_deviation": 0.0925202680497631,
+          "p95": 3.303
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.97,
+          "max": 1.15,
+          "mean": 1.051,
+          "median": 1.05,
+          "standard_deviation": 0.04701063709417262,
+          "p95": 1.1185
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 151109632.0,
+          "max": 163463168.0,
+          "mean": 156146073.6,
+          "median": 154732544.0,
+          "standard_deviation": 3990969.6184457676,
+          "p95": 161881702.39999998
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 334123008.0,
+          "max": 371929088.0,
+          "mean": 353474560.0,
+          "median": 354248704.0,
+          "standard_deviation": 10941135.489798894,
+          "p95": 368012288.0
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 69510.0,
+          "max": 69510.0,
+          "mean": 69510.0,
+          "median": 69510.0,
+          "standard_deviation": 0.0,
+          "p95": 69510.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 396704.0,
+          "max": 396704.0,
+          "mean": 396704.0,
+          "median": 396704.0,
+          "standard_deviation": 0.0,
+          "p95": 396704.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 1000,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "wall_median_change_percent": -3.258426966292126
+    },
+    "stress_console_bridge": {
+      "kind": "stress",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 4.22,
+          "max": 6.64,
+          "mean": 5.25,
+          "median": 5.375,
+          "standard_deviation": 0.8574121270168479,
+          "p95": 6.374499999999999
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 4.25,
+          "max": 4.58,
+          "mean": 4.43,
+          "median": 4.405,
+          "standard_deviation": 0.11944315244779291,
+          "p95": 4.58
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 1.36,
+          "max": 1.5,
+          "mean": 1.444,
+          "median": 1.455,
+          "standard_deviation": 0.04526465385804787,
+          "p95": 1.491
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 184807424.0,
+          "max": 197029888.0,
+          "mean": 188304998.4,
+          "median": 186949632.0,
+          "standard_deviation": 3722389.197706799,
+          "p95": 194969190.4
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 359641088.0,
+          "max": 388153344.0,
+          "mean": 370561024.0,
+          "median": 365744128.0,
+          "standard_deviation": 10619223.346597476,
+          "p95": 385495449.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 825241.0,
+          "max": 825241.0,
+          "mean": 825241.0,
+          "median": 825241.0,
+          "standard_deviation": 0.0,
+          "p95": 825241.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 8376.0,
+          "max": 8376.0,
+          "mean": 8376.0,
+          "median": 8376.0,
+          "standard_deviation": 0.0,
+          "p95": 8376.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 5000,
+          "network_events": 0,
+          "links": 0,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 4.52,
+          "max": 6.32,
+          "mean": 5.457,
+          "median": 5.275,
+          "standard_deviation": 0.6216474527861879,
+          "p95": 6.2435
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 4.3,
+          "max": 4.61,
+          "mean": 4.477,
+          "median": 4.460000000000001,
+          "standard_deviation": 0.09569047322835582,
+          "p95": 4.5920000000000005
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 1.38,
+          "max": 1.55,
+          "mean": 1.4629999999999999,
+          "median": 1.46,
+          "standard_deviation": 0.05165053511608357,
+          "p95": 1.532
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 182099968.0,
+          "max": 189247488.0,
+          "mean": 184919654.4,
+          "median": 184184832.0,
+          "standard_deviation": 2258372.10917339,
+          "p95": 188666880.0
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 358588416.0,
+          "max": 368267264.0,
+          "mean": 362149888.0,
+          "median": 362244096.0,
+          "standard_deviation": 2909701.360544068,
+          "p95": 366331904.0
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 165634.0,
+          "max": 165634.0,
+          "mean": 165634.0,
+          "median": 165634.0,
+          "standard_deviation": 0.0,
+          "p95": 165634.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 8376.0,
+          "max": 8376.0,
+          "mean": 8376.0,
+          "median": 8376.0,
+          "standard_deviation": 0.0,
+          "p95": 8376.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 1000,
+          "network_events": 0,
+          "links": 0,
+          "dropped_console_messages": 4000,
+          "dropped_network_events": 0
+        }
+      },
+      "wall_median_change_percent": -1.860465116279063
+    },
+    "stress_network_bridge": {
+      "kind": "stress",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 6.26,
+          "max": 9.92,
+          "mean": 7.123,
+          "median": 6.635,
+          "standard_deviation": 1.1377175005734557,
+          "p95": 9.042499999999999
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 10.37,
+          "max": 12.6,
+          "mean": 11.283,
+          "median": 11.309999999999999,
+          "standard_deviation": 0.7152474319344944,
+          "p95": 12.4065
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 3.92,
+          "max": 5.0,
+          "mean": 4.456,
+          "median": 4.495,
+          "standard_deviation": 0.336161336926846,
+          "p95": 4.936999999999999
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 189906944.0,
+          "max": 218865664.0,
+          "mean": 209792204.8,
+          "median": 215117824.0,
+          "standard_deviation": 10724701.38106212,
+          "p95": 218463846.39999998
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 504602624.0,
+          "max": 559075328.0,
+          "mean": 535768268.8,
+          "median": 537204736.0,
+          "standard_deviation": 17341535.458184272,
+          "p95": 558162944.0
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 608350.0,
+          "max": 893952.0,
+          "mean": 842886.0,
+          "median": 893931.0,
+          "standard_deviation": 95227.45544805401,
+          "p95": 893951.1
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 8376.0,
+          "max": 8376.0,
+          "mean": 8376.0,
+          "median": 8376.0,
+          "standard_deviation": 0.0,
+          "p95": 8376.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 1495,
+          "network_events": 1495,
+          "links": 0,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 6.1,
+          "max": 8.0,
+          "mean": 6.912000000000001,
+          "median": 6.71,
+          "standard_deviation": 0.676129507647101,
+          "p95": 7.973000000000001
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 9.6,
+          "max": 11.96,
+          "mean": 11.164,
+          "median": 11.335,
+          "standard_deviation": 0.7319562828475485,
+          "p95": 11.9285
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 3.71,
+          "max": 4.75,
+          "mean": 4.388,
+          "median": 4.505000000000001,
+          "standard_deviation": 0.34659614667345756,
+          "p95": 4.7095
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 191307776.0,
+          "max": 218361856.0,
+          "mean": 208977510.4,
+          "median": 212981760.0,
+          "standard_deviation": 9008915.76640597,
+          "p95": 216913100.8
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 518225920.0,
+          "max": 559439872.0,
+          "mean": 534604595.2,
+          "median": 536623104.0,
+          "standard_deviation": 12824316.034584342,
+          "p95": 553591398.4
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 506811.0,
+          "max": 593963.0,
+          "mean": 581166.3,
+          "median": 593957.0,
+          "standard_deviation": 29089.507646610695,
+          "p95": 593963.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 8376.0,
+          "max": 8376.0,
+          "mean": 8376.0,
+          "median": 8376.0,
+          "standard_deviation": 0.0,
+          "p95": 8376.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 1000,
+          "network_events": 2000,
+          "links": 0,
+          "dropped_console_messages": 1178,
+          "dropped_network_events": 178
+        }
+      },
+      "wall_median_change_percent": 1.130369253956295
+    },
+    "failure_invalid_auth": {
+      "kind": "failure",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 0.26,
+          "max": 0.3,
+          "mean": 0.28,
+          "median": 0.28,
+          "standard_deviation": 0.01054092553389459,
+          "p95": 0.2955
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 0.18,
+          "max": 0.21,
+          "mean": 0.193,
+          "median": 0.19,
+          "standard_deviation": 0.009486832980505141,
+          "p95": 0.2055
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.05,
+          "max": 0.07,
+          "mean": 0.06,
+          "median": 0.06,
+          "standard_deviation": 0.0047140452079103175,
+          "p95": 0.06549999999999999
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 22614016.0,
+          "max": 24064000.0,
+          "mean": 23105945.6,
+          "median": 23017472.0,
+          "standard_deviation": 429702.5255652514,
+          "p95": 23831756.799999997
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 544768.0,
+          "max": 1105920.0,
+          "mean": 781516.8,
+          "median": 722944.0,
+          "standard_deviation": 201596.4484766535,
+          "p95": 1093017.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 143.0,
+          "max": 143.0,
+          "mean": 143.0,
+          "median": 143.0,
+          "standard_deviation": 0.0,
+          "p95": 143.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "exit_codes": [
+          2
+        ],
+        "captured_counts": {}
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 0.33,
+          "max": 0.41,
+          "mean": 0.367,
+          "median": 0.365,
+          "standard_deviation": 0.021108186931983415,
+          "p95": 0.39649999999999996
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 0.24,
+          "max": 0.31,
+          "mean": 0.276,
+          "median": 0.28,
+          "standard_deviation": 0.01955050439815357,
+          "p95": 0.301
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.06,
+          "max": 0.07,
+          "mean": 0.064,
+          "median": 0.06,
+          "standard_deviation": 0.005163977794943227,
+          "p95": 0.07
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 23711744.0,
+          "max": 25645056.0,
+          "mean": 24669798.4,
+          "median": 24569856.0,
+          "standard_deviation": 685654.1691428218,
+          "p95": 25626624.0
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 544768.0,
+          "max": 25731072.0,
+          "mean": 3316531.2,
+          "median": 919552.0,
+          "standard_deviation": 7879506.770505045,
+          "p95": 14657126.399999972
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 52.0,
+          "max": 52.0,
+          "mean": 52.0,
+          "median": 52.0,
+          "standard_deviation": 0.0,
+          "p95": 52.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "exit_codes": [
+          2
+        ],
+        "captured_counts": {}
+      },
+      "wall_median_change_percent": 30.357142857142843
+    },
+    "agent_quick_json": {
+      "kind": "agent-facing",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 8.5,
+          "max": 11.0,
+          "mean": 9.345,
+          "median": 9.094999999999999,
+          "standard_deviation": 0.7680458608992332,
+          "p95": 10.671499999999998
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 4.89,
+          "max": 5.33,
+          "mean": 5.058999999999999,
+          "median": 5.01,
+          "standard_deviation": 0.1459413885396769,
+          "p95": 5.2895
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 1.05,
+          "max": 1.12,
+          "mean": 1.078,
+          "median": 1.0750000000000002,
+          "standard_deviation": 0.026161889160464802,
+          "p95": 1.1155000000000002
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 140181504.0,
+          "max": 143273984.0,
+          "mean": 141333708.8,
+          "median": 141381632.0,
+          "standard_deviation": 896418.1235448853,
+          "p95": 142748672.0
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 319336448.0,
+          "max": 341299200.0,
+          "mean": 330084761.6,
+          "median": 328982528.0,
+          "standard_deviation": 9986610.33013379,
+          "p95": 341212569.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 267.0,
+          "max": 267.0,
+          "mean": 267.0,
+          "median": 267.0,
+          "standard_deviation": 0.0,
+          "p95": 267.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 7.0,
+          "max": 7.0,
+          "mean": 7.0,
+          "median": 7.0,
+          "standard_deviation": 0.0,
+          "p95": 7.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 63601.0,
+          "max": 63601.0,
+          "mean": 63601.0,
+          "median": 63601.0,
+          "standard_deviation": 0.0,
+          "p95": 63601.0
+        },
+        "exit_codes": [
+          1
+        ],
+        "captured_counts": {
+          "viewports": 0,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 0,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 8.87,
+          "max": 9.82,
+          "mean": 9.309999999999999,
+          "median": 9.26,
+          "standard_deviation": 0.3217314269870312,
+          "p95": 9.770500000000002
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 5.12,
+          "max": 5.75,
+          "mean": 5.458,
+          "median": 5.415,
+          "standard_deviation": 0.19446793508899543,
+          "p95": 5.7364999999999995
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 1.02,
+          "max": 1.14,
+          "mean": 1.078,
+          "median": 1.0750000000000002,
+          "standard_deviation": 0.03705851229249945,
+          "p95": 1.131
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 140529664.0,
+          "max": 142221312.0,
+          "mean": 141591347.2,
+          "median": 141756416.0,
+          "standard_deviation": 537815.8743718895,
+          "p95": 142210252.8
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 320106496.0,
+          "max": 342913024.0,
+          "mean": 330178150.4,
+          "median": 325994496.0,
+          "standard_deviation": 10443350.049214872,
+          "p95": 342439321.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 267.0,
+          "max": 267.0,
+          "mean": 267.0,
+          "median": 267.0,
+          "standard_deviation": 0.0,
+          "p95": 267.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 7.0,
+          "max": 7.0,
+          "mean": 7.0,
+          "median": 7.0,
+          "standard_deviation": 0.0,
+          "p95": 7.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 63946.0,
+          "max": 63946.0,
+          "mean": 63946.0,
+          "median": 63946.0,
+          "standard_deviation": 0.0,
+          "p95": 63946.0
+        },
+        "exit_codes": [
+          1
+        ],
+        "captured_counts": {
+          "viewports": 0,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 0,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "wall_median_change_percent": 1.814183617372193
+    },
+    "kujo_test_suite": {
+      "kind": "reliability",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 8.16,
+          "max": 15.11,
+          "mean": 11.049,
+          "median": 11.125,
+          "standard_deviation": 2.00413156587419,
+          "p95": 13.926499999999997
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 7.58,
+          "max": 10.97,
+          "mean": 9.746,
+          "median": 9.95,
+          "standard_deviation": 1.1341585231155105,
+          "p95": 10.97
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.23,
+          "max": 0.43,
+          "mean": 0.308,
+          "median": 0.29,
+          "standard_deviation": 0.059591199946897454,
+          "p95": 0.3984999999999999
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 39129088.0,
+          "max": 43638784.0,
+          "mean": 42894950.4,
+          "median": 43382784.0,
+          "standard_deviation": 1374106.3592814058,
+          "p95": 43635097.6
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 39317504.0,
+          "max": 44036096.0,
+          "mean": 43021516.8,
+          "median": 43511808.0,
+          "standard_deviation": 1400459.4113987342,
+          "p95": 43954995.2
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 80.0,
+          "max": 80.0,
+          "mean": 80.0,
+          "median": 80.0,
+          "standard_deviation": 0.0,
+          "p95": 80.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 7.0,
+          "max": 7.0,
+          "mean": 7.0,
+          "median": 7.0,
+          "standard_deviation": 0.0,
+          "p95": 7.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {}
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 10.41,
+          "max": 14.13,
+          "mean": 12.802000000000001,
+          "median": 13.17,
+          "standard_deviation": 1.286440394611771,
+          "p95": 14.0625
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 9.94,
+          "max": 12.73,
+          "mean": 11.748000000000001,
+          "median": 12.02,
+          "standard_deviation": 1.0182534065742181,
+          "p95": 12.680499999999999
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.27,
+          "max": 0.44,
+          "mean": 0.36,
+          "median": 0.36,
+          "standard_deviation": 0.05270462766947299,
+          "p95": 0.43099999999999994
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 44195840.0,
+          "max": 47374336.0,
+          "mean": 46164377.6,
+          "median": 46223360.0,
+          "standard_deviation": 995907.863645941,
+          "p95": 47322726.4
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 44630016.0,
+          "max": 47869952.0,
+          "mean": 46295859.2,
+          "median": 46284800.0,
+          "standard_deviation": 959915.8523357718,
+          "p95": 47599001.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 80.0,
+          "max": 80.0,
+          "mean": 80.0,
+          "median": 80.0,
+          "standard_deviation": 0.0,
+          "p95": 80.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 7.0,
+          "max": 7.0,
+          "mean": 7.0,
+          "median": 7.0,
+          "standard_deviation": 0.0,
+          "p95": 7.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {}
+      },
+      "wall_median_change_percent": 18.382022471910112
+    },
+    "bridge_test_suite": {
+      "kind": "reliability",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 5.38,
+          "max": 9.26,
+          "mean": 6.812,
+          "median": 6.885,
+          "standard_deviation": 1.1564293704714046,
+          "p95": 8.422999999999998
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 3.64,
+          "max": 4.06,
+          "mean": 3.9159999999999995,
+          "median": 3.95,
+          "standard_deviation": 0.1369671493461113,
+          "p95": 4.0555
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 1.54,
+          "max": 1.71,
+          "mean": 1.59,
+          "median": 1.5750000000000002,
+          "standard_deviation": 0.05374838498865696,
+          "p95": 1.6875
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 139206656.0,
+          "max": 142921728.0,
+          "mean": 140468224.0,
+          "median": 139749376.0,
+          "standard_deviation": 1557708.3153299273,
+          "p95": 142883020.8
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 292220928.0,
+          "max": 368488448.0,
+          "mean": 333336166.4,
+          "median": 337932288.0,
+          "standard_deviation": 23375149.883735683,
+          "p95": 361969049.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 1259.0,
+          "max": 1263.0,
+          "mean": 1260.7,
+          "median": 1261.0,
+          "standard_deviation": 1.2516655570345725,
+          "p95": 1262.55
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 27.0,
+          "max": 27.0,
+          "mean": 27.0,
+          "median": 27.0,
+          "standard_deviation": 0.0,
+          "p95": 27.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {}
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 5.8,
+          "max": 11.93,
+          "mean": 8.732,
+          "median": 8.555,
+          "standard_deviation": 2.1329937229683127,
+          "p95": 11.722999999999999
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 4.34,
+          "max": 4.82,
+          "mean": 4.642,
+          "median": 4.65,
+          "standard_deviation": 0.15134948518798036,
+          "p95": 4.8155
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 2.05,
+          "max": 2.28,
+          "mean": 2.132,
+          "median": 2.11,
+          "standard_deviation": 0.07083627444874398,
+          "p95": 2.253
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 138797056.0,
+          "max": 143667200.0,
+          "mean": 139819827.2,
+          "median": 139499520.0,
+          "standard_deviation": 1425159.563535006,
+          "p95": 142039654.4
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 311648256.0,
+          "max": 364007424.0,
+          "mean": 341903360.0,
+          "median": 339640320.0,
+          "standard_deviation": 17854158.68455018,
+          "p95": 363754905.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 1502.0,
+          "max": 1507.0,
+          "mean": 1505.2,
+          "median": 1505.5,
+          "standard_deviation": 1.5491933384829668,
+          "p95": 1507.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 30.0,
+          "max": 30.0,
+          "mean": 30.0,
+          "median": 30.0,
+          "standard_deviation": 0.0,
+          "p95": 30.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 0.0,
+          "max": 0.0,
+          "mean": 0.0,
+          "median": 0.0,
+          "standard_deviation": 0.0,
+          "p95": 0.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {}
+      },
+      "wall_median_change_percent": 24.255628177196805
+    },
+    "scale_links_10": {
+      "kind": "scaling",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 2.5,
+          "max": 3.24,
+          "mean": 2.691,
+          "median": 2.635,
+          "standard_deviation": 0.2268357212708009,
+          "p95": 3.096
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 2.21,
+          "max": 2.36,
+          "mean": 2.2600000000000002,
+          "median": 2.255,
+          "standard_deviation": 0.048989794855663474,
+          "p95": 2.3329999999999997
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.77,
+          "max": 0.89,
+          "mean": 0.8160000000000001,
+          "median": 0.815,
+          "standard_deviation": 0.035339622081862844,
+          "p95": 0.8719999999999999
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 138100736.0,
+          "max": 141053952.0,
+          "mean": 139173478.4,
+          "median": 138885120.0,
+          "standard_deviation": 984683.5682615339,
+          "p95": 140755353.6
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 289927168.0,
+          "max": 314257408.0,
+          "mean": 300173721.6,
+          "median": 296220672.0,
+          "standard_deviation": 10297166.805653023,
+          "p95": 313332121.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 2021.0,
+          "max": 2021.0,
+          "mean": 2021.0,
+          "median": 2021.0,
+          "standard_deviation": 0.0,
+          "p95": 2021.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 14743.0,
+          "max": 14743.0,
+          "mean": 14743.0,
+          "median": 14743.0,
+          "standard_deviation": 0.0,
+          "p95": 14743.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 10,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 2.48,
+          "max": 4.66,
+          "mean": 2.8400000000000003,
+          "median": 2.56,
+          "standard_deviation": 0.6639277069079133,
+          "p95": 3.8904999999999985
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 2.19,
+          "max": 2.38,
+          "mean": 2.243,
+          "median": 2.215,
+          "standard_deviation": 0.06634087059355723,
+          "p95": 2.3575
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.78,
+          "max": 0.91,
+          "mean": 0.8210000000000001,
+          "median": 0.81,
+          "standard_deviation": 0.03725288952252935,
+          "p95": 0.883
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 137891840.0,
+          "max": 141271040.0,
+          "mean": 139011276.8,
+          "median": 138903552.0,
+          "standard_deviation": 932609.7200947935,
+          "p95": 140485836.8
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 289509376.0,
+          "max": 310865920.0,
+          "mean": 294461030.4,
+          "median": 290813952.0,
+          "standard_deviation": 8213907.846570626,
+          "p95": 310088089.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 2408.0,
+          "max": 2408.0,
+          "mean": 2408.0,
+          "median": 2408.0,
+          "standard_deviation": 0.0,
+          "p95": 2408.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 14743.0,
+          "max": 14743.0,
+          "mean": 14743.0,
+          "median": 14743.0,
+          "standard_deviation": 0.0,
+          "p95": 14743.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 10,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "wall_median_change_percent": -2.8462998102466694
+    },
+    "scale_links_100": {
+      "kind": "scaling",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 2.51,
+          "max": 2.7,
+          "mean": 2.631,
+          "median": 2.63,
+          "standard_deviation": 0.06008327554319933,
+          "p95": 2.7
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 2.24,
+          "max": 2.41,
+          "mean": 2.332,
+          "median": 2.35,
+          "standard_deviation": 0.05731007280089984,
+          "p95": 2.3964999999999996
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.79,
+          "max": 0.85,
+          "mean": 0.828,
+          "median": 0.84,
+          "standard_deviation": 0.023944379994757268,
+          "p95": 0.85
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 140386304.0,
+          "max": 143110144.0,
+          "mean": 141624115.2,
+          "median": 141555712.0,
+          "standard_deviation": 769890.1474142341,
+          "p95": 142763622.4
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 310337536.0,
+          "max": 324657152.0,
+          "mean": 314313932.8,
+          "median": 312733696.0,
+          "standard_deviation": 4142579.6441733367,
+          "p95": 320965222.4
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 8511.0,
+          "max": 8511.0,
+          "mean": 8511.0,
+          "median": 8511.0,
+          "standard_deviation": 0.0,
+          "p95": 8511.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 45843.0,
+          "max": 45843.0,
+          "mean": 45843.0,
+          "median": 45843.0,
+          "standard_deviation": 0.0,
+          "p95": 45843.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 100,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 2.56,
+          "max": 17.72,
+          "mean": 4.29,
+          "median": 2.75,
+          "standard_deviation": 4.723383909397536,
+          "p95": 11.167999999999985
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 2.24,
+          "max": 2.5,
+          "mean": 2.388,
+          "median": 2.395,
+          "standard_deviation": 0.08363943780033167,
+          "p95": 2.4865000000000004
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.78,
+          "max": 0.96,
+          "mean": 0.86,
+          "median": 0.86,
+          "standard_deviation": 0.05676462121975467,
+          "p95": 0.9464999999999999
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 140455936.0,
+          "max": 142688256.0,
+          "mean": 141586432.0,
+          "median": 141613056.0,
+          "standard_deviation": 685400.0531154537,
+          "p95": 142485504.0
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 292995072.0,
+          "max": 325394432.0,
+          "mean": 307813580.8,
+          "median": 314861568.0,
+          "standard_deviation": 12370729.498634255,
+          "p95": 321197465.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 8898.0,
+          "max": 8899.0,
+          "mean": 8898.1,
+          "median": 8898.0,
+          "standard_deviation": 0.31622776601683794,
+          "p95": 8898.55
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 45843.0,
+          "max": 45843.0,
+          "mean": 45843.0,
+          "median": 45843.0,
+          "standard_deviation": 0.0,
+          "p95": 45843.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 100,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "wall_median_change_percent": 4.562737642585556
+    },
+    "scale_links_1000": {
+      "kind": "scaling",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 2.92,
+          "max": 4.73,
+          "mean": 3.69,
+          "median": 3.56,
+          "standard_deviation": 0.5809953145728076,
+          "p95": 4.644500000000001
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 2.66,
+          "max": 2.82,
+          "mean": 2.747,
+          "median": 2.755,
+          "standard_deviation": 0.054170512683972584,
+          "p95": 2.811
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.83,
+          "max": 0.89,
+          "mean": 0.865,
+          "median": 0.87,
+          "standard_deviation": 0.021730674684008848,
+          "p95": 0.89
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 147861504.0,
+          "max": 167755776.0,
+          "mean": 160753254.4,
+          "median": 164673536.0,
+          "standard_deviation": 7843489.378366057,
+          "p95": 167365017.6
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 330301440.0,
+          "max": 365895680.0,
+          "mean": 345588531.2,
+          "median": 340643840.0,
+          "standard_deviation": 14464802.683373066,
+          "p95": 364520652.8
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 69121.0,
+          "max": 69121.0,
+          "mean": 69121.0,
+          "median": 69121.0,
+          "standard_deviation": 0.0,
+          "p95": 69121.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 396704.0,
+          "max": 396704.0,
+          "mean": 396704.0,
+          "median": 396704.0,
+          "standard_deviation": 0.0,
+          "p95": 396704.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 1000,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 3.08,
+          "max": 3.7,
+          "mean": 3.3609999999999998,
+          "median": 3.2800000000000002,
+          "standard_deviation": 0.22002272609891915,
+          "p95": 3.6775
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 2.65,
+          "max": 2.92,
+          "mean": 2.728,
+          "median": 2.705,
+          "standard_deviation": 0.08702490065109712,
+          "p95": 2.8839999999999995
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.83,
+          "max": 0.92,
+          "mean": 0.8720000000000001,
+          "median": 0.87,
+          "standard_deviation": 0.027406406388125977,
+          "p95": 0.9155
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 147869696.0,
+          "max": 167206912.0,
+          "mean": 163577036.8,
+          "median": 165988352.0,
+          "standard_deviation": 5734458.774048008,
+          "p95": 166825369.6
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 328462336.0,
+          "max": 359346176.0,
+          "mean": 342006579.2,
+          "median": 342261760.0,
+          "standard_deviation": 11414493.707385466,
+          "p95": 356411801.6
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 69508.0,
+          "max": 69508.0,
+          "mean": 69508.0,
+          "median": 69508.0,
+          "standard_deviation": 0.0,
+          "p95": 69508.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 396704.0,
+          "max": 396704.0,
+          "mean": 396704.0,
+          "median": 396704.0,
+          "standard_deviation": 0.0,
+          "p95": 396704.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 1000,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "wall_median_change_percent": -7.865168539325837
+    },
+    "scale_links_5000": {
+      "kind": "scaling",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 3.36,
+          "max": 3.92,
+          "mean": 3.5789999999999997,
+          "median": 3.545,
+          "standard_deviation": 0.19530318311111391,
+          "p95": 3.8659999999999997
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 3.5,
+          "max": 3.8,
+          "mean": 3.6100000000000003,
+          "median": 3.565,
+          "standard_deviation": 0.1098483803552272,
+          "p95": 3.782
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.99,
+          "max": 1.06,
+          "mean": 1.018,
+          "median": 1.0150000000000001,
+          "standard_deviation": 0.025298221281347056,
+          "p95": 1.0554999999999999
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 186572800.0,
+          "max": 193089536.0,
+          "mean": 189659136.0,
+          "median": 190042112.0,
+          "standard_deviation": 1936069.8672278218,
+          "p95": 192236134.39999998
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 398778368.0,
+          "max": 448364544.0,
+          "mean": 437960704.0,
+          "median": 442963968.0,
+          "standard_deviation": 15216760.362018367,
+          "p95": 448169164.79999995
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 341123.0,
+          "max": 341123.0,
+          "mean": 341123.0,
+          "median": 341123.0,
+          "standard_deviation": 0.0,
+          "p95": 341123.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 410402.0,
+          "max": 410402.0,
+          "mean": 410402.0,
+          "median": 410402.0,
+          "standard_deviation": 0.0,
+          "p95": 410402.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 5000,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 3.34,
+          "max": 4.03,
+          "mean": 3.6710000000000003,
+          "median": 3.63,
+          "standard_deviation": 0.23439994311717177,
+          "p95": 4.016500000000001
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 3.45,
+          "max": 3.82,
+          "mean": 3.63,
+          "median": 3.635,
+          "standard_deviation": 0.11440668201153668,
+          "p95": 3.7750000000000004
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.97,
+          "max": 1.07,
+          "mean": 1.0210000000000001,
+          "median": 1.025,
+          "standard_deviation": 0.03071373199943854,
+          "p95": 1.061
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 185532416.0,
+          "max": 192299008.0,
+          "mean": 190197350.4,
+          "median": 190488576.0,
+          "standard_deviation": 1955658.2568729583,
+          "p95": 192083353.60000002
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 435171328.0,
+          "max": 446717952.0,
+          "mean": 441581977.6,
+          "median": 441722880.0,
+          "standard_deviation": 4107160.2541206335,
+          "p95": 446647910.4
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 341510.0,
+          "max": 341510.0,
+          "mean": 341510.0,
+          "median": 341510.0,
+          "standard_deviation": 0.0,
+          "p95": 341510.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 410402.0,
+          "max": 410402.0,
+          "mean": 410402.0,
+          "median": 410402.0,
+          "standard_deviation": 0.0,
+          "p95": 410402.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 5000,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "wall_median_change_percent": 2.39774330042313
+    },
+    "scale_links_10000": {
+      "kind": "scaling",
+      "baseline": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 3.66,
+          "max": 3.93,
+          "mean": 3.749,
+          "median": 3.75,
+          "standard_deviation": 0.074899933244296,
+          "p95": 3.867
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 3.99,
+          "max": 4.24,
+          "mean": 4.115,
+          "median": 4.135,
+          "standard_deviation": 0.07975657409336934,
+          "p95": 4.212999999999999
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 1.01,
+          "max": 1.1,
+          "mean": 1.0450000000000002,
+          "median": 1.04,
+          "standard_deviation": 0.02838231060987736,
+          "p95": 1.0865
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 234622976.0,
+          "max": 253636608.0,
+          "mean": 245534720.0,
+          "median": 245878784.0,
+          "standard_deviation": 4680557.4257417,
+          "p95": 251115110.4
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 499912704.0,
+          "max": 538832896.0,
+          "mean": 505619251.2,
+          "median": 502255616.0,
+          "standard_deviation": 11716984.377446355,
+          "p95": 522889215.99999994
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 681131.0,
+          "max": 681131.0,
+          "mean": 681131.0,
+          "median": 681131.0,
+          "standard_deviation": 0.0,
+          "p95": 681131.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 410171.0,
+          "max": 410171.0,
+          "mean": 410171.0,
+          "median": 410171.0,
+          "standard_deviation": 0.0,
+          "p95": 410171.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 10000,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "current": {
+        "wall_seconds": {
+          "n": 10,
+          "min": 3.09,
+          "max": 3.44,
+          "mean": 3.2589999999999995,
+          "median": 3.23,
+          "standard_deviation": 0.14066903631495378,
+          "p95": 3.4355
+        },
+        "user_seconds": {
+          "n": 10,
+          "min": 3.3,
+          "max": 3.69,
+          "mean": 3.4810000000000003,
+          "median": 3.4850000000000003,
+          "standard_deviation": 0.130422390715705,
+          "p95": 3.6585
+        },
+        "system_seconds": {
+          "n": 10,
+          "min": 0.89,
+          "max": 1.03,
+          "mean": 0.9550000000000001,
+          "median": 0.9550000000000001,
+          "standard_deviation": 0.048131763593978825,
+          "p95": 1.0165
+        },
+        "max_rss_bytes_direct_process": {
+          "n": 10,
+          "min": 187543552.0,
+          "max": 192794624.0,
+          "mean": 190073651.2,
+          "median": 190156800.0,
+          "standard_deviation": 1537350.8432709677,
+          "p95": 192158720.0
+        },
+        "peak_rss_bytes_process_tree_sampled": {
+          "n": 10,
+          "min": 449687552.0,
+          "max": 470487040.0,
+          "mean": 463945728.0,
+          "median": 464535552.0,
+          "standard_deviation": 5911105.928163208,
+          "p95": 469956198.4
+        },
+        "stdout_bytes": {
+          "n": 10,
+          "min": 341524.0,
+          "max": 341524.0,
+          "mean": 341524.0,
+          "median": 341524.0,
+          "standard_deviation": 0.0,
+          "p95": 341524.0
+        },
+        "stdout_lines": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_files": {
+          "n": 10,
+          "min": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "median": 1.0,
+          "standard_deviation": 0.0,
+          "p95": 1.0
+        },
+        "artifact_bytes": {
+          "n": 10,
+          "min": 410171.0,
+          "max": 410171.0,
+          "mean": 410171.0,
+          "median": 410171.0,
+          "standard_deviation": 0.0,
+          "p95": 410171.0
+        },
+        "exit_codes": [
+          0
+        ],
+        "captured_counts": {
+          "viewports": 1,
+          "console_messages": 0,
+          "network_events": 0,
+          "links": 5000,
+          "dropped_console_messages": 0,
+          "dropped_network_events": 0
+        }
+      },
+      "wall_median_change_percent": -13.866666666666665
+    }
+  }
+}

@@ -22,7 +22,7 @@ from src.config import is_crawl, parse_max_depth, parse_max_pages, parse_auth_fi
 from src.config_file import resolve_config_path, load_config_file
 from src.checks import check_performance
 from src.checks import normalize_url, prepare_link_url, link_url_was_seen
-from src.crawl import collect_crawl_candidates
+from src.crawl import collect_crawl_candidates, enqueue_candidates, collect_queue_candidates
 from src.config import is_html, is_watch, parse_watch_interval, parse_ledger, parse_howl
 from src.report_html import html_escape, generate_html_report
 from src.integrations import write_ledger_record, write_howl_summary
@@ -36,7 +36,7 @@ from src.runner import step_required_field_error
 from src.config import lens_version
 from src.accessibility import map_a11y_severity, is_a11y_enabled
 
-LENS_VERSION := "1.0.1"
+LENS_VERSION := "1.1.0"
 from src.common import is_trueish, is_falseish
 from src.validate import extract_host, is_localhost_host, is_localhost_url
 from src.validate import validate_url, has_valid_scheme, validate_auth_storage_state, validate_config_write_paths, validate_directory_write_path, validate_file_write_path
@@ -504,7 +504,7 @@ func test_parse_out_dir_custom() {
 
 func test_version_defined() {
 	check(LENS_VERSION != "", "LENS_VERSION is defined")
-	check_eq(LENS_VERSION, "1.0.1", "LENS_VERSION is 1.0.1")
+	check_eq(LENS_VERSION, "1.1.0", "LENS_VERSION is 1.1.0")
 }
 
 # ============================================================
@@ -937,8 +937,8 @@ func test_phase4_flags() {
 }
 
 func test_lens_version_consistent() {
-	check_eq(lens_version(), "1.0.1", "lens_version: single source is 1.0.1")
-	check_eq(LENS_VERSION, "1.0.1", "test-local LENS_VERSION matches")
+	check_eq(lens_version(), "1.1.0", "lens_version: single source is 1.1.0")
+	check_eq(LENS_VERSION, "1.1.0", "test-local LENS_VERSION matches")
 }
 
 func test_flow_step_cap() {
@@ -1102,6 +1102,24 @@ func test_write_howl_summary() {
 	content := read_file(path)
 	check(is_trueish(contains(content, "PASS")), "howl: status present")
 	check(is_trueish(contains(content, "headline")), "howl: headline present")
+}
+
+func test_crawl_frontier_bound() {
+	fixture := { "viewports": array({ "links": array({"text":"Fixture","href":"javascript:alert(1)"},{"text":"Fixture","href":"/logout"},{"text":"Fixture","href":"https://example.com"},{"text":"Fixture","href":"/a"},{"text":"Fixture","href":"/a"},{"text":"Fixture","href":"/b"},{"text":"Fixture","href":"/c"}) }) }
+	bounded := collect_queue_candidates(fixture, "http://localhost/", array("http://localhost/"), array(), 3)
+	check_eq(len(bounded), 2, "crawl discovery: budget counts safe unique candidates")
+	check_eq(bounded[1], "http://localhost/b", "crawl discovery: guards and stable prefix")
+	check_eq(len(collect_queue_candidates(fixture, "http://localhost/", array(), array(), 1)), 0, "crawl discovery: exhausted budget skips links")
+
+	start := "http://localhost/"
+	candidates := array(start, "http://localhost/a", "http://localhost/a", "http://localhost/b", "http://localhost/c")
+	queue := enqueue_candidates(array(), candidates, 1, array(start), 2, 3)
+	check_eq(len(queue), 2, "crawl queue: bounded by remaining page budget")
+	check_eq(queue[0]["url"], "http://localhost/a", "crawl queue: stable BFS first candidate")
+	check_eq(queue[1]["url"], "http://localhost/b", "crawl queue: skips duplicates before budget")
+	check_eq(len(enqueue_candidates(queue, array("http://localhost/d"), 2, array(start, "http://localhost/a"), 2, 3)), 2, "crawl queue: consumed entries retain lifetime budget")
+	check_eq(len(enqueue_candidates(array(), candidates, 3, array(start), 2, 10)), 0, "crawl queue: depth bound")
+	check_eq(len(enqueue_candidates(array(), candidates, 1, array(start), 2, 1)), 0, "crawl queue: one-page budget")
 }
 
 func test_collect_crawl_candidates() {
@@ -1836,6 +1854,7 @@ test_build_program_step_non_executable_is_null()
 test_generate_walkthrough_html()
 test_write_ledger_record_appends()
 test_write_howl_summary()
+test_crawl_frontier_bound()
 test_collect_crawl_candidates()
 test_malformed_flow_json_is_rejected()
 test_malformed_spec_json_is_rejected()
@@ -1850,6 +1869,19 @@ test_console_artifact_writing()
 test_network_artifact_writing()
 test_dom_summary_artifact_writing()
 test_report_references_runtime_artifacts()
+
+# Browser-runtime config and secret propagation contracts.
+ready_cfg := build_config(array("check", "http://localhost:3000", "--ready-selector", "#ready"))
+check_eq(ready_cfg["ready_selector"], "#ready", "readiness: explicit selector")
+ready_merged := merge_file_config(ready_cfg, array("check", "http://localhost:3000", "--ready-selector", "#ready"), { "ready_selector": "#other" })
+check_eq(ready_merged["ready_selector"], "#ready", "readiness: CLI wins")
+ready_file := merge_file_config(build_config(array("check", "http://localhost:3000")), array("check", "http://localhost:3000"), { "ready_selector": "#loaded" })
+check_eq(ready_file["ready_selector"], "#loaded", "readiness: config hook")
+secret_program := build_program_step({ "type": { "selector": "#password", "value": "fixture-private", "secret": true } }, 1)
+check_eq(secret_program["secret"], true, "flow: secret marking reaches browser")
+
+ready_display := redacted_bridge_command_for_display(array("node", "--ready-selector", "input[value=PRIVATE_READINESS]"))
+check_eq(index_of(ready_display, "PRIVATE_READINESS"), -1, "readiness: verbose selector is hidden")
 
 print_summary()
 

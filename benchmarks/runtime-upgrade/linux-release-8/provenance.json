@@ -1,0 +1,39 @@
+{
+  "workflow_run": "https://github.com/kujolang/lens/actions/runs/34084543631",
+  "conclusion": "success",
+  "baseline_revision": "504ff55a63440b895bd4ea515612ddde94ea9cdb",
+  "initial_local_baseline_revision": "e96fb383366b845c633302a59effd4b3010f4b6e",
+  "baseline_equivalence": "git diff --exit-code confirmed identical bridge, src, lens and benchmark-fixture-server.py sources between CI and initial local baselines",
+  "candidate_revision": "e8cf9357462aa1ab438b5b358eee3c9d84d131dc",
+  "production_revision": "45af1d798ffe19bc876750c2b36a2d1c5ec542f3",
+  "node": "20.20.2",
+  "kujo": "1.3.1",
+  "kujo_revision": "9cedbf2f5ae5a0a9b126b055f4c9a6a58a2c23eb",
+  "kujo_build": "cargo build --release, shared by both revisions",
+  "os": "Ubuntu 24.04.4",
+  "architecture": "x86_64",
+  "runner_image": "ubuntu24/20260831.293",
+  "cpu_memory_note": "CPU count and RAM not separately sampled on the hosted runner; do not equate it to a named development machine",
+  "iterations": 8,
+  "concurrency_iterations": 3,
+  "before": {
+    "lens": "1.0.1",
+    "playwright": "1.60.0",
+    "chromium_revision": "1223",
+    "chromium_version": "148.0.7778.96"
+  },
+  "after": {
+    "lens": "1.1.0",
+    "playwright": "1.61.1",
+    "chromium_revision": "1228",
+    "chromium_version": "149.0.7827.55"
+  },
+  "verification": {
+    "kujo_passed": 462,
+    "bridge_passed": 51,
+    "cli_e2e_passed": 10,
+    "benchmark_harness_passed": 3,
+    "failed": 0
+  },
+  "method_note": "Core harness preserves original timing method and records medians only; runtime harness retains raw samples. Each group is sequential before/after on the same runner. Small differences are not statistical-equivalence proof."
+}

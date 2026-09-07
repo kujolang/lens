@@ -1,0 +1,93 @@
+{
+  "name": "lens-hardening-before-after",
+  "description": "Identical deterministic capability and reliability checks for the pre-hardening and v1.0.1 Lens checkouts.",
+  "version": "1.0.0",
+  "output_dir": "./eval-results",
+  "stop_on_failure": false,
+  "tests": [
+    {
+      "name": "Correctness: Kujo test suite passes",
+      "tags": ["correctness", "reliability"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK kujo-tests"}
+    },
+    {
+      "name": "Correctness: bridge test suite passes",
+      "tags": ["correctness", "reliability"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK bridge-tests"}
+    },
+    {
+      "name": "Usability: version command succeeds",
+      "tags": ["agent-usability"],
+      "check": "output_contains",
+      "params": {"command": "$LENS_CHECK version", "expected": "Lens"}
+    },
+    {
+      "name": "Failure: missing auth fails before browser boundary",
+      "tags": ["failure-behavior", "reliability"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK missing-auth-exit"}
+    },
+    {
+      "name": "Failure: missing auth path is not disclosed",
+      "tags": ["failure-behavior", "agent-usability"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK missing-auth-redaction"}
+    },
+    {
+      "name": "Reliability: console evidence is bounded and counted",
+      "tags": ["reliability", "context-efficiency"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK console-bound"}
+    },
+    {
+      "name": "Reliability: network evidence is bounded and counted",
+      "tags": ["reliability", "context-efficiency"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK network-bound"}
+    },
+    {
+      "name": "Reliability: link evidence is bounded and counted",
+      "tags": ["reliability", "context-efficiency"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK links-bound"}
+    },
+    {
+      "name": "Reliability: custom viewport dimensions are bounded",
+      "tags": ["reliability", "failure-behavior"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK viewport-bound"}
+    },
+    {
+      "name": "Safety: output paths reject unsafe final targets",
+      "tags": ["reliability", "failure-behavior"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK write-path-validation"}
+    },
+    {
+      "name": "Failure: malformed provider output has a stable guard",
+      "tags": ["failure-behavior", "agent-usability"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK malformed-provider-guard"}
+    },
+    {
+      "name": "Safety: accessibility evidence passes through redaction",
+      "tags": ["reliability", "agent-usability"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK accessibility-redaction"}
+    },
+    {
+      "name": "Usability: evidence truncation produces a warning",
+      "tags": ["agent-usability", "context-efficiency"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK limit-warning"}
+    },
+    {
+      "name": "Reliability: report outputs use explicit overwrite",
+      "tags": ["reliability", "failure-behavior"],
+      "check": "command_succeeds",
+      "params": {"command": "$LENS_CHECK forced-overwrite"}
+    }
+  ]
+}

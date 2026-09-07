@@ -1,0 +1,86 @@
+{
+  "production_revision": "45af1d798ffe19bc876750c2b36a2d1c5ec542f3",
+  "verification_revision": "e8cf9357462aa1ab438b5b358eee3c9d84d131dc",
+  "local": {
+    "platform": "macOS 26.6.2 x86_64",
+    "kujo": {
+      "version": "1.2.3",
+      "passed": 462,
+      "failed": 0
+    },
+    "node26_real_bridge": {
+      "version": "26.7.0",
+      "passed": 51,
+      "failed": 0,
+      "skipped": 0
+    },
+    "node18_real_bridge": {
+      "version": "18.20.8",
+      "passed": 51,
+      "failed": 0,
+      "skipped": 0
+    },
+    "node20_unit_bridge": {
+      "version": "20.20.2",
+      "passed": 28,
+      "failed": 0,
+      "skipped_browser_groups": 7
+    },
+    "node22_unit_bridge": {
+      "version": "22.23.2",
+      "passed": 28,
+      "failed": 0,
+      "skipped_browser_groups": 7
+    },
+    "chromium_cli_e2e": {
+      "passed": 10,
+      "failed": 0
+    },
+    "benchmark_harness": {
+      "passed": 3,
+      "failed": 0
+    },
+    "firefox_cli_capture": {
+      "passed": 1,
+      "failed": 0
+    },
+    "webkit_cli_capture": {
+      "passed": 1,
+      "failed": 0
+    },
+    "syntax": {
+      "bridge_js": "passed",
+      "python_harnesses": "passed",
+      "bash": "passed",
+      "workflow_yaml": "passed"
+    },
+    "visual": {
+      "trivial_desktop_mobile_png_baseline": "byte-identical",
+      "native_webm": "decoded and visually reviewed; secret input masked",
+      "other_sites_pixel_equivalence": "not asserted"
+    }
+  },
+  "baseline_tests": {
+    "kujo": 448,
+    "bridge": 18
+  },
+  "scope_note": "Counts are distinct suite executions, not summed unique tests. Node 20/22 local unit-only compatibility runs precede the final timer correction; final Node 20 real-browser verification runs in Linux CI.",
+  "linux_release_ci": {
+    "kujo_passed": 462,
+    "bridge_passed": 51,
+    "cli_e2e_passed": 10,
+    "benchmark_harness_passed": 3,
+    "failed": 0,
+    "workflow_run": "https://github.com/kujolang/lens/actions/runs/34084543631",
+    "node": "20.20.2",
+    "kujo": "1.3.1",
+    "os": "Ubuntu 24.04.4"
+  },
+  "linux_phase_ci": {
+    "workflow_run": "https://github.com/kujolang/lens/actions/runs/34086825049",
+    "conclusion": "success",
+    "paired_trials_per_fixture": 24,
+    "fixtures": 2,
+    "production_changed_since_functional_ci": false
+  }
+}

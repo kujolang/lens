@@ -8,7 +8,7 @@ from src.common import is_trueish, is_falseish, str_starts_with, str_contains, p
 # Single source of truth for the Lens version string. Keep kennel.toml and
 # lens.spec.yml in sync with this when releasing.
 export func lens_version() {
-	return "1.0.1"
+	return "1.1.0"
 }
 
 # Severity levels ordered from least to most severe.
@@ -43,13 +43,12 @@ DEFAULT_DIFF_THRESHOLD_VAL := 0.01
 # Default output directory base.
 DEFAULT_OUT_DIR_BASE := ".lens/runs"
 
-# Default post-load settle window in milliseconds (Phase 1.2). After the page
-# reaches network-idle, Lens waits this long to capture any final console or
-# network activity. Kept small because readiness is now event-driven.
+# Extra observation horizon in milliseconds, added to the 500ms quick-mode
+# minimum. Shared readiness also requires DOM/network quiet within a bound.
 DEFAULT_SETTLE_MS := 400
 
 # Default maximum number of viewports captured concurrently (Phase 1.3).
-# 0 means "no explicit cap" → the provider uses the viewport count.
+# 0 selects the measured browser-runtime default (four contexts).
 DEFAULT_MAX_CONCURRENCY := 0
 
 # Bound custom screenshot dimensions so a typo or hostile config cannot force
@@ -569,6 +568,7 @@ export func build_config(argv) {
 		"a11y_include": parse_a11y_include(argv),
 		"a11y_exclude": parse_a11y_exclude(argv),
 		"settle_ms": quick_settle_ms,
+		"ready_selector": flag_value(argv, "--ready-selector", ""),
 		"max_concurrency": parse_max_concurrency(argv),
 		"config_path": parse_config_path(argv),
 		"perf": is_perf(argv),
@@ -693,6 +693,7 @@ export func merge_file_config(config, argv, file_data) {
 		array("a11y_include", "a11y_include", "--a11y-include"),
 		array("a11y_exclude", "a11y_exclude", "--a11y-exclude"),
 		array("settle_ms", "settle_ms", "--settle-ms"),
+		array("ready_selector", "ready_selector", "--ready-selector"),
 		array("max_concurrency", "max_concurrency", "--max-concurrency"),
 		array("check_links", "check_links", "--check-links"),
 		array("allow_external", "allow_external", "--allow-external"),
@@ -801,8 +802,8 @@ export func print_help() {
 		"  --config <path>     Load defaults from a TOML file (default: ./.lens.toml)",
 		"  --out <path>        Output directory (default: .lens/runs/<timestamp>)",
 		"  --viewport <name>   Viewport to capture: desktop, mobile, or WxH (repeatable)",
-		"  --settle-ms <n>     Post-readiness settle window in ms (default: 400)",
-		"  --max-concurrency <n> Max viewports captured at once (default: all)",
+		"  --settle-ms <n>     Extra evidence horizon in ms (default: 400, max: 10000)",
+		"  --max-concurrency <n> Max viewports captured at once (default: 4; maximum: 16)",
 		"  --timeout <seconds> Page load timeout in seconds (default: 30, max: 300)",
 		"  --verbose           Print expanded terminal output",
 		"  --json              Print JSON summary to stdout",
@@ -823,6 +824,7 @@ export func print_help() {
 		"  --browser <name>    Browser engine: chromium, firefox, webkit",
 		"  --throttle <prof>   Network throttle: 3g, slow-3g, 4g",
 		"  --device <name>     Emulate a Playwright device descriptor",
+		"  --ready-selector <s> Wait for visible app-ready selector (optional)",
 		"  --crawl             Bounded same-origin crawl (opt-in)",
 		"  --max-depth <n>     Crawl depth from start URL (default: 1, max: 5)",
 		"  --max-pages <n>     Max pages to crawl (default: 20, max: 200)",

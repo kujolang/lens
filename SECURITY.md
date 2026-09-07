@@ -25,8 +25,7 @@ surface. Key guarantees:
 - **Never stored at all:** request/response bodies, cookies, and auth headers.
   The network capture is a strict whitelist.
 - **Typed-input safety.** Values typed in a flow (e.g. credentials) are redacted
-  to `[REDACTED]` in `flow.json`; the internal program handoff is deleted
-  immediately after the bridge consumes it. Lens reads `--auth-file` only to
+  to `[REDACTED]` in `flow.json`; the internal program is supplied through private, unlinked stdin storage. Lens reads `--auth-file` only to
   validate the Playwright storage-state envelope, then passes the path to the
   browser; contents and parse details are never logged or written by Lens.
 - **Verbose logs are sanitized.** `--verbose` keeps diagnostic bridge-command
@@ -59,3 +58,19 @@ Lens is **not** a security scanner — it does not check CSP, cookie security,
 HTTPS configuration, or XSS. Reports of "Lens doesn't detect <web vuln>" are out
 of scope; reports of Lens itself leaking secrets, escaping localhost, or
 executing unintended actions are in scope and very welcome.
+
+## Browser session lifetime
+
+Unconfigured single checks use one-shot browsers. Crawl/watch and configuration-driven
+checks use a session with a user-only Unix socket directory (0700; socket 0600)
+and at most one browser process. The socket accepts observation jobs only; Kujo
+continues to gate URLs and redact evidence. Contexts, cookies and storage are
+never reused across captures. Requests and responses are bounded in memory,
+not logged or persisted. Browser crashes are not replayed; later jobs may start
+a replacement. Idle browsers close after 60 seconds; ordinary command termination
+closes the host. No shared profile or cross-command daemon is installed.
+
+Native recording decorations are enabled only for click actions using a fixed
+label. Typing/navigation annotations are disabled. Known secret input values are
+scrubbed from structured flow results and secret inputs are visually masked.
+This does not remove other sensitive account content from rendered pixels.

@@ -2,6 +2,18 @@ name: Performance regression check
 
 on:
   workflow_dispatch:
+    inputs:
+      phases_only:
+        description: Run only alternating browser startup/readiness diagnostics
+        required: true
+        default: false
+        type: boolean
+      iterations:
+        description: Repetitions per benchmark case
+        required: true
+        default: "3"
+        type: choice
+        options: ["3", "8"]
   pull_request:
     types: [labeled]
 
@@ -10,8 +22,11 @@ permissions:
 
 jobs:
   benchmark:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'performance'
+    if: github.event.inputs.phases_only != 'true' && (github.event_name == 'workflow_dispatch' || github.event.label.name == 'performance')
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      BENCH_ITERATIONS: ${{ github.event.inputs.iterations || '3' }}
     steps:
       - name: Checkout Lens
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -58,7 +73,28 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || 'origin/main' }}
         run: |
           git worktree add "$RUNNER_TEMP/lens-base" "$BASE_SHA"
-          npm ci --prefix "$RUNNER_TEMP/lens-base/bridge"
+          cd "$RUNNER_TEMP/lens-base/bridge"
+          npm ci
+          PLAYWRIGHT_SKIP_BROWSER_GC=1 npx playwright-core install chromium --only-shell
+
+      - name: Install visual comparison test dependencies
+        working-directory: lens
+        run: |
+          python3 -m venv "$RUNNER_TEMP/lens-visual"
+          "$RUNNER_TEMP/lens-visual/bin/python" -m pip install --only-binary=:all: -r .github/visual-test-requirements.txt
+          echo "$RUNNER_TEMP/lens-visual/bin" >> "$GITHUB_PATH"
+
+      - name: Verify runtime contracts before measuring
+        working-directory: lens
+        env:
+          KUJO_BIN: ${{ github.workspace }}/kujo/target/release/kujo
+        run: |
+          node --version
+          "$KUJO_BIN" --version
+          "$KUJO_BIN" run tests/lens_tests.kujo
+          npm test --prefix bridge
+          python3 scripts/runtime-e2e.py
+          python3 scripts/test-benchmark-harness.py
 
       - name: Compare same-runner medians
         working-directory: lens
@@ -66,11 +102,31 @@ jobs:
           KUJO_BIN: ${{ github.workspace }}/kujo/target/release/kujo
         run: |
           set -euo pipefail
-          LENS_BENCH_TARGET_ROOT="$RUNNER_TEMP/lens-base" scripts/bench.sh 3 "$RUNNER_TEMP/before.json"
-          scripts/bench.sh 3 "$RUNNER_TEMP/after.json"
+          LENS_BENCH_TARGET_ROOT="$RUNNER_TEMP/lens-base" scripts/bench.sh "$BENCH_ITERATIONS" "$RUNNER_TEMP/before.json"
+          scripts/bench.sh "$BENCH_ITERATIONS" "$RUNNER_TEMP/after.json"
           python3 scripts/compare-benchmarks.py \
             "$RUNNER_TEMP/before.json" "$RUNNER_TEMP/after.json" \
             --threshold-percent 20 --warn-only
+
+      - name: Compare flows, crawl and repeated checks
+        working-directory: lens
+        env:
+          KUJO_BIN: ${{ github.workspace }}/kujo/target/release/kujo
+        run: |
+          python3 scripts/bench-runtime.py "$BENCH_ITERATIONS" "$RUNNER_TEMP/runtime-before.json" "$RUNNER_TEMP/lens-base"
+          python3 scripts/bench-runtime.py "$BENCH_ITERATIONS" "$RUNNER_TEMP/runtime-after.json"
+          python3 scripts/compare-benchmarks.py "$RUNNER_TEMP/runtime-before.json" "$RUNNER_TEMP/runtime-after.json" --threshold-percent 20 --warn-only
+
+      - name: Measure bounded viewport concurrency
+        working-directory: lens
+        run: |
+          set -euo pipefail
+          python3 scripts/benchmark-fixture-server.py --port 9973 >/tmp/lens-concurrency-fixture.log 2>&1 &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true' EXIT
+          curl --silent --fail --retry 20 --retry-connrefused --retry-delay 1 --max-time 1 \
+            --output /dev/null http://127.0.0.1:9973/trivial
+          node scripts/bench-concurrency.js http://127.0.0.1:9973 "$RUNNER_TEMP/concurrency.json" 3
 
       - name: Upload benchmark receipts
         if: always()
@@ -80,3 +136,49 @@ jobs:
           path: |
             ${{ runner.temp }}/before.json
             ${{ runner.temp }}/after.json
+            ${{ runner.temp }}/runtime-before.json
+            ${{ runner.temp }}/runtime-after.json
+            ${{ runner.temp }}/concurrency.json
+
+  phases:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.phases_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Lens
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: bridge/package-lock.json
+
+      - name: Install matching candidate and baseline engines
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_GC: "1"
+        run: |
+          set -euo pipefail
+          node --version
+          git rev-parse HEAD origin/main
+          npm ci --prefix bridge
+          cd bridge
+          npx playwright-core install-deps chromium
+          npm run install-browser
+          cd ..
+          git worktree add "$RUNNER_TEMP/lens-base" origin/main
+          cd "$RUNNER_TEMP/lens-base/bridge"
+          npm ci
+          npx playwright-core install chromium --only-shell
+
+      - name: Profile alternating browser phases
+        run: python3 scripts/bench-phase-comparison.py "$RUNNER_TEMP/lens-base" "$RUNNER_TEMP/phases.json" 24
+
+      - name: Upload phase receipts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lens-phase-receipts
+          path: ${{ runner.temp }}/phases.json

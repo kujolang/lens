@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "iterations": 8,
+  "completed": false,
+  "unit": "seconds",
+  "method": "alternating order, paired median delta, fixed-seed bootstrap diagnostic only",
+  "results": {
+    "image-heavy": {
+      "samples": {
+        "before": [
+          9.239939463994233,
+          16.9338390060002,
+          35.405743095005164,
+          35.11862364700937
+        ],
+        "after": [
+          10.834027453005547,
+          17.535498621989973,
+          9.2813163039973,
+          12.601231314009055
+        ]
+      },
+      "before": 26.026231326504785,
+      "after": 11.717629383507301,
+      "paired_delta_median_s": -10.957866358505271,
+      "paired_delta_bootstrap_95_percent_interval_s": [
+        -26.124426791007863,
+        1.5940879890113138
+      ]
+    }
+  },
+  "rejected_trials": [
+    {
+      "case": "image-heavy",
+      "side": "before",
+      "exit_code": 3
+    },
+    {
+      "case": "image-heavy",
+      "side": "before",
+      "failure_kind": "process-unavailable-or-timeout"
+    }
+  ],
+  "excluded_reason": "Codex desktop process exhaustion and severalfold startup latency shifts; diagnostics only, not performance acceptance evidence."
+}
