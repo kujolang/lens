@@ -7,14 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-07
+
 - Keep unconfigured single checks one-shot; activate owned hosts for crawl/watch/configuration-driven checks.
 - Flow text/presence/absence assertions wait for the declared state within their step timeout.
 - Bound crawl frontier work to the page budget while preserving BFS order.
 - Inspect excludes prefilled editable form values from selector/text evidence.
 
-The upcoming Lens 1.1.0 requires Kujo >=1.2.3 for private flow-program stdin.
+Lens 1.1.0 requires Kujo >=1.2.3 for private flow-program stdin.
 
 ### Performance and reliability
+
+- Align release manifests and pin the compatibility fixture Python runtime;
+  keep local fixture probes independent of runner proxy settings and accept
+  structured browser-launch errors in missing-engine CI checks.
 
 - Share browser processes across crawl pages and watch iterations with fresh
   contexts; retain Kujo's queue, safety checks, evidence and verdict policies.

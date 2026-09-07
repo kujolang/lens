@@ -290,7 +290,7 @@ memory is outside this IPC isolation boundary.
 
 ## Compatibility
 
-- Lens upcoming version: 1.1.0; baseline: 1.0.1.
+- Lens version: 1.1.0; baseline: 1.0.1.
 - Exact Playwright 1.61.1 and axe-core 4.11.4 pins replace broad ranges.
 - Node >=18 remains supported; `.nvmrc` stays on 20.
 - Kujo >=1.2.3 is required for safe stdin process support.

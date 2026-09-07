@@ -40,6 +40,9 @@ the recording uses native Playwright pointer and action highlights:
 Unrecorded flows run without recording animation or pacing. Typed values never
 appear in action annotations.
 
+Lens **v1.1.0** is released. See the [release notes](https://github.com/kujolang/lens/releases/tag/v1.1.0)
+for runtime improvements, compatibility requirements, and measured tradeoffs.
+
 ## Contents
 
 - [Why Lens](#why-lens) · [Quick start](#quick-start) · [What you can do](#what-you-can-do)
