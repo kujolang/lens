@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "iterations": 8,
+  "unit": "seconds",
+  "lower_is_better": true,
+  "environment": {
+    "system": "Darwin",
+    "machine": "x86_64"
+  },
+  "medians": {
+    "bridge_trivial": 2.6691,
+    "bridge_realistic": 2.90762,
+    "cli_trivial": 3.9932,
+    "cli_realistic": 4.40991,
+    "quick_trivial": 3.59773,
+    "quick_realistic": 3.73108,
+    "quick_spa": 3.49648,
+    "quick_image_heavy": 3.72301,
+    "quick_late_network": 4.07628,
+    "quick_many_links": 3.46772
+  }
+}

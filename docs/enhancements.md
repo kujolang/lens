@@ -5,6 +5,12 @@ one, implement it, run the standard verification gauntlet, and open a PR —
 without needing the others in front of it. Tasks are ordered by dependency, so
 working top-to-bottom is always safe.
 
+> **Runtime update (upcoming v1.1.0):** shared bounded readiness, native flow
+> recording, isolated crawl/watch browser reuse and shell-only installation are
+> implemented. See [the runtime engineering report](browser-runtime-upgrade.md)
+> for measured results and remaining experiments. Older runtime tasks below
+> describe historical plans.
+>
 > **Status note:** many items in this checklist have since shipped in Lens
 > v0.9.0. For the current next-session readiness worklist, use
 > [Enterprise Readiness Next Session](enterprise-readiness-next-session.md).

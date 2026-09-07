@@ -1,0 +1,1885 @@
+{
+  "schema_version": 1,
+  "iterations": 3,
+  "unit": "seconds",
+  "medians": {
+    "trivial_concurrency_1": 9.548741550999999,
+    "trivial_concurrency_2": 5.068914342999997,
+    "trivial_concurrency_4": 2.8131936300000016,
+    "trivial_concurrency_8": 1.7870849309999977,
+    "spa_concurrency_1": 9.565864881999994,
+    "spa_concurrency_2": 5.0440068829999944,
+    "spa_concurrency_4": 2.820921907000011,
+    "spa_concurrency_8": 1.7372614919999905,
+    "image-heavy_concurrency_1": 10.873480716999984,
+    "image-heavy_concurrency_2": 5.951579808999988,
+    "image-heavy_concurrency_4": 3.643364321000001,
+    "image-heavy_concurrency_8": 2.5541997499999995
+  },
+  "samples": {
+    "trivial_concurrency_1": [
+      11.193742248000001,
+      9.497851886000003,
+      9.548741550999999
+    ],
+    "trivial_concurrency_2": [
+      5.274107252000001,
+      5.068914342999997,
+      5.032905503999995
+    ],
+    "trivial_concurrency_4": [
+      2.757167991999995,
+      2.8523253140000016,
+      2.8131936300000016
+    ],
+    "trivial_concurrency_8": [
+      1.7870849309999977,
+      1.8020384760000014,
+      1.7678604229999983
+    ],
+    "spa_concurrency_1": [
+      9.870005631,
+      9.565864881999994,
+      9.531321125000002
+    ],
+    "spa_concurrency_2": [
+      4.998651763999995,
+      5.154771333000012,
+      5.0440068829999944
+    ],
+    "spa_concurrency_4": [
+      2.741264639000001,
+      2.820921907000011,
+      2.8485690459999895
+    ],
+    "spa_concurrency_8": [
+      1.7797199530000072,
+      1.7372614919999905,
+      1.7336157329999988
+    ],
+    "image-heavy_concurrency_1": [
+      10.840044257999994,
+      10.873480716999984,
+      10.893976735000004
+    ],
+    "image-heavy_concurrency_2": [
+      5.983496057999989,
+      5.850938232000015,
+      5.951579808999988
+    ],
+    "image-heavy_concurrency_4": [
+      3.6552576189999817,
+      3.643364321000001,
+      3.5854455249999884
+    ],
+    "image-heavy_concurrency_8": [
+      2.5541997499999995,
+      2.685282332999981,
+      2.3614969279999785
+    ]
+  },
+  "phases": {
+    "trivial_concurrency_1": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 4.79,
+          "page_create_ms": 169.44,
+          "navigation_ms": 23.68,
+          "readiness_ms": 925.77,
+          "screenshot_ms": 69.91,
+          "dom_capture_ms": 7.63,
+          "link_capture_ms": 2.76,
+          "context_close_ms": 6.64,
+          "total_bridge_ms": 1214.47
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 926
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 8.53,
+          "page_create_ms": 164.73,
+          "navigation_ms": 21.73,
+          "readiness_ms": 924.19,
+          "screenshot_ms": 35.18,
+          "dom_capture_ms": 4.24,
+          "link_capture_ms": 3.77,
+          "context_close_ms": 6.03,
+          "total_bridge_ms": 1173.82
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 924
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 3.15,
+          "page_create_ms": 169.58,
+          "navigation_ms": 27.6,
+          "readiness_ms": 919.93,
+          "screenshot_ms": 56.35,
+          "dom_capture_ms": 4.48,
+          "link_capture_ms": 2.35,
+          "context_close_ms": 5.74,
+          "total_bridge_ms": 1194.19
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 920
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 7.51,
+          "page_create_ms": 159.12,
+          "navigation_ms": 20.29,
+          "readiness_ms": 918.57,
+          "screenshot_ms": 38.71,
+          "dom_capture_ms": 3.94,
+          "link_capture_ms": 1.56,
+          "context_close_ms": 4.87,
+          "total_bridge_ms": 1159.04
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 919
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 6.5,
+          "page_create_ms": 161.35,
+          "navigation_ms": 18.45,
+          "readiness_ms": 918.25,
+          "screenshot_ms": 54.7,
+          "dom_capture_ms": 4.42,
+          "link_capture_ms": 1.86,
+          "context_close_ms": 8.08,
+          "total_bridge_ms": 1177.78
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 918
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 4.2,
+          "page_create_ms": 175.84,
+          "navigation_ms": 20.7,
+          "readiness_ms": 921.9,
+          "screenshot_ms": 51.76,
+          "dom_capture_ms": 6.66,
+          "link_capture_ms": 2.71,
+          "context_close_ms": 6.33,
+          "total_bridge_ms": 1196.49
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 922
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 5.95,
+          "page_create_ms": 164.9,
+          "navigation_ms": 23.71,
+          "readiness_ms": 921.74,
+          "screenshot_ms": 37.75,
+          "dom_capture_ms": 4.31,
+          "link_capture_ms": 3.43,
+          "context_close_ms": 7.02,
+          "total_bridge_ms": 1175.68
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 922
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 4.54,
+          "page_create_ms": 164.17,
+          "navigation_ms": 38.59,
+          "readiness_ms": 908.32,
+          "screenshot_ms": 120.49,
+          "dom_capture_ms": 4.19,
+          "link_capture_ms": 1.65,
+          "context_close_ms": 6.03,
+          "total_bridge_ms": 1252.57
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 908
+        }
+      }
+    ],
+    "trivial_concurrency_2": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 5.81,
+          "page_create_ms": 180.2,
+          "navigation_ms": 26.42,
+          "readiness_ms": 907.29,
+          "screenshot_ms": 90.85,
+          "dom_capture_ms": 5.34,
+          "link_capture_ms": 2.83,
+          "context_close_ms": 16.86,
+          "total_bridge_ms": 1240.3
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 907
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 11.14,
+          "page_create_ms": 170.97,
+          "navigation_ms": 26.52,
+          "readiness_ms": 909.35,
+          "screenshot_ms": 89.58,
+          "dom_capture_ms": 4.58,
+          "link_capture_ms": 2.4,
+          "context_close_ms": 7.88,
+          "total_bridge_ms": 1229.88
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 909
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 12.28,
+          "page_create_ms": 171.85,
+          "navigation_ms": 20.58,
+          "readiness_ms": 938.88,
+          "screenshot_ms": 65.13,
+          "dom_capture_ms": 8.52,
+          "link_capture_ms": 3.9,
+          "context_close_ms": 10.78,
+          "total_bridge_ms": 1239.55
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 939
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 9.44,
+          "page_create_ms": 175.12,
+          "navigation_ms": 20.67,
+          "readiness_ms": 938.34,
+          "screenshot_ms": 63.57,
+          "dom_capture_ms": 6.13,
+          "link_capture_ms": 5.27,
+          "context_close_ms": 7.37,
+          "total_bridge_ms": 1229.3
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 938
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 11.58,
+          "page_create_ms": 173.54,
+          "navigation_ms": 26.18,
+          "readiness_ms": 937.3,
+          "screenshot_ms": 86.32,
+          "dom_capture_ms": 6.12,
+          "link_capture_ms": 2.01,
+          "context_close_ms": 6.52,
+          "total_bridge_ms": 1254.42
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 937
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 9.67,
+          "page_create_ms": 170.9,
+          "navigation_ms": 25.66,
+          "readiness_ms": 940.19,
+          "screenshot_ms": 86.03,
+          "dom_capture_ms": 6.39,
+          "link_capture_ms": 2.18,
+          "context_close_ms": 12.26,
+          "total_bridge_ms": 1257.75
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 940
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 10.96,
+          "page_create_ms": 173.63,
+          "navigation_ms": 25.7,
+          "readiness_ms": 929.31,
+          "screenshot_ms": 132.33,
+          "dom_capture_ms": 5.04,
+          "link_capture_ms": 2.31,
+          "context_close_ms": 11.62,
+          "total_bridge_ms": 1304.89
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 929
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 6.56,
+          "page_create_ms": 187.86,
+          "navigation_ms": 24.53,
+          "readiness_ms": 924.96,
+          "screenshot_ms": 132.46,
+          "dom_capture_ms": 4.71,
+          "link_capture_ms": 2.11,
+          "context_close_ms": 8.37,
+          "total_bridge_ms": 1294.17
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 925
+        }
+      }
+    ],
+    "trivial_concurrency_4": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 8.81,
+          "page_create_ms": 208.27,
+          "navigation_ms": 36.43,
+          "readiness_ms": 947.89,
+          "screenshot_ms": 103.5,
+          "dom_capture_ms": 17.75,
+          "link_capture_ms": 5.05,
+          "context_close_ms": 10.03,
+          "total_bridge_ms": 1356.6
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 948
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 10.09,
+          "page_create_ms": 201.49,
+          "navigation_ms": 35.38,
+          "readiness_ms": 960.61,
+          "screenshot_ms": 103.56,
+          "dom_capture_ms": 6.91,
+          "link_capture_ms": 11.5,
+          "context_close_ms": 45.56,
+          "total_bridge_ms": 1406.06
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 961
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 10.5,
+          "page_create_ms": 271.83,
+          "navigation_ms": 119.38,
+          "readiness_ms": 905.56,
+          "screenshot_ms": 98.04,
+          "dom_capture_ms": 11.99,
+          "link_capture_ms": 5.99,
+          "context_close_ms": 8.9,
+          "total_bridge_ms": 1437.84
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 906
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 11.41,
+          "page_create_ms": 217.17,
+          "navigation_ms": 46.43,
+          "readiness_ms": 921.16,
+          "screenshot_ms": 42.39,
+          "dom_capture_ms": 4.52,
+          "link_capture_ms": 2.13,
+          "context_close_ms": 8.82,
+          "total_bridge_ms": 1258.61
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 921
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 4.9,
+          "page_create_ms": 192.69,
+          "navigation_ms": 26.77,
+          "readiness_ms": 941.06,
+          "screenshot_ms": 67.98,
+          "dom_capture_ms": 4.81,
+          "link_capture_ms": 1.93,
+          "context_close_ms": 6.44,
+          "total_bridge_ms": 1250.84
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 941
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 48.01,
+          "page_create_ms": 221.28,
+          "navigation_ms": 26.54,
+          "readiness_ms": 945.41,
+          "screenshot_ms": 189.24,
+          "dom_capture_ms": 4.06,
+          "link_capture_ms": 2.91,
+          "context_close_ms": 9.68,
+          "total_bridge_ms": 1454.83
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 945
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 14.73,
+          "page_create_ms": 199.96,
+          "navigation_ms": 26.43,
+          "readiness_ms": 945.98,
+          "screenshot_ms": 134.5,
+          "dom_capture_ms": 4.99,
+          "link_capture_ms": 4.4,
+          "context_close_ms": 8.33,
+          "total_bridge_ms": 1350.95
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 946
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 6.09,
+          "page_create_ms": 193.05,
+          "navigation_ms": 26.33,
+          "readiness_ms": 925.77,
+          "screenshot_ms": 136.24,
+          "dom_capture_ms": 6.55,
+          "link_capture_ms": 4.44,
+          "context_close_ms": 11.44,
+          "total_bridge_ms": 1322.78
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 926
+        }
+      }
+    ],
+    "trivial_concurrency_8": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 18.1,
+          "page_create_ms": 279.2,
+          "navigation_ms": 308.57,
+          "readiness_ms": 920.38,
+          "screenshot_ms": 177.81,
+          "dom_capture_ms": 4.45,
+          "link_capture_ms": 3.11,
+          "context_close_ms": 9.16,
+          "total_bridge_ms": 1724.21
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 920
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 19.36,
+          "page_create_ms": 371.55,
+          "navigation_ms": 58.17,
+          "readiness_ms": 907.59,
+          "screenshot_ms": 32.82,
+          "dom_capture_ms": 42.93,
+          "link_capture_ms": 3.13,
+          "context_close_ms": 8.17,
+          "total_bridge_ms": 1449.63
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 908
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 20.25,
+          "page_create_ms": 299.68,
+          "navigation_ms": 328.17,
+          "readiness_ms": 986.58,
+          "screenshot_ms": 109.04,
+          "dom_capture_ms": 3.84,
+          "link_capture_ms": 1.63,
+          "context_close_ms": 10.59,
+          "total_bridge_ms": 1767.05
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 987
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 20.63,
+          "page_create_ms": 435.28,
+          "navigation_ms": 28.48,
+          "readiness_ms": 942.55,
+          "screenshot_ms": 94.81,
+          "dom_capture_ms": 5.33,
+          "link_capture_ms": 3.33,
+          "context_close_ms": 10.66,
+          "total_bridge_ms": 1553.57
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 943
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 21.56,
+          "page_create_ms": 425.94,
+          "navigation_ms": 28.45,
+          "readiness_ms": 945.59,
+          "screenshot_ms": 94.98,
+          "dom_capture_ms": 6.54,
+          "link_capture_ms": 3.53,
+          "context_close_ms": 16.28,
+          "total_bridge_ms": 1561.03
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 946
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 21.92,
+          "page_create_ms": 295.62,
+          "navigation_ms": 129.75,
+          "readiness_ms": 910.32,
+          "screenshot_ms": 82.09,
+          "dom_capture_ms": 12.81,
+          "link_capture_ms": 5.7,
+          "context_close_ms": 12.73,
+          "total_bridge_ms": 1476.32
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 910
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 22.25,
+          "page_create_ms": 375.54,
+          "navigation_ms": 53.81,
+          "readiness_ms": 907.31,
+          "screenshot_ms": 80.75,
+          "dom_capture_ms": 11.97,
+          "link_capture_ms": 4.17,
+          "context_close_ms": 10.04,
+          "total_bridge_ms": 1472.13
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 907
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 23.06,
+          "page_create_ms": 394.89,
+          "navigation_ms": 34.62,
+          "readiness_ms": 951.29,
+          "screenshot_ms": 204.09,
+          "dom_capture_ms": 6.89,
+          "link_capture_ms": 2.63,
+          "context_close_ms": 7.87,
+          "total_bridge_ms": 1661.48
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 951
+        }
+      }
+    ],
+    "spa_concurrency_1": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 3.2,
+          "page_create_ms": 164.27,
+          "navigation_ms": 23.14,
+          "readiness_ms": 927.31,
+          "screenshot_ms": 71.37,
+          "dom_capture_ms": 3.69,
+          "link_capture_ms": 4.65,
+          "context_close_ms": 7.1,
+          "total_bridge_ms": 1214.6
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 927
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 4.19,
+          "page_create_ms": 159.04,
+          "navigation_ms": 19.33,
+          "readiness_ms": 922.14,
+          "screenshot_ms": 31.12,
+          "dom_capture_ms": 4.67,
+          "link_capture_ms": 3.55,
+          "context_close_ms": 7.4,
+          "total_bridge_ms": 1156.34
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 922
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 5.06,
+          "page_create_ms": 165.43,
+          "navigation_ms": 43.62,
+          "readiness_ms": 907.46,
+          "screenshot_ms": 49.41,
+          "dom_capture_ms": 4.08,
+          "link_capture_ms": 2.56,
+          "context_close_ms": 8.92,
+          "total_bridge_ms": 1191.44
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 907
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 3.99,
+          "page_create_ms": 174.6,
+          "navigation_ms": 25.62,
+          "readiness_ms": 917.8,
+          "screenshot_ms": 38.31,
+          "dom_capture_ms": 3.75,
+          "link_capture_ms": 1.88,
+          "context_close_ms": 8.67,
+          "total_bridge_ms": 1181.59
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 918
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 3.16,
+          "page_create_ms": 157.83,
+          "navigation_ms": 22.65,
+          "readiness_ms": 920.97,
+          "screenshot_ms": 68.29,
+          "dom_capture_ms": 4.42,
+          "link_capture_ms": 1.69,
+          "context_close_ms": 5.31,
+          "total_bridge_ms": 1189.48
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 921
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 2.71,
+          "page_create_ms": 167.74,
+          "navigation_ms": 19.97,
+          "readiness_ms": 924.22,
+          "screenshot_ms": 54.81,
+          "dom_capture_ms": 5.54,
+          "link_capture_ms": 1.71,
+          "context_close_ms": 4.94,
+          "total_bridge_ms": 1188.2
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 924
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 3,
+          "page_create_ms": 170.89,
+          "navigation_ms": 26.15,
+          "readiness_ms": 917.45,
+          "screenshot_ms": 36.56,
+          "dom_capture_ms": 3.4,
+          "link_capture_ms": 1.47,
+          "context_close_ms": 9.33,
+          "total_bridge_ms": 1172.21
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 917
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 3.17,
+          "page_create_ms": 153.84,
+          "navigation_ms": 25.92,
+          "readiness_ms": 917.71,
+          "screenshot_ms": 112.72,
+          "dom_capture_ms": 3.39,
+          "link_capture_ms": 1.39,
+          "context_close_ms": 8.28,
+          "total_bridge_ms": 1232.26
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 918
+        }
+      }
+    ],
+    "spa_concurrency_2": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 5.82,
+          "page_create_ms": 183.52,
+          "navigation_ms": 39.45,
+          "readiness_ms": 921.83,
+          "screenshot_ms": 93.51,
+          "dom_capture_ms": 4.4,
+          "link_capture_ms": 3.31,
+          "context_close_ms": 7.6,
+          "total_bridge_ms": 1267.76
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 922
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 8.19,
+          "page_create_ms": 170.81,
+          "navigation_ms": 36.62,
+          "readiness_ms": 927.51,
+          "screenshot_ms": 30.19,
+          "dom_capture_ms": 5.94,
+          "link_capture_ms": 2.56,
+          "context_close_ms": 6.37,
+          "total_bridge_ms": 1193.11
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 928
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 8.78,
+          "page_create_ms": 174.65,
+          "navigation_ms": 24.13,
+          "readiness_ms": 904.45,
+          "screenshot_ms": 49.72,
+          "dom_capture_ms": 4.16,
+          "link_capture_ms": 2.06,
+          "context_close_ms": 5.9,
+          "total_bridge_ms": 1179.47
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 904
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 4.32,
+          "page_create_ms": 177.5,
+          "navigation_ms": 24.75,
+          "readiness_ms": 934.72,
+          "screenshot_ms": 40.51,
+          "dom_capture_ms": 4.22,
+          "link_capture_ms": 1.93,
+          "context_close_ms": 6.24,
+          "total_bridge_ms": 1204.24
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 935
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 6.51,
+          "page_create_ms": 168.95,
+          "navigation_ms": 24.29,
+          "readiness_ms": 919.75,
+          "screenshot_ms": 57.6,
+          "dom_capture_ms": 4.69,
+          "link_capture_ms": 1.91,
+          "context_close_ms": 11.43,
+          "total_bridge_ms": 1199.16
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 920
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 4.97,
+          "page_create_ms": 176.62,
+          "navigation_ms": 40.07,
+          "readiness_ms": 906.99,
+          "screenshot_ms": 97.35,
+          "dom_capture_ms": 5.76,
+          "link_capture_ms": 3.47,
+          "context_close_ms": 11.38,
+          "total_bridge_ms": 1251.18
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 907
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 4.76,
+          "page_create_ms": 175.33,
+          "navigation_ms": 26.39,
+          "readiness_ms": 927.16,
+          "screenshot_ms": 40.16,
+          "dom_capture_ms": 4.2,
+          "link_capture_ms": 1.95,
+          "context_close_ms": 6.05,
+          "total_bridge_ms": 1189.21
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 927
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 4.76,
+          "page_create_ms": 202.93,
+          "navigation_ms": 54.42,
+          "readiness_ms": 918.53,
+          "screenshot_ms": 116.77,
+          "dom_capture_ms": 3.88,
+          "link_capture_ms": 2.41,
+          "context_close_ms": 7.27,
+          "total_bridge_ms": 1318.04
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 919
+        }
+      }
+    ],
+    "spa_concurrency_4": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 14.26,
+          "page_create_ms": 195.93,
+          "navigation_ms": 144.79,
+          "readiness_ms": 945.14,
+          "screenshot_ms": 154.65,
+          "dom_capture_ms": 7.12,
+          "link_capture_ms": 26.2,
+          "context_close_ms": 19.01,
+          "total_bridge_ms": 1519.67
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 945
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 16.15,
+          "page_create_ms": 197.98,
+          "navigation_ms": 47.69,
+          "readiness_ms": 927.91,
+          "screenshot_ms": 48.62,
+          "dom_capture_ms": 4.96,
+          "link_capture_ms": 3.73,
+          "context_close_ms": 9.56,
+          "total_bridge_ms": 1269.52
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 928
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 16.98,
+          "page_create_ms": 191.12,
+          "navigation_ms": 146.05,
+          "readiness_ms": 943.64,
+          "screenshot_ms": 57.57,
+          "dom_capture_ms": 5.31,
+          "link_capture_ms": 2.44,
+          "context_close_ms": 10.68,
+          "total_bridge_ms": 1386.87
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 944
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 17.89,
+          "page_create_ms": 204.9,
+          "navigation_ms": 30.79,
+          "readiness_ms": 943.66,
+          "screenshot_ms": 49.08,
+          "dom_capture_ms": 5.24,
+          "link_capture_ms": 3.92,
+          "context_close_ms": 14.8,
+          "total_bridge_ms": 1275.79
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 944
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 16.49,
+          "page_create_ms": 213.98,
+          "navigation_ms": 95.13,
+          "readiness_ms": 901.97,
+          "screenshot_ms": 62.74,
+          "dom_capture_ms": 6.88,
+          "link_capture_ms": 2.62,
+          "context_close_ms": 6.46,
+          "total_bridge_ms": 1313.48
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 902
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 12.36,
+          "page_create_ms": 208.6,
+          "navigation_ms": 114.52,
+          "readiness_ms": 901.62,
+          "screenshot_ms": 90.47,
+          "dom_capture_ms": 5.43,
+          "link_capture_ms": 1.97,
+          "context_close_ms": 7.06,
+          "total_bridge_ms": 1351.63
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 902
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 6.15,
+          "page_create_ms": 275.85,
+          "navigation_ms": 31.89,
+          "readiness_ms": 913.44,
+          "screenshot_ms": 37.73,
+          "dom_capture_ms": 3.94,
+          "link_capture_ms": 2.72,
+          "context_close_ms": 11.14,
+          "total_bridge_ms": 1288.09
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 913
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 6.38,
+          "page_create_ms": 237.38,
+          "navigation_ms": 22.15,
+          "readiness_ms": 937.8,
+          "screenshot_ms": 103.89,
+          "dom_capture_ms": 3.34,
+          "link_capture_ms": 1.59,
+          "context_close_ms": 9.43,
+          "total_bridge_ms": 1327.64
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 938
+        }
+      }
+    ],
+    "spa_concurrency_8": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 15.7,
+          "page_create_ms": 311.18,
+          "navigation_ms": 79.91,
+          "readiness_ms": 920.16,
+          "screenshot_ms": 110.39,
+          "dom_capture_ms": 58.29,
+          "link_capture_ms": 2.12,
+          "context_close_ms": 9.95,
+          "total_bridge_ms": 1520.48
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 920
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 16.57,
+          "page_create_ms": 314.17,
+          "navigation_ms": 304.48,
+          "readiness_ms": 916.06,
+          "screenshot_ms": 85.78,
+          "dom_capture_ms": 6.15,
+          "link_capture_ms": 4.96,
+          "context_close_ms": 17.86,
+          "total_bridge_ms": 1679.67
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 916
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 17.33,
+          "page_create_ms": 302.65,
+          "navigation_ms": 216.35,
+          "readiness_ms": 951.5,
+          "screenshot_ms": 101.33,
+          "dom_capture_ms": 3.81,
+          "link_capture_ms": 4.65,
+          "context_close_ms": 17.25,
+          "total_bridge_ms": 1634.52
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 951
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 17.68,
+          "page_create_ms": 377.97,
+          "navigation_ms": 221.54,
+          "readiness_ms": 915.34,
+          "screenshot_ms": 85,
+          "dom_capture_ms": 4.56,
+          "link_capture_ms": 5.06,
+          "context_close_ms": 7.35,
+          "total_bridge_ms": 1667.01
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 915
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 18.4,
+          "page_create_ms": 399.37,
+          "navigation_ms": 281.84,
+          "readiness_ms": 930.7,
+          "screenshot_ms": 72.66,
+          "dom_capture_ms": 3.79,
+          "link_capture_ms": 2.14,
+          "context_close_ms": 7.9,
+          "total_bridge_ms": 1732.33
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 931
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 19.26,
+          "page_create_ms": 316.57,
+          "navigation_ms": 70.09,
+          "readiness_ms": 922.55,
+          "screenshot_ms": 55.09,
+          "dom_capture_ms": 3.82,
+          "link_capture_ms": 2.56,
+          "context_close_ms": 9.38,
+          "total_bridge_ms": 1410.33
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 923
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 19.65,
+          "page_create_ms": 383.38,
+          "navigation_ms": 59.97,
+          "readiness_ms": 903.84,
+          "screenshot_ms": 150.21,
+          "dom_capture_ms": 8.42,
+          "link_capture_ms": 2.27,
+          "context_close_ms": 7.84,
+          "total_bridge_ms": 1561.62
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 904
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 20,
+          "page_create_ms": 321.06,
+          "navigation_ms": 73.75,
+          "readiness_ms": 917.11,
+          "screenshot_ms": 169.65,
+          "dom_capture_ms": 13.12,
+          "link_capture_ms": 16.2,
+          "context_close_ms": 8.23,
+          "total_bridge_ms": 1547.4
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 917
+        }
+      }
+    ],
+    "image-heavy_concurrency_1": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 4.17,
+          "page_create_ms": 170.16,
+          "navigation_ms": 234.98,
+          "readiness_ms": 906.94,
+          "screenshot_ms": 78.24,
+          "dom_capture_ms": 7.36,
+          "link_capture_ms": 2.04,
+          "context_close_ms": 6.34,
+          "total_bridge_ms": 1420.85
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 907
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 3.88,
+          "page_create_ms": 161.84,
+          "navigation_ms": 202.46,
+          "readiness_ms": 911.55,
+          "screenshot_ms": 31.35,
+          "dom_capture_ms": 5.33,
+          "link_capture_ms": 2.45,
+          "context_close_ms": 5.68,
+          "total_bridge_ms": 1328.93
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 912
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 4.11,
+          "page_create_ms": 170.1,
+          "navigation_ms": 193.54,
+          "readiness_ms": 901.97,
+          "screenshot_ms": 54.67,
+          "dom_capture_ms": 5.26,
+          "link_capture_ms": 2.18,
+          "context_close_ms": 8.25,
+          "total_bridge_ms": 1345.98
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 902
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 4.23,
+          "page_create_ms": 158.01,
+          "navigation_ms": 205.43,
+          "readiness_ms": 902.86,
+          "screenshot_ms": 33.84,
+          "dom_capture_ms": 6.09,
+          "link_capture_ms": 2.46,
+          "context_close_ms": 6.98,
+          "total_bridge_ms": 1324.82
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 903
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 3,
+          "page_create_ms": 160.15,
+          "navigation_ms": 206.84,
+          "readiness_ms": 915.06,
+          "screenshot_ms": 66.62,
+          "dom_capture_ms": 4.49,
+          "link_capture_ms": 2.76,
+          "context_close_ms": 6.9,
+          "total_bridge_ms": 1372.34
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 915
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 4.53,
+          "page_create_ms": 169.3,
+          "navigation_ms": 195.18,
+          "readiness_ms": 903.89,
+          "screenshot_ms": 50.01,
+          "dom_capture_ms": 6.1,
+          "link_capture_ms": 2.18,
+          "context_close_ms": 5.81,
+          "total_bridge_ms": 1342.75
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 904
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 3.12,
+          "page_create_ms": 167.01,
+          "navigation_ms": 195.17,
+          "readiness_ms": 909.75,
+          "screenshot_ms": 36.77,
+          "dom_capture_ms": 5.61,
+          "link_capture_ms": 2.71,
+          "context_close_ms": 7.57,
+          "total_bridge_ms": 1333.52
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 910
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 3.79,
+          "page_create_ms": 167.75,
+          "navigation_ms": 213.87,
+          "readiness_ms": 901.83,
+          "screenshot_ms": 111.48,
+          "dom_capture_ms": 4.66,
+          "link_capture_ms": 1.93,
+          "context_close_ms": 7.43,
+          "total_bridge_ms": 1419.51
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 902
+        }
+      }
+    ],
+    "image-heavy_concurrency_2": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 5.11,
+          "page_create_ms": 180.24,
+          "navigation_ms": 253.19,
+          "readiness_ms": 916.56,
+          "screenshot_ms": 95.71,
+          "dom_capture_ms": 8.09,
+          "link_capture_ms": 1.88,
+          "context_close_ms": 7.89,
+          "total_bridge_ms": 1472.85
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 917
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 5.86,
+          "page_create_ms": 181.65,
+          "navigation_ms": 252.91,
+          "readiness_ms": 914.62,
+          "screenshot_ms": 38.08,
+          "dom_capture_ms": 7.39,
+          "link_capture_ms": 3.16,
+          "context_close_ms": 43.78,
+          "total_bridge_ms": 1450.85
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 915
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 4.89,
+          "page_create_ms": 168.73,
+          "navigation_ms": 245.66,
+          "readiness_ms": 903.53,
+          "screenshot_ms": 94.52,
+          "dom_capture_ms": 6.08,
+          "link_capture_ms": 3.14,
+          "context_close_ms": 14.26,
+          "total_bridge_ms": 1449.14
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 904
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 5.64,
+          "page_create_ms": 168.33,
+          "navigation_ms": 250.5,
+          "readiness_ms": 907.39,
+          "screenshot_ms": 60.68,
+          "dom_capture_ms": 6.14,
+          "link_capture_ms": 3.37,
+          "context_close_ms": 8.24,
+          "total_bridge_ms": 1420.37
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 907
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 12.67,
+          "page_create_ms": 177.37,
+          "navigation_ms": 294.51,
+          "readiness_ms": 907.44,
+          "screenshot_ms": 84.52,
+          "dom_capture_ms": 8.76,
+          "link_capture_ms": 3.5,
+          "context_close_ms": 13.14,
+          "total_bridge_ms": 1507.31
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 907
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 8.59,
+          "page_create_ms": 178.31,
+          "navigation_ms": 283.82,
+          "readiness_ms": 916.84,
+          "screenshot_ms": 84.68,
+          "dom_capture_ms": 7,
+          "link_capture_ms": 3.77,
+          "context_close_ms": 6.98,
+          "total_bridge_ms": 1494.76
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 917
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 14.76,
+          "page_create_ms": 181.04,
+          "navigation_ms": 282.83,
+          "readiness_ms": 1009.79,
+          "screenshot_ms": 46.62,
+          "dom_capture_ms": 7.22,
+          "link_capture_ms": 2.01,
+          "context_close_ms": 6.18,
+          "total_bridge_ms": 1553.98
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 1010
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 8.45,
+          "page_create_ms": 178,
+          "navigation_ms": 266.86,
+          "readiness_ms": 913.12,
+          "screenshot_ms": 115.61,
+          "dom_capture_ms": 4.69,
+          "link_capture_ms": 1.84,
+          "context_close_ms": 10.19,
+          "total_bridge_ms": 1503.43
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 913
+        }
+      }
+    ],
+    "image-heavy_concurrency_4": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 7.78,
+          "page_create_ms": 176.04,
+          "navigation_ms": 439.22,
+          "readiness_ms": 919.82,
+          "screenshot_ms": 119.68,
+          "dom_capture_ms": 15.28,
+          "link_capture_ms": 27.92,
+          "context_close_ms": 15.01,
+          "total_bridge_ms": 1735.29
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 920
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 10.34,
+          "page_create_ms": 171.22,
+          "navigation_ms": 432.73,
+          "readiness_ms": 926.49,
+          "screenshot_ms": 40.61,
+          "dom_capture_ms": 10.53,
+          "link_capture_ms": 4.33,
+          "context_close_ms": 41.9,
+          "total_bridge_ms": 1654.35
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 926
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 11.18,
+          "page_create_ms": 183.43,
+          "navigation_ms": 467.13,
+          "readiness_ms": 925.59,
+          "screenshot_ms": 155.03,
+          "dom_capture_ms": 17.59,
+          "link_capture_ms": 8.47,
+          "context_close_ms": 8.12,
+          "total_bridge_ms": 1782.64
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 926
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 11.84,
+          "page_create_ms": 181.39,
+          "navigation_ms": 437.48,
+          "readiness_ms": 920.48,
+          "screenshot_ms": 124.19,
+          "dom_capture_ms": 11.48,
+          "link_capture_ms": 28.26,
+          "context_close_ms": 17.93,
+          "total_bridge_ms": 1739.95
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 920
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 21.05,
+          "page_create_ms": 225.99,
+          "navigation_ms": 446.8,
+          "readiness_ms": 913.55,
+          "screenshot_ms": 53.11,
+          "dom_capture_ms": 7.01,
+          "link_capture_ms": 2.64,
+          "context_close_ms": 9.38,
+          "total_bridge_ms": 1687.11
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 914
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 13.97,
+          "page_create_ms": 205.64,
+          "navigation_ms": 491.25,
+          "readiness_ms": 920.18,
+          "screenshot_ms": 71.95,
+          "dom_capture_ms": 5.59,
+          "link_capture_ms": 4.95,
+          "context_close_ms": 16.72,
+          "total_bridge_ms": 1737.53
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 920
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 11.72,
+          "page_create_ms": 205.55,
+          "navigation_ms": 490.61,
+          "readiness_ms": 918.67,
+          "screenshot_ms": 72.02,
+          "dom_capture_ms": 4.8,
+          "link_capture_ms": 3.56,
+          "context_close_ms": 10.18,
+          "total_bridge_ms": 1724.94
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 919
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 9.97,
+          "page_create_ms": 261.7,
+          "navigation_ms": 428.43,
+          "readiness_ms": 942.84,
+          "screenshot_ms": 123.08,
+          "dom_capture_ms": 5.02,
+          "link_capture_ms": 2.05,
+          "context_close_ms": 10.49,
+          "total_bridge_ms": 1800.57
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 943
+        }
+      }
+    ],
+    "image-heavy_concurrency_8": [
+      {
+        "viewport_index": 0,
+        "timings": {
+          "context_create_ms": 15.04,
+          "page_create_ms": 213.16,
+          "navigation_ms": 635.3,
+          "readiness_ms": 905.15,
+          "screenshot_ms": 90.08,
+          "dom_capture_ms": 4.38,
+          "link_capture_ms": 2.44,
+          "context_close_ms": 8.25,
+          "total_bridge_ms": 1878.95
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 905
+        }
+      },
+      {
+        "viewport_index": 1,
+        "timings": {
+          "context_create_ms": 16.3,
+          "page_create_ms": 225.75,
+          "navigation_ms": 700.36,
+          "readiness_ms": 906.91,
+          "screenshot_ms": 59.48,
+          "dom_capture_ms": 4.2,
+          "link_capture_ms": 2.55,
+          "context_close_ms": 10.22,
+          "total_bridge_ms": 1936.99
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 907
+        }
+      },
+      {
+        "viewport_index": 2,
+        "timings": {
+          "context_create_ms": 17.5,
+          "page_create_ms": 232.45,
+          "navigation_ms": 724.1,
+          "readiness_ms": 937.26,
+          "screenshot_ms": 64.25,
+          "dom_capture_ms": 4.65,
+          "link_capture_ms": 2.15,
+          "context_close_ms": 8.59,
+          "total_bridge_ms": 1997.39
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 937
+        }
+      },
+      {
+        "viewport_index": 3,
+        "timings": {
+          "context_create_ms": 18.08,
+          "page_create_ms": 458.04,
+          "navigation_ms": 691.92,
+          "readiness_ms": 912.84,
+          "screenshot_ms": 46.81,
+          "dom_capture_ms": 5.47,
+          "link_capture_ms": 3.59,
+          "context_close_ms": 15.72,
+          "total_bridge_ms": 2171.25
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 913
+        }
+      },
+      {
+        "viewport_index": 4,
+        "timings": {
+          "context_create_ms": 18.51,
+          "page_create_ms": 260.43,
+          "navigation_ms": 742.48,
+          "readiness_ms": 949.87,
+          "screenshot_ms": 68.98,
+          "dom_capture_ms": 4.69,
+          "link_capture_ms": 4.16,
+          "context_close_ms": 7.92,
+          "total_bridge_ms": 2064.95
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 950
+        }
+      },
+      {
+        "viewport_index": 5,
+        "timings": {
+          "context_create_ms": 19.75,
+          "page_create_ms": 530.64,
+          "navigation_ms": 636.07,
+          "readiness_ms": 909.96,
+          "screenshot_ms": 179.19,
+          "dom_capture_ms": 8.56,
+          "link_capture_ms": 5.19,
+          "context_close_ms": 18.67,
+          "total_bridge_ms": 2313.6
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 910
+        }
+      },
+      {
+        "viewport_index": 6,
+        "timings": {
+          "context_create_ms": 20.21,
+          "page_create_ms": 452.12,
+          "navigation_ms": 627.85,
+          "readiness_ms": 926.39,
+          "screenshot_ms": 187.37,
+          "dom_capture_ms": 6.54,
+          "link_capture_ms": 2.96,
+          "context_close_ms": 7.9,
+          "total_bridge_ms": 2360.22
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 926
+        }
+      },
+      {
+        "viewport_index": 7,
+        "timings": {
+          "context_create_ms": 20.69,
+          "page_create_ms": 605.33,
+          "navigation_ms": 559.15,
+          "readiness_ms": 909.05,
+          "screenshot_ms": 178.52,
+          "dom_capture_ms": 8.77,
+          "link_capture_ms": 4.19,
+          "context_close_ms": 11.15,
+          "total_bridge_ms": 2304.37
+        },
+        "readiness": {
+          "reason": "quiet-window",
+          "duration_ms": 909
+        }
+      }
+    ]
+  },
+  "lifecycle": {
+    "trivial_concurrency_1": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    },
+    "trivial_concurrency_2": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    },
+    "trivial_concurrency_4": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    },
+    "trivial_concurrency_8": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    },
+    "spa_concurrency_1": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    },
+    "spa_concurrency_2": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    },
+    "spa_concurrency_4": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    },
+    "spa_concurrency_8": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    },
+    "image-heavy_concurrency_1": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    },
+    "image-heavy_concurrency_2": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    },
+    "image-heavy_concurrency_4": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    },
+    "image-heavy_concurrency_8": {
+      "cleanup_failures": 0,
+      "browser_launches": 1
+    }
+  }
+}

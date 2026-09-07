@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "iterations": 3,
+  "fixture": "image-heavy",
+  "viewports": 8,
+  "sampling_interval_ms": 100,
+  "samples": {
+    "4": [
+      {
+        "peak_rss_kib": 546176,
+        "peak_process_count": 8
+      },
+      {
+        "peak_rss_kib": 563580,
+        "peak_process_count": 8
+      },
+      {
+        "peak_rss_kib": 564708,
+        "peak_process_count": 8
+      }
+    ],
+    "8": [
+      {
+        "peak_rss_kib": 837804,
+        "peak_process_count": 12
+      },
+      {
+        "peak_rss_kib": 862256,
+        "peak_process_count": 12
+      },
+      {
+        "peak_rss_kib": 850168,
+        "peak_process_count": 12
+      }
+    ]
+  }
+}

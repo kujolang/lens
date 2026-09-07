@@ -100,7 +100,7 @@ export PATH="/path/to/lens:$PATH"
 
 ```bash
 lens --version
-# Lens v1.0.1
+# Lens v1.1.0
 
 lens --help
 # Shows usage and flags
@@ -161,8 +161,9 @@ Flags:
   --out <dir>          Output directory (default: .lens/runs/<timestamp>/)
   --viewport <name>    Viewport to capture: desktop, mobile, or WxH (repeatable)
                        Default: desktop and mobile
-  --settle-ms <n>      Post-readiness settle window in ms (default: 400)
-  --max-concurrency <n> Max viewports captured at once (default: all)
+  --settle-ms <n>      Extra evidence horizon in ms (default: 400, max: 10000)
+  --max-concurrency <n> Max viewports captured at once (default: 4; maximum: 16)
+  --ready-selector <selector> Optional visible app-ready condition
   --timeout <seconds>  Page load timeout in seconds (default: 30, max: 300)
   --verbose            Enable verbose terminal output
   --json               Print JSON summary to stdout
@@ -225,7 +226,7 @@ max_links      = 25
 allow_external = false
 viewports      = ["desktop", "mobile", "1024x768"]
 out_dir        = "./.lens/runs"
-settle_ms      = 300                # post-readiness settle window (ms)
+settle_ms      = 300                # extra evidence horizon (ms)
 max_concurrency = 2                 # cap concurrent viewport captures
 accessibility  = true
 a11y_tags      = ["wcag2a", "wcag2aa"]
@@ -246,15 +247,15 @@ artifact size.
 
 ### Readiness & concurrency
 
-`--settle-ms` controls how long Lens waits after the page reaches network-idle
-before capturing (default 400 ms). Lower it for snappier runs on simple pages;
-raise it for apps with late client-side rendering. `--max-concurrency` caps how
-many viewports are captured at once (default: all of them, in parallel).
+`--settle-ms` adds an observation horizon to the 500ms quick-mode minimum
+(default: 400ms extra). Readiness also requires bounded DOM/network quiet.
+`--max-concurrency` caps simultaneous viewport contexts (automatic cap: four;
+explicit maximum: 16). See [runtime semantics](#browser-runtime-readiness-and-lifecycle).
 
 ### Quick agent profile
 
 `--quick` is an opt-in inner-loop profile for autonomous repair work. It emits
-JSON, captures only the desktop viewport, sets the post-readiness settle window
+JSON, captures only the desktop viewport, sets the extra observation horizon
 to zero, and uses Chromium. Explicit `--viewport`, `--settle-ms`, and
 `--browser` flags still override those choices. Project config cannot silently
 weaken the profile. Run a normal check without `--quick` before handoff to
@@ -341,7 +342,7 @@ lens flow examples/flows/login.json --execute --record --walkthrough
 |------|--------------|
 | `--execute` | Actually perform `click` / `type` / `wait_for_*` / `assert_*` steps in a live browser session, with real per-step pass/fail. |
 | `--record` | Record the session to `video/walkthrough.webm`. |
-| `--walkthrough` | Emit `walkthrough.html`: the recording + a synchronized step timeline + a PASS/FAIL verdict + a deterministic run fingerprint. |
+| `--walkthrough` | Emit `walkthrough.html`: the recording + an ordered step timeline + a PASS/FAIL verdict + a deterministic run fingerprint. |
 
 **Safety is unchanged.** Every step is still run through the flow safety model
 *before* execution — clicks need `safe: true`, destructive targets need explicit
@@ -1082,11 +1083,11 @@ the first is used.
 
 Add `--record` (with `--execute`) to capture the session to
 `video/walkthrough.webm`, and `--walkthrough` to emit a shareable
-`walkthrough.html` (recording + synchronized step timeline + run fingerprint).
-While recording, Lens overlays a **visible cursor** that glides to each target
-and pulses on click, so the video shows what happened. The cursor is a visual
-aid only — it changes nothing the checks observe, and typed secret values are
-never shown.
+`walkthrough.html` (recording + ordered step timeline + run fingerprint).
+While recording, Playwright supplies a native pointer and click highlight.
+Only click actions are annotated, using a fixed label. Secret-marked inputs
+remain masked, and typed values never become annotation text. Review other rendered account content
+before sharing a recording.
 
 ### Safety Model
 
@@ -1306,7 +1307,73 @@ historical implementation context.
 
 ## Version
 
-Lens v1.0.1 — browser checks, same-origin link checking, Spec/Eval integration,
+Lens v1.1.0 — browser checks, same-origin link checking, Spec/Eval integration,
 safe executable flows, visual baselines/diffing, axe-core accessibility
 scanning, performance evidence, bounded crawl, HTML reports, and centralized
 secret redaction across artifacts, reports, and verbose bridge logs.
+
+## Browser runtime readiness and lifecycle
+
+Lens 1.1.0 requires Kujo >=1.2.3 for private process stdin. The pinned browser
+runtime is Playwright Core 1.61.1 with Node >=18. The default browser
+installation is `playwright-core install chromium --only-shell`. Firefox and
+WebKit remain separate installations; throttling remains Chromium-only.
+
+After the navigation `load` milestone, Lens observes DOM mutations and network
+requests. Readiness requires a 250ms quiet window with no pending requests and
+an observation horizon of 500ms plus `settle_ms` (400ms by default; 0 in quick
+mode). This preserves the former quick and normal late-evidence horizons without
+adding a second fixed pause after network idle. The readiness cap is 2 seconds,
+or the configured longer observation horizon, bounded by the navigation timeout.
+Long polling and permanent requests reach the cap and leave usable evidence.
+
+Checks can use `--ready-selector <selector>` or `.lens.toml` `ready_selector` to wait
+for a visible app-ready element instead of the heuristic. Timeout continues with
+bounded evidence and records `max-wait-reached`; it is diagnostic, not an implicit
+assertion. Use a Spec or flow assertion when that condition must determine PASS/FAIL.
+No finite heuristic can capture arbitrary future events: use an explicit app
+condition or a longer settle horizon when the application's relevant work starts
+later. Readiness metadata contains only a reason enum and a duration, never the
+selector, URLs, DOM content, or request data.
+
+Unconfigured single checks use the one-shot bridge. For `--crawl`, `--watch`,
+`--config`, or an existing `.lens.toml`, the launcher owns a private Unix socket
+and a session browser host. Configuration may enable crawl; Kujo remains its
+only parser. Kujo still owns configuration, BFS ordering, URL safety, redaction,
+findings and verdicts. Jobs are serialized; each viewport has a fresh context.
+The runtime automatically captures up to four viewports concurrently; explicit
+`--max-concurrency` is capped at 16. Results retain requested viewport order.
+Crawls reuse one browser across pages, including the initial page. Watch retains
+its browser between iterations and reloads clean contexts. An idle browser
+closes after 60 seconds; a subsequent job relaunches it. A crashed job is never
+replayed by the host; the next job can launch a replacement browser.
+
+Normal exit, SIGINT and SIGTERM close the browser and remove the private socket.
+An uncatchable supervisor kill can leave an empty socket directory; new sessions
+use unique directories and do not connect to stale endpoints. Watch checks its
+supervisor's lifetime and exits after its next bounded iteration if orphaned.
+No job bodies or auth storage contents are written to the IPC directory. The
+host never accepts interactive flow programs. Direct Kujo/bridge invocations
+retain one-shot behavior unless started inside the owned session.
+
+`metadata.json` retains schema version 1 and adds numeric browser-phase timings,
+per-viewport readiness, and session counters under `provider`. `crawl.json` adds
+runtime timing and cumulative session launch/context/page counters. Context/page
+counters count viewport captures; `visited_count` counts crawl URLs. These fields
+are diagnostics and do not participate in findings, visual baselines or verdicts.
+Flow metadata includes runtime timings; executed steps include monotonic start/end
+offsets measured from bridge startup. Existing filenames and exit codes remain.
+
+Flows use native per-page WebM screencasting at `video/walkthrough.webm`.
+Click annotations use a fixed label; typing and navigation have no action
+annotations. Lens retains a 300ms final-frame hold only for recordings. Explicit
+`wait` steps retain their requested delay. Scrolls complete without smooth-scroll
+sleeps; asynchronous outcomes should use selector/text waits or assertions.
+The 100 MiB recording cap and optional MP4 conversion remain in effect.
+Secret-marked inputs are visually masked and their known values are scrubbed
+from structured runtime evidence. Rendered account content still needs review
+before sharing screenshots/video. Flow programs use Kujo's private, unlinked
+stdin storage instead of a persistent `flow-program.json` handoff.
+
+See [the engineering report](browser-runtime-upgrade.md) for benchmark receipts,
+footprint, platform coverage, remaining limitations and failure handling.

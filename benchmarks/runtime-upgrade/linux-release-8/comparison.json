@@ -1,0 +1,114 @@
+{
+  "iterations": 8,
+  "source_run": "https://github.com/kujolang/lens/actions/runs/34084543631",
+  "metrics": {
+    "cli_trivial": {
+      "before_seconds": 1.72618,
+      "after_seconds": 1.74049,
+      "seconds_saved": -0.014310000000000045,
+      "improvement_percent": -0.8289981346093712
+    },
+    "cli_realistic": {
+      "before_seconds": 1.95201,
+      "after_seconds": 1.97039,
+      "seconds_saved": -0.018380000000000063,
+      "improvement_percent": -0.9415935369183591
+    },
+    "quick_trivial": {
+      "before_seconds": 1.26451,
+      "after_seconds": 1.28811,
+      "seconds_saved": -0.023600000000000065,
+      "improvement_percent": -1.8663355766265246
+    },
+    "quick_realistic": {
+      "before_seconds": 1.48639,
+      "after_seconds": 1.52982,
+      "seconds_saved": -0.04342999999999986,
+      "improvement_percent": -2.9218441997053164
+    },
+    "quick_spa": {
+      "before_seconds": 1.3805,
+      "after_seconds": 1.29842,
+      "seconds_saved": 0.08208000000000015,
+      "improvement_percent": 5.945671858022467
+    },
+    "quick_image_heavy": {
+      "before_seconds": 1.42981,
+      "after_seconds": 1.44032,
+      "seconds_saved": -0.01051000000000002,
+      "improvement_percent": -0.7350627006385477
+    },
+    "quick_many_links": {
+      "before_seconds": 1.32361,
+      "after_seconds": 1.34816,
+      "seconds_saved": -0.024550000000000072,
+      "improvement_percent": -1.8547759536419393
+    },
+    "quick_late_network": {
+      "before_seconds": 2.07866,
+      "after_seconds": 1.86187,
+      "seconds_saved": 0.21679000000000026,
+      "improvement_percent": 10.429315039496611
+    },
+    "inspect": {
+      "before_seconds": 1.0089653619999126,
+      "after_seconds": 1.0331713200001786,
+      "seconds_saved": -0.024205958000266037,
+      "improvement_percent": -2.399087115566226
+    },
+    "crawl_5": {
+      "before_seconds": 8.028135090500086,
+      "after_seconds": 3.972211442999992,
+      "seconds_saved": 4.055923647500094,
+      "improvement_percent": 50.52136768724259
+    },
+    "crawl_10": {
+      "before_seconds": 13.403347925999924,
+      "after_seconds": 7.215133282000011,
+      "seconds_saved": 6.188214643999913,
+      "improvement_percent": 46.169171151604324
+    },
+    "flow_1_click": {
+      "before_seconds": 3.4329448815000205,
+      "after_seconds": 1.1176330124999367,
+      "seconds_saved": 2.315311869000084,
+      "improvement_percent": 67.4438987202268
+    },
+    "flow_5_click": {
+      "before_seconds": 11.681983467499947,
+      "after_seconds": 1.2502223529999128,
+      "seconds_saved": 10.431761114500034,
+      "improvement_percent": 89.29785890830856
+    },
+    "flow_5_recorded": {
+      "before_seconds": 14.68084506799994,
+      "after_seconds": 4.308989042500002,
+      "seconds_saved": 10.371856025499937,
+      "improvement_percent": 70.64890323042526
+    },
+    "flow_navigation": {
+      "before_seconds": 11.813055710999947,
+      "after_seconds": 1.3915104484999574,
+      "seconds_saved": 10.42154526249999,
+      "improvement_percent": 88.22057152236887
+    },
+    "loop_5": {
+      "before_seconds": 6.209560703499847,
+      "after_seconds": 6.334777954999936,
+      "seconds_saved": -0.12521725150008933,
+      "improvement_percent": -2.0165235107455204
+    },
+    "bridge_trivial": {
+      "before_seconds": 1.51509,
+      "after_seconds": 1.53329,
+      "seconds_saved": -0.018199999999999994,
+      "improvement_percent": -1.20124877070009
+    },
+    "bridge_realistic": {
+      "before_seconds": 1.75057,
+      "after_seconds": 1.76623,
+      "seconds_saved": -0.015660000000000007,
+      "improvement_percent": -0.8945657700063412
+    }
+  }
+}

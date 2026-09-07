@@ -1,0 +1,37 @@
+{
+  "lens": "1.1.0",
+  "playwright": "1.61.1",
+  "node": "v26.7.0",
+  "os": "macOS-26.6.2-x86_64-i386-64bit",
+  "architecture": "x86_64",
+  "kujo": "1.2.3",
+  "browsers": [
+    {
+      "name": "chromium",
+      "revision": "1228",
+      "installByDefault": true,
+      "browserVersion": "149.0.7827.55",
+      "title": "Chrome for Testing"
+    },
+    {
+      "name": "chromium-headless-shell",
+      "revision": "1228",
+      "installByDefault": true,
+      "browserVersion": "149.0.7827.55",
+      "title": "Chrome Headless Shell"
+    }
+  ],
+  "npm_disk_kib": 15632,
+  "default_install_kib": 220764,
+  "baseline_default_install_kib": 606768,
+  "benchmark_note": "Local footprint and compatibility environment. Late desktop batches affected by process exhaustion are excluded; final acceptance uses clean Linux CI.",
+  "logical_cpus": 12,
+  "memory_bytes": 17179869184,
+  "browser_manifest_note": "The browsers array is Playwright driver metadata; Lens install-browser overrides its default with --only-shell.",
+  "installed_default_components": [
+    "chromium-headless-shell-1228",
+    "ffmpeg-1011"
+  ],
+  "source_head": "45af1d798ffe19bc876750c2b36a2d1c5ec542f3",
+  "source_note": "Final production runtime revision; e8cf9357462aa1ab438b5b358eee3c9d84d131dc adds CI visual dependencies and E2E prerequisite validation. Local benchmark variants predate this revision; use the per-receipt provenance and final Linux run."
+}

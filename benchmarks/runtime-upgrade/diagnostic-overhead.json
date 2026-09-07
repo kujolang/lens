@@ -1,0 +1,32 @@
+{
+  "iterations": 8,
+  "method": "alternating candidate quick image-heavy CLI; identical stdout instrumentation, with/without duplicate per-viewport timings/readiness",
+  "unit": "seconds",
+  "samples": {
+    "current": [
+      5.552419415005716,
+      4.005516858000192,
+      4.2578439290082315,
+      5.247998534003273,
+      4.723851996997837,
+      4.355651835008757,
+      4.565588122990448,
+      4.178895144999842
+    ],
+    "metadata_only": [
+      5.132336587994359,
+      4.002493838997907,
+      4.881252143997699,
+      4.584524211997632,
+      4.262068646989064,
+      4.333079782998539,
+      4.814320459001465,
+      4.858224797004368
+    ]
+  },
+  "medians": {
+    "current": 4.460619978999603,
+    "metadata_only": 4.699422335499548
+  },
+  "median_paired_delta": -0.012797535506251734
+}

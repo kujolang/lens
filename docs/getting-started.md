@@ -14,7 +14,7 @@ You need three things before installing Lens:
 
 | Tool | Why | Check |
 |------|-----|-------|
-| [Kujo](https://github.com/kujolang/kujo) runtime | Lens is written in Kujo | `kujo --version` |
+| [Kujo](https://github.com/kujolang/kujo) runtime | Lens requires Kujo >=1.2.3 (private process stdin) | `kujo --version` |
 | Node.js ≥ 18 | Drives the headless browser | `node --version` |
 | bash | The `lens` launcher is a bash script | `bash --version` |
 
@@ -60,7 +60,7 @@ export PATH="/path/to/lens:$PATH"
 
 ```bash
 ./lens --version
-# Lens v1.0.1
+# Lens v1.1.0
 
 ./lens --help
 # Usage, flags, and examples
@@ -217,3 +217,31 @@ The reference has a [fuller troubleshooting list](reference.md#troubleshooting).
 - [README](../README.md) — the quick tour and feature overview
 - [Reference](reference.md) — every flag, the JSON schema, the safety model, and
   the redaction model
+
+## Browser runtime and installation
+
+`npm ci --prefix bridge` installs the exact Playwright Core 1.61.1 driver and
+axe-core 4.11.4. `npm run install-browser --prefix bridge` installs Chromium's
+headless shell and the recording codec support, omitting headed Chrome. Check,
+inspect, flows, screenshots, accessibility, and recordings use that shell.
+Install a separate engine only when needed:
+
+```bash
+cd bridge
+npx playwright-core install firefox
+npx playwright-core install webkit
+```
+
+Kujo >=1.2.3 is required for private flow-program stdin. Node 18 remains supported; `.nvmrc` continues to select Node 20. Do not substitute
+a system Chrome executable for the browser revision installed by Playwright.
+
+Unconfigured single checks stay one-shot. Crawl/watch and configuration-driven
+checks automatically use an owned browser host through `lens`; each capture gets a fresh
+context. Stop watch with Ctrl-C. A finished command closes its browser and removes
+its private socket. The browser also closes after 60 idle seconds in a live
+session and is relaunched when needed. Direct bridge calls remain one-shot.
+
+If an application has an explicit readiness marker, use
+`lens check http://localhost:3000 --ready-selector '#app-ready'`.
+See [readiness semantics](reference.md#browser-runtime-readiness-and-lifecycle)
+and the [measured upgrade report](browser-runtime-upgrade.md).

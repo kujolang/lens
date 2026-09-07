@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "iterations": 8,
+  "unit": "seconds",
+  "cold_definition": "fresh Node process and Chromium per trial; session_first includes host process boot",
+  "medians": {
+    "one_shot_loop_5": 19.049594716999998,
+    "session_loop_5": 13.212399568999999,
+    "session_first": 3.8090270425000012,
+    "session_warm": 2.3255082209999998
+  },
+  "samples": {
+    "one_shot_loop_5": [
+      19.498765195,
+      17.954146292999997,
+      19.168770378999998,
+      17.498391713,
+      17.440638448999998,
+      18.930419055,
+      20.109914324,
+      19.350686605000003
+    ],
+    "session_loop_5": [
+      13.408024471000003,
+      13.425548376,
+      12.990550862,
+      12.007672465,
+      12.52661915,
+      13.400993052999999,
+      13.023806084999999,
+      13.763345141999999
+    ],
+    "session_first": [
+      3.822926534000001,
+      3.8761939109999997,
+      4.020587322999999,
+      3.45883662,
+      3.512063714000002,
+      3.795127551000001,
+      3.716243125,
+      4.14592915
+    ],
+    "session_warm": [
+      2.411110854000002,
+      2.399263880999999,
+      2.3624387910000006,
+      2.4122844110000004,
+      2.228600592999999,
+      2.171034352999999,
+      2.3596224189999995,
+      2.7900971000000028,
+      2.2866356510000005,
+      2.1800816080000005,
+      2.3184061220000003,
+      2.184840157999999,
+      2.1748964330000016,
+      2.1377789239999982,
+      2.1283704410000026,
+      2.1077900469999986,
+      2.2090763499999992,
+      2.243318041999999,
+      2.2979050850000022,
+      2.2642559589999984,
+      2.4437339379999976,
+      2.422215311,
+      2.3750795059999983,
+      2.3648367470000013,
+      2.476077302999998,
+      2.3490815189999994,
+      2.2331584309999997,
+      2.249245707000002,
+      2.3326103199999997,
+      2.346703120000002,
+      2.5540336639999985,
+      2.384068887999998
+    ]
+  },
+  "resources": [
+    {
+      "rss_kib": 236092,
+      "process_count": 4,
+      "browser_launches": 1,
+      "remaining_contexts": 0
+    },
+    {
+      "rss_kib": 234756,
+      "process_count": 4,
+      "browser_launches": 1,
+      "remaining_contexts": 0
+    },
+    {
+      "rss_kib": 234844,
+      "process_count": 4,
+      "browser_launches": 1,
+      "remaining_contexts": 0
+    },
+    {
+      "rss_kib": 236228,
+      "process_count": 4,
+      "browser_launches": 1,
+      "remaining_contexts": 0
+    },
+    {
+      "rss_kib": 236636,
+      "process_count": 4,
+      "browser_launches": 1,
+      "remaining_contexts": 0
+    },
+    {
+      "rss_kib": 235804,
+      "process_count": 4,
+      "browser_launches": 1,
+      "remaining_contexts": 0
+    },
+    {
+      "rss_kib": 245380,
+      "process_count": 4,
+      "browser_launches": 1,
+      "remaining_contexts": 0
+    },
+    {
+      "rss_kib": 233240,
+      "process_count": 4,
+      "browser_launches": 1,
+      "remaining_contexts": 0
+    }
+  ],
+  "idle_trials": [
+    {
+      "configured_ms": 30000,
+      "closed_after_ms": 30063,
+      "browser_closed": true
+    },
+    {
+      "configured_ms": 60000,
+      "closed_after_ms": 60063,
+      "browser_closed": true
+    }
+  ]
+}

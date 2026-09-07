@@ -1,0 +1,27 @@
+{
+  "head": "e96fb383366b845c633302a59effd4b3010f4b6e",
+  "lens": "1.0.1",
+  "playwright": "1.60.0",
+  "node": "v26.7.0",
+  "os": "macOS-26.6.2-x86_64-i386-64bit",
+  "architecture": "x86_64",
+  "browsers": [
+    {
+      "name": "chromium",
+      "revision": "1223",
+      "installByDefault": true,
+      "browserVersion": "148.0.7778.96",
+      "title": "Chrome for Testing"
+    },
+    {
+      "name": "chromium-headless-shell",
+      "revision": "1223",
+      "installByDefault": true,
+      "browserVersion": "148.0.7778.96",
+      "title": "Chrome Headless Shell"
+    }
+  ],
+  "npm_disk_kib": 15420,
+  "kujo_tests": 448,
+  "initial_browser_failure": "Missing lockfile-matched shell revision 1223; restored using npm ci and install-browser before baseline."
+}
