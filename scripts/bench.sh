@@ -25,6 +25,10 @@ PORT="${LENS_BENCH_PORT:-9972}"
 WORK="$(mktemp -d)"
 FIXTURE_PID=""
 cleanup() {
+  local status=$?
+  if (( status != 0 )) && [[ -s "$WORK/fixture.log" ]]; then
+    cat "$WORK/fixture.log" >&2
+  fi
   if [[ -n "$FIXTURE_PID" ]]; then
     kill "$FIXTURE_PID" 2>/dev/null || true
     wait "$FIXTURE_PID" 2>/dev/null || true
@@ -55,7 +59,7 @@ print(float(sys.argv[2]) - float(sys.argv[1]))
 PY
 }
 
-python3 "$SCRIPT_DIR/benchmark-fixture-server.py" --port "$PORT" >/dev/null 2>&1 &
+python3 "$SCRIPT_DIR/benchmark-fixture-server.py" --port "$PORT" >"$WORK/fixture.log" 2>&1 &
 FIXTURE_PID=$!
 BASE_URL="http://127.0.0.1:$PORT"
 python3 - "$BASE_URL/trivial" <<'PYREADY'
