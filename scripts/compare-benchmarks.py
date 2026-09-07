@@ -14,6 +14,8 @@ def load_medians(path: str) -> dict[str, float]:
         raise ValueError(f"unsupported benchmark receipt: {path}")
     if payload.get("completed") is False:
         raise ValueError(f"incomplete benchmark receipt: {path}")
+    if payload.get("excluded_reason"):
+        raise ValueError(f"excluded diagnostic receipt: {path}")
     medians = payload.get("medians")
     if not isinstance(medians, dict) or not medians:
         raise ValueError(f"benchmark receipt has no medians: {path}")

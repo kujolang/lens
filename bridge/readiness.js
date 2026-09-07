@@ -38,7 +38,12 @@ async function observeReadiness(page) {
       // The quiet condition cannot succeed before this evidence horizon.
       // Observers continue tracking activity; avoid repeated browser round trips
       // until their state can actually make the page ready.
-      await delay(Math.max(1, Math.ceil(Math.min(minimum, cap) - (performance.now() - start))));
+      const horizon = Math.min(minimum, cap);
+      // Timer granularity can wake us slightly early. Recheck the monotonic
+      // deadline before querying the browser, rather than adding a 50ms poll.
+      while (performance.now() - start < horizon) {
+        await delay(Math.max(1, Math.ceil(horizon - (performance.now() - start))));
+      }
       while (performance.now() - start < cap && !page.isClosed()) {
         let quiet = false;
         try {

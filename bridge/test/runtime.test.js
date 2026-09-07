@@ -85,6 +85,7 @@ test('real browser runtime evidence, flows, and isolation', browserTests, async 
     ]) {
       await t.test(`readiness ${route}`, async () => {
         const result = await capture({ ...parseArgs(), url: url + route, viewports: ['desktop'], timeout: 4 }, host);
+        assert.deepEqual(result.provider_errors, [], 'Readiness fixture capture must succeed');
         const vp = result.viewports[0];
         assert.equal(vp.readiness.reason, reason);
         assert.ok(vp.dom_summary.visible_text_sample.includes(text));

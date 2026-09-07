@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify a failed core benchmark cannot become a successful median receipt."""
 import json
+import importlib.util
 import os
 from pathlib import Path
 import socket
@@ -37,4 +38,15 @@ with tempfile.TemporaryDirectory(prefix='lens-bench-test-') as directory:
     assert resumed.returncode == 0, resumed.stderr
     data = json.loads(receipt.read_text())
     assert data['completed'] is True and len(data['medians']) == 10, data
-print('Benchmark failure rejection and resume: 2 passed, 0 failed')
+    data['excluded_reason'] = 'Deliberately invalid diagnostic fixture'
+    receipt.write_text(json.dumps(data))
+    spec = importlib.util.spec_from_file_location('compare', ROOT / 'scripts/compare-benchmarks.py')
+    compare = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(compare)
+    try:
+        compare.load_medians(str(receipt))
+    except ValueError as error:
+        assert 'excluded' in str(error)
+    else:
+        raise AssertionError('Excluded diagnostic accepted as performance evidence')
+print('Benchmark failure rejection, resume and exclusion: 3 passed, 0 failed')
