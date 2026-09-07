@@ -72,6 +72,13 @@ jobs:
           npm ci
           PLAYWRIGHT_SKIP_BROWSER_GC=1 npx playwright-core install chromium --only-shell
 
+      - name: Install visual comparison test dependencies
+        working-directory: lens
+        run: |
+          python3 -m venv "$RUNNER_TEMP/lens-visual"
+          "$RUNNER_TEMP/lens-visual/bin/python" -m pip install --only-binary=:all: -r .github/visual-test-requirements.txt
+          echo "$RUNNER_TEMP/lens-visual/bin" >> "$GITHUB_PATH"
+
       - name: Verify runtime contracts before measuring
         working-directory: lens
         env:

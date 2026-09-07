@@ -140,6 +140,13 @@ jobs:
           npx playwright-core install-deps chromium
           npm run install-browser
 
+      - name: Install visual comparison test dependencies
+        working-directory: lens
+        run: |
+          python3 -m venv "$RUNNER_TEMP/lens-visual"
+          "$RUNNER_TEMP/lens-visual/bin/python" -m pip install --only-binary=:all: -r .github/visual-test-requirements.txt
+          echo "$RUNNER_TEMP/lens-visual/bin" >> "$GITHUB_PATH"
+
       - name: Browser runtime regression tests
         working-directory: lens
         run: npm test --prefix bridge
