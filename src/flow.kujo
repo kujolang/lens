@@ -4,7 +4,7 @@
 # Safety rules block destructive actions by default.
 
 from src.common import is_trueish, is_falseish, str_starts_with, str_contains, str_lower
-from src.redact import redact_text
+from src.redact import redact_text, redact_value
 
 # Return a copy of a flow safe to persist to flow.json: typed-input values are
 # replaced with [REDACTED] so credentials/secrets entered via `type` steps
@@ -30,15 +30,7 @@ export func redact_flow_for_output(flow) {
 		out["steps"] = red_steps
 	}
 
-	# Sweep the full serialized structure as well: flow names, navigation URLs,
-	# selectors, labels, and screenshot names are all user-controlled strings.
-	try {
-		swept := parse_json(redact_text(to_json(out)))
-		if is_trueish(is_dict(swept)) { return swept }
-	} except e {
-		# Preserve the type-value redaction if a future value cannot round-trip.
-	}
-	return out
+	return redact_value(out)
 }
 
 # Known flow step types.

@@ -11,6 +11,9 @@ from src.common import str_starts_with, str_contains, str_lower, is_trueish, is_
 # Returns empty string on parse failure.
 export func extract_host(raw_url) {
 	mut url := str_lower(to_string(raw_url))
+	# Browsers normalize embedded ASCII controls and backslashes. Reject these
+	# ambiguous inputs instead of validating a different destination.
+	if len(regex_find_all(url, "[\\x00-\\x20\\x7f\\\\]")) > 0 { return "" }
 	
 	# Strip scheme
 	mut host_part := ""
@@ -33,13 +36,23 @@ export func extract_host(raw_url) {
 		idx = idx + 1
 	}
 	
-	# Handle IPv6 bracket notation: [::1]:port → [::1]
+	# Userinfo ends at the LAST @, before host/port parsing.
+	mut at := index_of(host_part, "@")
+	while at >= 0 {
+		host_part = substring(host_part, at + 1, len(host_part))
+		at = index_of(host_part, "@")
+	}
+
+	# Handle IPv6 bracket notation: [::1]:port → [::1]. A suffix
+	# other than a valid port must not be mistaken for loopback.
 	if is_trueish(str_starts_with(host_part, "[")) {
 		mut bracket_idx := index_of(host_part, "]")
 		if bracket_idx >= 0 {
+			suffix := substring(host_part, bracket_idx + 1, len(host_part))
+			if suffix != "" && is_falseish(valid_port_suffix(suffix)) { return "" }
 			return substring(host_part, 0, bracket_idx + 1)
 		}
-		return host_part
+		return ""
 	}
 	
 	# Strip port (colon followed by digits).
@@ -48,10 +61,17 @@ export func extract_host(raw_url) {
 	# We detect this by checking if the first colon is at position 0.
 	mut colon_idx := index_of(host_part, ":")
 	if colon_idx > 0 {
+		if is_falseish(valid_port_suffix(substring(host_part, colon_idx, len(host_part)))) { return "" }
 		host_part = substring(host_part, 0, colon_idx)
 	}
 	
 	return host_part
+}
+
+func valid_port_suffix(suffix) {
+	if suffix == ":" { return true }
+	if len(regex_find_all(suffix, "^:[0-9]{1,5}$")) != 1 { return false }
+	return to_int(substring(suffix, 1, len(suffix))) <= 65535
 }
 
 # Check if a URL has a valid http/https scheme.

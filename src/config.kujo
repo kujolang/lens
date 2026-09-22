@@ -348,8 +348,9 @@ export func parse_diff_threshold(argv) {
 	if raw == "" {
 		return DEFAULT_DIFF_THRESHOLD_VAL
 	}
-	val := to_number(raw)
-	if val < 0.0 || val > 1.0 {
+	mut val := DEFAULT_DIFF_THRESHOLD_VAL
+	try { val = to_float(raw) } except e { return DEFAULT_DIFF_THRESHOLD_VAL }
+	if val != val || val < 0.0 || val > 1.0 {
 		return DEFAULT_DIFF_THRESHOLD_VAL
 	}
 	return val
@@ -762,6 +763,19 @@ export func merge_file_config(config, argv, file_data) {
 			merged["viewports"] = vps
 		}
 	}
+
+	# Apply the same numeric/enum policy to merged file values as CLI values.
+	# Reuse the parsers so future bounds have one authoritative implementation.
+	merged["timeout"] = parse_timeout(array("check", "--timeout", to_string(merged["timeout"])))
+	merged["max_links"] = parse_max_links(array("check", "--max-links", to_string(merged["max_links"])))
+	merged["settle_ms"] = parse_settle_ms(array("check", "--settle-ms", to_string(merged["settle_ms"])))
+	merged["max_concurrency"] = parse_max_concurrency(array("check", "--max-concurrency", to_string(merged["max_concurrency"])))
+	merged["max_pages"] = parse_max_pages(array("check", "--max-pages", to_string(merged["max_pages"])))
+	merged["max_depth"] = parse_max_depth(array("check", "--max-depth", to_string(merged["max_depth"])))
+	merged["watch_interval"] = parse_watch_interval(array("check", "--watch-interval", to_string(merged["watch_interval"])))
+	merged["diff_threshold"] = parse_diff_threshold(array("check", "--diff-threshold", to_string(merged["diff_threshold"])))
+	merged["browser"] = parse_browser(array("check", "--browser", to_string(merged["browser"])))
+	merged["throttle"] = parse_throttle(array("check", "--throttle", to_string(merged["throttle"])))
 
 	# --quick is an explicit CLI profile, so its defaults outrank project-file
 	# values while still allowing direct CLI flags to override each choice.

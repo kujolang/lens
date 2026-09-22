@@ -17,6 +17,14 @@ bench=importlib.util.module_from_spec(spec);spec.loader.exec_module(bench)
 class Handler(bench.Handler):
     cookies=[]
     def do_GET(self):
+        if self.path.startswith('/privacy'):
+            self.send_response(500, 'token=PRIVATE_SECRET_123')
+            self.send_header('Content-Type', 'text/html')
+            self.end_headers()
+            self.wfile.write(b'<h1>Privacy</h1><div id="token=PRIVATE_SECRET_123" style="width:4000px">Evidence</div>')
+            return
+        if self.path == '/a11y-failure':
+            return self.send(200, 'text/html', bench.fixture.html('<main><h1>Fixture</h1><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"></main>'))
         tree={
             '/tree': '<a href="/tree/a/">A</a><a href="/broken">Broken</a><a href="/tree/b">B</a><a href="https://example.com">External</a><a href="/delete-user">Delete</a>',
             '/tree/a/':'<a href="child">Child</a>', '/tree/b':'B',
@@ -51,6 +59,8 @@ def main():
                 assert (work/'check'/name).stat().st_size>0,name
             assert 'session' not in json.loads((work/'check/metadata.json').read_text())['provider']
             passed+=1
+            run('check',url+'/trivial?token=PRIVATE_SECRET_123','--baseline','--update-baseline','--baseline-dir',str(work/'baselines'),'--out',str(work/'check'))
+            passed+=1
             run('check',url+'/trivial?token=PRIVATE_SECRET_123','--compare-baseline','--baseline-dir',str(work/'baselines'),'--out',str(work/'compare'))
             passed+=1
             run('check',url+'/many-links','--quick','--crawl','--max-pages','10','--out',str(work/'crawl'))
@@ -72,11 +82,32 @@ def main():
             assert [p['url'].removeprefix(url) for p in tree['pages']]==['/tree','/tree/a/','/broken','/tree/b','/tree/a/child']
             assert tree['pages'][2]['error']>0
             assert tree['runtime']['session']['browser_launches']==1
+            assert json.loads((work/'tree/lens-report.json').read_text())['status']=='FAIL'
+            passed+=1
+            run('check',url+'/a11y-failure','--accessibility','--html','--eval-out',str(work/'a11y-eval.json'),'--out',str(work/'a11y-failure'),allowed=(1,))
+            for artifact in ['lens-report.json','metadata.json']:
+                assert json.loads((work/'a11y-failure'/artifact).read_text())['status']=='FAIL',artifact
+            assert json.loads((work/'a11y-eval.json').read_text())['status']=='FAIL'
+            assert 'Status: FAIL' in (work/'a11y-failure/lens-report.md').read_text()
+            assert '<div class="verdict">FAIL</div>' in (work/'a11y-failure/lens-report.html').read_text()
+            passed+=1
+            run('check',url+'/privacy?%74oken=PRIVATE_SECRET_123#access_token=PRIVATE_SECRET_123','--quick','--html','--out',str(work/'privacy'),allowed=(1,))
+            for artifact in (work/'privacy').glob('*'):
+                if artifact.is_file():
+                    assert 'PRIVATE_SECRET_123' not in artifact.read_text(),artifact.name
+                    if artifact.suffix=='.json': json.loads(artifact.read_text())
+            passed+=1
+            specfile=work/'spec.json'
+            specfile.write_text(json.dumps({'title':{'contains':'Not present'}}))
+            run('check',url+'/trivial','--quick','--spec',str(specfile),'--eval-out',str(work/'spec-eval.json'),'--out',str(work/'spec'),allowed=(1,))
+            report=json.loads((work/'spec/lens-report.json').read_text())
+            evaluated=json.loads((work/'spec-eval.json').read_text())
+            assert len(evaluated['results'])==len(report['findings'])
             passed+=1
             run('inspect',url+'/flow','--json','--out',str(work/'inspect'))
             assert (work/'inspect/elements.json').stat().st_size>0
             passed+=1
-            flow={'name':'Fixture journey','url':url+'/flow','viewports':['desktop'],'steps':[
+            flow={'name':'Fixture journey','description':'password="PRIVATE_SECRET_123"','url':url+'/flow','viewports':['desktop'],'steps':[
                 {'visit':url+'/flow'},{'click':{'selector':'#go','safe':True}},
                 {'type':{'selector':'#value','value':'PRIVATE_SECRET_123','secret':True}},
                 {'wait':{'ms':50}},{'wait_for_selector':'#go'}, {'screenshot':{'name':'proof'}},
@@ -94,7 +125,12 @@ def main():
             flow['steps'][1]={'click':{'selector':'#go'}}
             program.write_text(json.dumps(flow))
             run('flow',str(program),'--validate','--out',str(work/'blocked'),allowed=(1,2))
+            run('flow',str(program),'--execute','--walkthrough','--fail-on','warning','--out',str(work/'blocked-executed'),allowed=(1,))
+            assert '<div class="verdict">FAIL</div>' in (work/'blocked-executed/walkthrough.html').read_text()
+            assert json.loads((work/'blocked-executed/lens-report.json').read_text())['status']=='FAIL'
             run('check','https://example.com','--out',str(work/'external'),allowed=(2,))
+            for command in ['check','inspect']:
+                run(command,'http://localhost:password@example.invalid/','--out',str(work/'authority'),allowed=(2,))
             passed+=1
             for directory in ['check','compare','crawl','inspect','flow']:
                 for file in (work/directory).rglob('*'):

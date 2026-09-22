@@ -125,7 +125,7 @@ export func save_baselines(config, run_dir, viewports, baseline_dir) {
 			mi = mi + 1
 		}
 		meta_json := to_json(meta)
-		write_file(baseline_dir + "/baseline-metadata.json", meta_json)
+		write_file(baseline_dir + "/baseline-metadata.json", meta_json, true)
 	}
 	
 	return saved
@@ -186,7 +186,6 @@ export func compare_baselines(config, run_dir, viewports, baseline_dir) {
 		}
 		
 		# Run visual diff via Python bridge
-		cmd := "python3 bridge/visual-diff.py " + current_path + " " + baseline_path + " --threshold " + to_string(threshold) + " --diff-output " + diff_path + " --json"
 		diff_result := spawn_process(array("python3", "bridge/visual-diff.py", current_path, baseline_path, "--threshold", to_string(threshold), "--diff-output", diff_path, "--json"))
 		
 		if is_trueish(diff_result.success) {
