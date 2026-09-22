@@ -57,7 +57,10 @@ def compare_images(current_path, baseline_path, threshold=0.01, diff_output=None
         result["total_pixels"] = int(total_pixels)
 
         # Count changed pixels
-        diff = np.abs(curr_arr.astype(int) - base_arr.astype(int))
+        # RGB channel differences are in [-255, 255]; int16 is sufficient.
+        # Subtract directly into the narrow result and take abs in place.
+        diff = np.subtract(curr_arr, base_arr, dtype=np.int16)
+        np.abs(diff, out=diff)
         # A pixel is "changed" if any channel differs significantly
         changed = np.any(diff > 10, axis=2)  # threshold of 10 per channel
         changed_pixels = int(np.sum(changed))

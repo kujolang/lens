@@ -160,7 +160,9 @@ jobs:
         working-directory: lens
         env:
           KUJO_BIN: ${{ github.workspace }}/kujo/target/release/kujo
-        run: python3 scripts/runtime-e2e.py
+        run: |
+          python3 scripts/test-visual-diff.py
+          python3 scripts/runtime-e2e.py
 
       - name: Run Lens against a real server
         working-directory: lens

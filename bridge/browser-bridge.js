@@ -235,32 +235,32 @@ async function runAxeScan(page, opts) {
       } else {
         context = document;
       }
+      // Project in the browser: node HTML and unused result collections must
+      // not cross the browser-to-Node transport just to be discarded.
       // eslint-disable-next-line no-undef
-      return await axe.run(context, runOptions);
+      const raw = await axe.run(context, runOptions);
+      return {
+        violations: (raw.violations || []).map(v => ({
+          id: v.id,
+          impact: v.impact || 'moderate',
+          description: v.description || '',
+          help: v.help || '',
+          help_url: v.helpUrl || '',
+          tags: v.tags || [],
+          node_count: (v.nodes || []).length,
+          targets: (v.nodes || []).slice(0, 5).map(n => (n.target || []).join(' ')),
+        })),
+        passes_count: (raw.passes || []).length,
+        incomplete_count: (raw.incomplete || []).length,
+        inapplicable_count: (raw.inapplicable || []).length,
+      };
     }, { tags: opts.a11yTags, include: opts.a11yInclude, exclude: opts.a11yExclude });
-
-    // Map to a compact, privacy-safe shape. We deliberately do NOT include
-    // node.html (which can contain rendered secrets); only CSS-selector
-    // targets and counts are retained.
-    const violations = (axeResult.violations || []).map((v) => ({
-      id: v.id,
-      impact: v.impact || 'moderate',
-      description: v.description || '',
-      help: v.help || '',
-      help_url: v.helpUrl || '',
-      tags: v.tags || [],
-      node_count: (v.nodes || []).length,
-      targets: (v.nodes || []).slice(0, 5).map((n) => (n.target || []).join(' ')),
-    }));
 
     return {
       engine_available: true,
       engine: 'axe-core',
       version: axeVersion,
-      violations,
-      passes_count: (axeResult.passes || []).length,
-      incomplete_count: (axeResult.incomplete || []).length,
-      inapplicable_count: (axeResult.inapplicable || []).length,
+      ...axeResult,
     };
   } catch (err) {
     return { engine_available: false, error: 'axe-core scan failed: ' + err.message };
@@ -722,7 +722,7 @@ if (require.main === module) {
   });
 } else {
   module.exports = {
-    capture, captureViewport, parseArgs, resolveViewport, mapWithConcurrency, COLLECT_LINKS,
+    capture, captureViewport, runAxeScan, parseArgs, resolveViewport, mapWithConcurrency, COLLECT_LINKS,
     VIEWPORT_SIZES, THROTTLE_PROFILES, pushBounded,
     MAX_CONSOLE_MESSAGES, MAX_NETWORK_EVENTS, MAX_CAPTURED_LINKS,
     MAX_VIEWPORT_DIMENSION,

@@ -11,6 +11,31 @@ const browser = require('../browser-bridge.js');
 const flow = require('../flow-bridge.js');
 const inspect = require('../inspect-bridge.js');
 
+test('axe projection preserves counts and targets without transporting node HTML', async () => {
+  const nodes = Array.from({ length: 500 }, (_, i) => ({
+    html: '<input value="PRIVATE_HTML">'.repeat(100), target: [`#input-${i}`],
+  }));
+  const raw = { violations: [{id:'label', nodes}], passes: [{nodes}], incomplete: [], inapplicable: [{}] };
+  let transported;
+  const page = { evaluate: async (fn, cfg) => {
+    if (typeof fn === 'string') return; // source injection
+    const previousAxe = global.axe, previousDocument = global.document;
+    global.document = {};
+    global.axe = { run: async () => raw };
+    try { transported = await fn(cfg); return transported; }
+    finally { global.axe = previousAxe; global.document = previousDocument; }
+  }};
+  const result = await browser.runAxeScan(page, {});
+  assert.equal(result.engine_available, true);
+  assert.equal(result.violations[0].node_count, 500);
+  assert.deepEqual(result.violations[0].targets, ['#input-0','#input-1','#input-2','#input-3','#input-4']);
+  assert.equal(result.passes_count, 1);
+  assert.equal(result.incomplete_count, 0);
+  assert.equal(result.inapplicable_count, 1);
+  assert.ok(!JSON.stringify(transported).includes('PRIVATE_HTML'));
+  assert.ok(Buffer.byteLength(JSON.stringify(transported)) < 1000);
+});
+
 function withArgv(args, fn) {
   const saved = process.argv;
   process.argv = ['node', 'bridge.js', ...args];
