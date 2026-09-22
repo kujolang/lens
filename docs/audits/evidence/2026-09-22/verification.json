@@ -1,0 +1,42 @@
+{
+  "kujo_assertions": {
+    "passed": 521,
+    "failed": 0
+  },
+  "bridge_tests": {
+    "passed": 52,
+    "failed": 0
+  },
+  "visual_tests": {
+    "passed": 2,
+    "failed": 0
+  },
+  "earlier_expanded_e2e": {
+    "passed": 14,
+    "failed": 0
+  },
+  "final_e2e": {
+    "passed": 14,
+    "failed": 0,
+    "scope": "uninterrupted real CLI Chromium E2E on committed source"
+  },
+  "harness": {
+    "earlier_passed": 4,
+    "final_attempts": 3,
+    "failure": "two earlier resume timeouts retained; final unmodified rerun passed",
+    "final_passed": 4
+  },
+  "check_lint_syntax": "pass",
+  "complete_final_gate": "All relevant local functional checks pass. Remote CI matrix unexecuted; controlled latency non-regression remains unproven.",
+  "watch_isolated_controls": {
+    "baseline": "pass",
+    "final": "pass",
+    "deadline_seconds": 40,
+    "assertions": "two contexts, one browser launch, no cookie/console state leakage"
+  },
+  "intervening_e2e_failure": {
+    "preceding_groups_passed": 13,
+    "failure": "watch did not complete two isolated runs",
+    "deadline_seconds": 40
+  }
+}

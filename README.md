@@ -62,6 +62,10 @@ actually work?"* Lens answers it the same way every time:
 - **🔒 Secret-safe** — tokens, JWTs, credentials, and sensitive params are redacted from every artifact *and* report.
 - **👀 Observe, don't touch** — opens a URL and watches. It never clicks, types, logs in, or submits forms unless you opt into a safety-gated flow.
 
+Known open security boundary: initial target validation does not confine browser
+redirects or external subresources. See the [hardening audit](docs/audits/repository-hardening.md)
+for the remaining work and verified fixes.
+
 ## Production posture
 
 Lens 1.0 is **stable within its deterministic local-first scope**: the core

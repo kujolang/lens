@@ -22,6 +22,8 @@ surface. Key guarantees:
   from **every** artifact and report (`src/redact.kujo`), applied at capture, at
   finding construction, and as a final sweep. Nested accessibility scan data,
   including page-derived selector targets and engine errors, is swept too.
+  String leaves are redacted before JSON encoding; encoded URL parameter names
+  and credential-bearing fragments are covered.
 - **Never stored at all:** request/response bodies, cookies, and auth headers.
   The network capture is a strict whitelist.
 - **Typed-input safety.** Values typed in a flow (e.g. credentials) are redacted
@@ -43,6 +45,16 @@ surface. Key guarantees:
   reported as warnings.
 - **Baseline identifiers are redacted.** Secret-bearing URLs and flow names are
   redacted before they become baseline directory names or metadata.
+
+## Known open navigation boundary
+
+Initial target admission is enforced, including authority/userinfo parsing.
+Browser redirects, page-driven navigation and subresource requests are not yet
+confined to localhost. This is an unresolved gap in the localhost-only objective,
+not an egress sandbox. A first-request Playwright route guard does not intercept
+every redirect across engines. See `docs/audits/repository-hardening.md` for
+scope, evidence and the required follow-up. Evidence item caps also do not bound
+individual string bytes or total upstream browser output.
 
 ## Caveats to be aware of
 

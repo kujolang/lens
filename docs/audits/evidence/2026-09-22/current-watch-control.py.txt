@@ -1,0 +1,30 @@
+import importlib.util,tempfile,threading,subprocess,time,json,os
+from pathlib import Path
+root=Path.cwd();spec=importlib.util.spec_from_file_location('e2e',root/'scripts/runtime-e2e.py');e=importlib.util.module_from_spec(spec);spec.loader.exec_module(e)
+server=e.bench.fixture.FixtureServer(('127.0.0.1',0),e.Handler);threading.Thread(target=server.serve_forever,daemon=True).start()
+base=root;result={'revision':'f6689b6dc4a3569f3590ff2cc9276b920721d801','deadline_seconds':40,'passed':False}
+try:
+ with tempfile.TemporaryDirectory() as td:
+  work=Path(td);env=dict(os.environ,KUJO_BIN=str(root.parent/'kujo/target/release/kujo'))
+  with (work/'watch.log').open('w') as log:
+   watch=subprocess.Popen([str(base/'lens'),'check',f'http://127.0.0.1:{server.server_port}/state','--quick','--watch','--watch-interval','1','--out',str(work/'watch')],cwd=base,env=env,stdout=log,stderr=log,start_new_session=True)
+   try:
+    deadline=time.monotonic()+40
+    while time.monotonic()<deadline:
+     meta=work/'watch/metadata.json'
+     if meta.exists():
+      try:
+       state=json.loads(meta.read_text())['provider']['session']
+       if state['contexts_created']>=2:
+        assert state['browser_launches']==1
+        result['passed']=True;break
+      except (ValueError,KeyError):pass
+     time.sleep(.1)
+   finally:watch.terminate();watch.wait(timeout=10)
+  result['cookies_observed']=len(e.Handler.cookies)
+  if result['passed']:
+   assert len(e.Handler.cookies)>=2 and all(c is None for c in e.Handler.cookies)
+   assert not json.loads((work/'watch/console.json').read_text())
+  (root/'.lens/audit-2026-09-22/current-watch-control.log').write_text((work/'watch.log').read_text())
+finally:server.shutdown();server.server_close()
+(root/'docs/audits/evidence/2026-09-22/current-watch-control.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))

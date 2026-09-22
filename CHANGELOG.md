@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Fix localhost target admission for userinfo, malformed IPv6 suffixes and ports.
+- Redact complete URL userinfo, encoded parameter names, OAuth fragments, nested DOM evidence,
+  network status text and accessibility errors before JSON serialization;
+  preserve quoted and deeply nested evidence without fail-open fallbacks.
+- Keep optional-check report/Eval verdicts and blocked-step walkthrough verdicts
+  consistent with exit codes; avoid duplicate Spec findings in Eval output.
+- Apply CLI bounds to file configuration and fix explicit fractional visual
+  thresholds. Allow opted-in baseline updates to replace their metadata.
+- Project accessibility evidence inside the browser and reduce visual-diff
+  temporary array memory without changing pixel classification.
+- Add browser privacy/verdict regressions and exhaustive byte-channel visual
+  comparison tests in CI; pin the composite artifact upload Action.
+- Document the unresolved browser redirect/egress boundary in the
+  [hardening audit](docs/audits/repository-hardening.md).
+
 ## [1.1.0] - 2026-09-07
 
 - Keep unconfigured single checks one-shot; activate owned hosts for crawl/watch/configuration-driven checks.

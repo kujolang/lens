@@ -1,0 +1,50 @@
+[
+  {
+    "side": "before",
+    "seconds": 2.1523201579693705,
+    "peak_rss_bytes": 372461568,
+    "changed_pixels": 419810,
+    "total_pixels": 4194304,
+    "difference_ratio": 0.100091
+  },
+  {
+    "side": "after",
+    "seconds": 2.0813531120074913,
+    "peak_rss_bytes": 295497728,
+    "changed_pixels": 419810,
+    "total_pixels": 4194304,
+    "difference_ratio": 0.100091
+  },
+  {
+    "side": "after",
+    "seconds": 1.8939897050149739,
+    "peak_rss_bytes": 295505920,
+    "changed_pixels": 419810,
+    "total_pixels": 4194304,
+    "difference_ratio": 0.100091
+  },
+  {
+    "side": "before",
+    "seconds": 2.0569337240303867,
+    "peak_rss_bytes": 372084736,
+    "changed_pixels": 419810,
+    "total_pixels": 4194304,
+    "difference_ratio": 0.100091
+  },
+  {
+    "side": "before",
+    "seconds": 2.6747240650001913,
+    "peak_rss_bytes": 372076544,
+    "changed_pixels": 419810,
+    "total_pixels": 4194304,
+    "difference_ratio": 0.100091
+  },
+  {
+    "side": "after",
+    "seconds": 2.2471660979790613,
+    "peak_rss_bytes": 295493632,
+    "changed_pixels": 419810,
+    "total_pixels": 4194304,
+    "difference_ratio": 0.100091
+  }
+]
