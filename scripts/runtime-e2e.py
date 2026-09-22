@@ -16,7 +16,19 @@ bench=importlib.util.module_from_spec(spec);spec.loader.exec_module(bench)
 
 class Handler(bench.Handler):
     cookies=[]
+    policy_hits=0
     def do_GET(self):
+        if self.path == '/policy-sink':
+            Handler.policy_hits += 1
+            return self.send(200, 'text/html', bench.fixture.html('<h1>Sink</h1>'))
+        if self.path == '/policy-redirect':
+            self.send_response(302)
+            self.send_header('Location', f'http://localhost.:{self.server.server_port}/policy-sink')
+            self.end_headers()
+            return
+        if self.path == '/oversized':
+            return self.send(200, 'text/html', bench.fixture.html('<h1>Bounded evidence</h1><button>Button</button>',
+                "<script>document.title='🔑'.repeat(5000);console.error('🔑'.repeat(5000));</script>"))
         if self.path.startswith('/privacy'):
             self.send_response(500, 'token=PRIVATE_SECRET_123')
             self.send_header('Content-Type', 'text/html')
@@ -54,6 +66,23 @@ def main():
                 assert p.returncode in allowed, (args[0],p.returncode,p.stdout,p.stderr)
                 assert 'PRIVATE_SECRET_123' not in p.stdout+p.stderr
                 return p
+            for command in ['check', 'inspect']:
+                run(command, url+'/policy-redirect', '--out', str(work/('policy-'+command)), allowed=(1,3))
+                assert Handler.policy_hits == 0
+            policy_flow=work/'policy-flow.json'
+            policy_flow.write_text(json.dumps({'name':'Policy', 'url':url+'/policy-redirect', 'steps':[{'visit':url+'/policy-redirect'}]}))
+            run('flow', str(policy_flow), '--execute', '--out', str(work/'policy-flow'), allowed=(3,))
+            assert Handler.policy_hits == 0
+            run('check', url+'/policy-redirect', '--allow-external', '--quick', '--out', str(work/'policy-opt-in'))
+            assert Handler.policy_hits > 0
+            passed+=1
+            run('check', url+'/oversized', '--quick', '--fail-on', 'warning', '--out', str(work/'oversized'), allowed=(1,))
+            bounded=json.loads((work/'oversized/lens-report.json').read_text())
+            assert any('byte' in f['description'].lower() for f in bounded['findings'])
+            assert (work/'oversized/console.json').stat().st_size < 2000
+            run('inspect', url+'/oversized', '--out', str(work/'oversized-inspect'), allowed=(1,))
+            assert json.loads((work/'oversized-inspect/elements.json').read_text())['evidence_limits']['byte_limit_reached']
+            passed+=1
             run('check',url+'/trivial?token=PRIVATE_SECRET_123','--html','--accessibility','--perf','--baseline','--baseline-dir',str(work/'baselines'),'--out',str(work/'check'))
             for name in ['lens-report.json','lens-report.html','metadata.json','accessibility.json','metrics.json','screenshots/desktop.png','screenshots/mobile.png']:
                 assert (work/'check'/name).stat().st_size>0,name

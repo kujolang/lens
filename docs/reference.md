@@ -647,10 +647,20 @@ browser process, which closes on command termination or after idle expiry.
 
 Initial targets must be HTTP(S) loopback URLs unless external access is enabled.
 Userinfo is parsed before host/port checks; malformed port/bracket syntax,
-ASCII controls and backslashes are rejected. This admission check is **not a
-network sandbox**: browser redirects, page navigation and external resources
-remain an unresolved enforcement gap. Do not rely on it to isolate hostile
-pages. See [open findings](audits/repository-hardening.md#remaining-work).
+ASCII controls and backslashes are rejected. Restricted Chromium/Firefox captures
+also enforce loopback HTTP(S)/WebSocket destinations at a per-context proxy,
+including redirect hops, workers and popups. Blocked requests fail the capture.
+Service workers are blocked in restricted contexts. WebKit requires explicit
+external access because worker WebSockets can bypass its native proxy.
+`--allow-external` (flow JSON: `allow_external: true`) restores normal networking
+for trusted applications, including external assets and service workers.
+This is not an OS sandbox; see [precise security scope](../SECURITY.md#browser-network-policy).
+
+Strings above 16 KiB are omitted whole, captured arrays have a 1 MiB budget,
+and results above 16 MiB fail explicitly. `evidence_limits.byte_limit_reached`
+records omissions and produces warning findings; inspect writes the receipt
+and exits 1. Existing count limits still apply. No credential prefixes are
+retained from oversized strings.
 
 Redaction operates on structured string values before JSON encoding. Encoded
 sensitive query names and fragment parameters are scrubbed while benign URL

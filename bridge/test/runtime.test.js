@@ -23,7 +23,8 @@ test('timings record failures using numeric fields without error content', async
 
 test('context is closed when page creation fails', async () => {
   let closed = 0;
-  const browser = { newContext: async () => ({ newPage: async () => { throw new Error('page failed'); }, close: async () => closed++ }) };
+  const context = Object.assign(new EventEmitter(), {  newPage: async () => { throw new Error('page failed'); }, close: async () => { closed++; context.emit('close'); } });
+  const browser = { newContext: async () => context };
   await assert.rejects(captureViewport(browser, 'http://localhost', 'desktop', 1000, '', {}));
   assert.equal(closed, 1);
 });
@@ -344,7 +345,7 @@ test('recording teardown failure preserves steps and removes incomplete video', 
   const page = new EventEmitter();
   page.addInitScript = async () => {};
   page.screenshot = async () => {};
-  page.evaluate = async () => ({title:'Fixture'});
+  page.evaluate = async () => ({value:{title:'Fixture'},omitted_strings:0,omitted_items:0});
   page.url = () => 'http://localhost/';
   page.waitForTimeout = async () => { throw new Error('page closed PRIVATE'); };
   page.screencast = {
@@ -352,8 +353,9 @@ test('recording teardown failure preserves steps and removes incomplete video', 
     stop: async () => { throw new Error('recording closed PRIVATE'); },
   };
   let closed = false;
+  const context = Object.assign(new EventEmitter(), {  newPage: async () => page, close: async () => { context.emit('close'); } });
   engine.launch = async () => ({
-    newContext: async () => ({newPage: async () => page, close: async () => {}}),
+    newContext: async () => context,
     close: async () => {closed = true;},
   });
   try {

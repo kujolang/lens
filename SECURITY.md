@@ -46,15 +46,31 @@ surface. Key guarantees:
 - **Baseline identifiers are redacted.** Secret-bearing URLs and flow names are
   redacted before they become baseline directory names or metadata.
 
-## Known open navigation boundary
+## Browser network policy
 
-Initial target admission is enforced, including authority/userinfo parsing.
-Browser redirects, page-driven navigation and subresource requests are not yet
-confined to localhost. This is an unresolved gap in the localhost-only objective,
-not an egress sandbox. A first-request Playwright route guard does not intercept
-every redirect across engines. See `docs/audits/repository-hardening.md` for
-scope, evidence and the required follow-up. Evidence item caps also do not bound
-individual string bytes or total upstream browser output.
+Restricted Chromium/Firefox contexts route HTTP(S) and WebSockets through a
+per-context loopback proxy. Every redirect hop and connection is admitted at
+the proxy, with allowed names pinned to loopback addresses. Service workers are blocked in
+restricted contexts. Blocked requests produce a failed capture, never a clean
+pass. `--allow-external` (flow JSON: `allow_external: true`) restores ordinary
+browser networking, including service workers, for trusted applications.
+
+WebKit refuses restricted captures before opening a page because its native
+worker WebSockets can bypass the proxy on macOS. Use Chromium/Firefox for
+restricted runs, or explicitly enable external access for trusted WebKit runs.
+This is an HTTP(S)/WebSocket policy, **not an OS sandbox**: it does not isolate
+hostile browser code, WebRTC/UDP, local processes or browser vulnerabilities.
+
+Evidence strings above 16 KiB are omitted whole, not cut into potentially
+identifiable credential prefixes. Captured arrays are bounded to 1 MiB and
+bridge results above 16 MiB fail explicitly. Omissions set `byte_limit_reached`
+and produce a warning (inspect exits 1). These limits bound retained and
+projected evidence, not the page's own heap or browser-protocol event buffers.
+
+Output directories and their parents must be controlled by the invoking user.
+Final-path checks do not defend against a concurrent local user replacing paths
+or symlinks. Use separate output directories for concurrent runs; sharing a
+mutable output directory is unsupported.
 
 ## Caveats to be aware of
 

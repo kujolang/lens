@@ -872,6 +872,7 @@ export func run_flow(config) {
 		if is_trueish(nav_validation["valid"]) && is_trueish(node_available()) {
 			prov_config := {
 				"viewports": flow["viewports"],
+				"allow_external": flow["allow_external"],
 				"timeout": flow["timeout_seconds"],
 				"verbose": config["verbose"],
 				"accessibility": false,
@@ -1232,6 +1233,7 @@ export func run_flow_exec(config) {
 		"timeout": to_int(to_string(flow["timeout_seconds"])) * 1000,
 		"record": is_trueish(config["record"]),
 		"auth_file": to_string(config["auth_file"]),
+		"allow_external": is_trueish(flow["allow_external"]),
 		"steps": plan["program"]
 	}
 	bridge_res := run_flow_bridge(program, out_dir)
@@ -1253,12 +1255,12 @@ export func run_flow_exec(config) {
 		mut dropped_network := 0
 		if is_trueish(has_key(limits, "dropped_console_messages")) { dropped_console = to_int(to_string(limits["dropped_console_messages"])) }
 		if is_trueish(has_key(limits, "dropped_network_events")) { dropped_network = to_int(to_string(limits["dropped_network_events"])) }
-		if dropped_console + dropped_network > 0 {
+		if dropped_console + dropped_network > 0 || (is_trueish(has_key(limits, "byte_limit_reached")) && is_trueish(limits["byte_limit_reached"])) {
 			step_results = append(step_results, {
 				"index": len(step_results) + 1,
 				"type": "evidence_limit",
 				"status": "blocked",
-				"error": "Flow evidence capture omitted " + to_string(dropped_console) + " console message(s) and " + to_string(dropped_network) + " network event(s) after reaching safety limits.",
+				"error": "Flow evidence capture omitted " + to_string(dropped_console) + " console message(s) and " + to_string(dropped_network) + " network event(s), or oversized evidence after reaching safety limits.",
 				"viewport": flow_first_viewport(flow)
 			})
 		}
@@ -1399,7 +1401,8 @@ export func run_inspect(config) {
 	}
 
 	timeout := to_string(config["timeout"])
-	args := array("node", "bridge/inspect-bridge.js", "--url", url, "--timeout", timeout)
+	mut args := array("node", "bridge/inspect-bridge.js", "--url", url, "--timeout", timeout)
+	if is_trueish(config["allow_external"]) { args = append(args, "--allow-external") }
 	res := spawn_process(args, { "timeout_ms": 120000 })
 	out := trim(to_string(res.stdout))
 	if out == "" {
@@ -1408,6 +1411,10 @@ export func run_inspect(config) {
 	}
 
 	parsed := parse_json(out)
+	if is_trueish(has_key(parsed, "error")) && parsed["error"] != null && to_string(parsed["error"]) != "" {
+		print_lens_error(redact_text(to_string(parsed["error"])))
+		return EXIT_BROWSER_FAIL
+	}
 	mut elements := array()
 	if is_trueish(has_key(parsed, "elements")) {
 		elements = parsed["elements"]
@@ -1444,9 +1451,14 @@ export func run_inspect(config) {
 		"final_url": redact_url(to_string(parsed["final_url"])),
 		"title": redact_text(to_string(parsed["title"])),
 		"count": len(clean),
+		"evidence_limits": parsed["evidence_limits"],
 		"elements": clean
 	}), true)
 
+	if is_trueish(has_key(parsed, "evidence_limits")) && is_trueish(parsed["evidence_limits"]["byte_limit_reached"]) {
+		print_lens_error("Inspect evidence exceeded a byte limit; elements.json records the incomplete capture.")
+		return EXIT_CHECK_FAIL
+	}
 	if is_trueish(config["json_output"]) {
 		print(to_json(clean))
 		return EXIT_OK

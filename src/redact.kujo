@@ -157,8 +157,8 @@ export func redact_url(raw_url) {
 # JSON escape syntax. Preserve keys, arrays, numeric/null/bool values and all
 # evidence, including accessibility error payloads.
 export func redact_value(value) {
-	# Iterative postorder traversal avoids the runtime's recursive module-local
-	# bindings and keeps nesting off the VM call stack.
+	# Iterative postorder traversal keeps nesting off the VM call stack.
+	# In recursive code, use explicit local declarations (let/mut).
 	mut rv_stack := array({ "input": value, "entered": false })
 	mut rv_done := null
 	while len(rv_stack) > 0 {

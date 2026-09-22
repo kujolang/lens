@@ -8,6 +8,7 @@
 #   kujo test
 #   kujo run tests/lens_tests.kujo
 
+from tests.fixtures.scoped_clone import clone_nested
 from src.config import parse_viewport, parse_severity, severity_index
 from src.config import severity_meets_threshold, has_flag, flag_value
 from src.config import parse_subcommand, parse_viewports, parse_fail_on
@@ -1629,11 +1630,22 @@ func test_check_page_load_clean() {
 	check_eq(cr["status"], "pass", "page_load: clean navigation -> pass")
 }
 
+func test_scoped_recursive_clone() {
+	let input := array({"a": array({"b": "hi"})})
+	check_eq(to_json(clone_nested(input)), to_json(input), "explicit local declarations preserve recursive dictionary keys")
+}
+test_scoped_recursive_clone()
+
 func test_check_capture_limits() {
 	clean := check_capture_limits({}, { "provider_result": { "viewports": array(
 		{ "evidence_limits": { "dropped_console_messages": 0, "dropped_network_events": 0, "dropped_links": 0 } }
 	) } })
 	check_eq(clean["status"], "pass", "evidence limits: no drops passes")
+	byte_bounded := check_capture_limits({}, { "provider_result": { "viewports": array(
+		{ "evidence_limits": { "byte_limit_reached": true } }
+	) } })
+	check_eq(byte_bounded["severity"], "warning", "evidence limits: byte omissions warn without count drops")
+
 
 	bounded := check_capture_limits({}, { "provider_result": { "viewports": array(
 		{ "evidence_limits": { "dropped_console_messages": 3, "dropped_network_events": 2, "dropped_links": 1 } }

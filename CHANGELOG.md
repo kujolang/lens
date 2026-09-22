@@ -19,8 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   temporary array memory without changing pixel classification.
 - Add browser privacy/verdict regressions and exhaustive byte-channel visual
   comparison tests in CI; pin the composite artifact upload Action.
-- Document the unresolved browser redirect/egress boundary in the
-  [hardening audit](docs/audits/repository-hardening.md).
+- Enforce loopback HTTP(S)/WebSocket destinations in Chromium/Firefox, including
+  redirects; block service workers in restricted contexts. WebKit now requires
+  explicit external-access opt-in because worker sockets bypass its proxy.
+- Bound evidence string/collection bytes with observable whole-value omissions;
+  reject oversized bridge results and retain actionable warning/exit semantics.
+- Pin CI's Kujo runtime and exercise destination policy across all browser engines.
+- Correct the audit's recursive-binding claim: explicit `let` locals preserve
+  nested keys under documented Kujo assignment semantics.
 
 ## [1.1.0] - 2026-09-07
 

@@ -1,0 +1,16 @@
+export func clone_nested(value) {
+    if is_array(value) {
+        mut items := array()
+        mut i := 0
+        while i < len(value) { items = append(items, clone_nested(value[i])); i = i + 1 }
+        return items
+    }
+    if is_dict(value) {
+        mut obj := {}
+        let fields := keys(value)
+        mut k := 0
+        while k < len(fields) { obj[fields[k]] = clone_nested(value[fields[k]]); k = k + 1 }
+        return obj
+    }
+    return value
+}
