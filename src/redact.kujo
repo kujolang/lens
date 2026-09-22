@@ -90,7 +90,7 @@ export func redact_header_value(header_name, header_value) {
 # Redact basic-auth credentials embedded in a URL authority.
 # Example: https://user:pass@host/ -> https://[REDACTED]@host/
 func redact_basic_auth(url) {
-	return regex_replace(to_string(url), "://[^/@\\s]+:[^/@\\s]+@", "://" + REDACTED + "@")
+	return regex_replace(to_string(url), "://[^/\\s?#\"<>]+@", "://" + REDACTED + "@")
 }
 
 # Decode ASCII percent escapes only for sensitive-name comparison. Preserve the
@@ -229,7 +229,7 @@ export func redact_text(raw_text) {
 	}
 
 	# Basic-auth credentials inside any URL in the text.
-	text = regex_replace(text, "://[^/@\\s]+:[^/@\\s]+@", "://" + REDACTED + "@")
+	text = regex_replace(text, "://[^/\\s?#\"<>]+@", "://" + REDACTED + "@")
 
 	# Bearer tokens.
 	text = regex_replace(text, "(?i)Bearer\\s+[A-Za-z0-9\\-._~+/]+=*", "Bearer " + REDACTED)

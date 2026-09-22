@@ -1408,6 +1408,8 @@ func test_redact_text_preserves_benign() {
 }
 
 func test_redact_url_basic_auth_and_fragment() {
+	check_eq(redact_url("http://user:PRIVATE@TAIL@localhost:3000/path"), "http://[REDACTED]@localhost:3000/path", "redact complete userinfo through last at")
+	check_eq(redact_url("http://PRIVATE@localhost/path"), "http://[REDACTED]@localhost/path", "redact username-only URL userinfo")
 	r := redact_url("https://user:pass@host.com/x?api_key=zzzsecretval#frag")
 	check(is_falseish(contains(r, "user:pass")), "redact_url: basic-auth credentials removed")
 	check(is_falseish(contains(r, "zzzsecretval")), "redact_url: sensitive param removed")
