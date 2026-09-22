@@ -49,7 +49,15 @@ jobs:
           python3 scripts/test-benchmark-harness.py
 
   test:
-    name: Tests + checks
+    name: Tests + checks (${{ matrix.runtime }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: pinned
+            ref: cf785c0a7953717af16b657cda05b85d628144c5
+          - runtime: minimum-1.2.3
+            ref: 39653dc6dd1078dbb5f86545364a4f20ad7da554
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Lens
@@ -61,6 +69,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: kujolang/kujo
+          ref: ${{ matrix.ref }}
           path: kujo
 
       - name: Cache cargo
@@ -118,6 +127,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: kujolang/kujo
+          ref: cf785c0a7953717af16b657cda05b85d628144c5
           path: kujo
 
       - name: Cache cargo
@@ -254,6 +264,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: kujolang/kujo
+          ref: cf785c0a7953717af16b657cda05b85d628144c5
           path: kujo
 
       - name: Cache cargo
@@ -287,6 +298,12 @@ jobs:
             npx playwright-core install "${{ matrix.browser }}"
           fi
 
+      - name: Browser destination policy regression tests
+        working-directory: lens
+        env:
+          LENS_POLICY_ENGINES: ${{ matrix.browser }}
+        run: node --test bridge/test/network-policy.test.js
+
       - name: Verify installed and missing-engine behavior
         working-directory: lens
         env:
@@ -300,13 +317,13 @@ jobs:
             --output /dev/null http://127.0.0.1:8098/trivial
 
           ./lens check http://127.0.0.1:8098/trivial \
-            --browser "${{ matrix.browser }}" --out "/tmp/${{ matrix.browser }}-run"
+            --browser "${{ matrix.browser }}" --allow-external --out "/tmp/${{ matrix.browser }}-run"
 
           mkdir -p "$RUNNER_TEMP/empty-playwright-browsers"
           set +e
           PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/empty-playwright-browsers" \
             ./lens check http://127.0.0.1:8098/trivial \
-              --browser "${{ matrix.browser }}" --out "/tmp/${{ matrix.browser }}-missing" \
+              --browser "${{ matrix.browser }}" --allow-external --out "/tmp/${{ matrix.browser }}-missing" \
               >"$RUNNER_TEMP/missing-engine.log" 2>&1
           code=$?
           set -e
