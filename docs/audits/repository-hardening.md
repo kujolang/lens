@@ -4,7 +4,7 @@
 
 - Repository: `kujolang/lens`; branch: `codex/hardening-2026-09-22`.
 - Starting SHA: `fd388efd4f55f3f844cf7de4fc541abfd07a6785` (clean `main`).
-- Ending implementation SHA: `f6689b6dc4a3569f3590ff2cc9276b920721d801`. The final documentation commit is recorded in the engineering receipt; a document cannot contain its own commit hash.
+- Ending implementation SHA: `18b826b` (closure); CI pin/minimum-runtime gates: `2e9e7db`. Original implementation: `f6689b6dc4a3569f3590ff2cc9276b920721d801`. The final documentation commit is recorded in the engineering receipt; a document cannot contain its own commit hash.
 - Purpose: local browser QA, deterministic checks, screenshots/visual comparison, optional accessibility/crawling, safe-by-default flow validation and explicitly executed flows, redacted reports for people and agents.
 - Runtime: Kujo CLI/modules → argv-based Node bridge → Playwright browser; optional Python/Pillow/NumPy visual comparison. Integrations: Spec, Eval, Howl, RunLedger, GitHub composite action, browser storage state, project JSON configuration.
 - Public contracts reviewed: `lens` launcher and commands, flags/defaults/exit codes, project/flow/Spec input, report/metadata/Eval output, provider process/framing/environment, artifact/output paths, browser-engine and auth configuration.
@@ -14,6 +14,8 @@ Read the implementation of all `src/*.kujo` and bridge JavaScript modules, activ
 Local host: macOS x86_64, Node 26.7.0/npm 11.19.0, Python 3.10, Pillow 12.3.0, NumPy 1.23.5, Kujo 1.4.0. Kujo checkout `7f4a288587710003c60869c016c8f4d97ca3b8af`; tested binary SHA-256 `eeea79362ea8c89cb3e8fe0b34984a8588bc57a9eea829cd902e91d16d9a4787` (unchanged across the audit). Local verification used Chromium. CI retains Node 18/20/22, Ubuntu/macOS and Chromium/Firefox/WebKit jobs; that remote matrix and the minimum Kujo version were not executed locally.
 
 ## Baseline
+
+This document preserves the initial audit receipt. The subsequent open-item closure and merge verification are in [repository-hardening-closure.md](repository-hardening-closure.md).
 
 All existing checks passed before edits: **462 Kujo assertions, 51 bridge tests, 10 runtime E2E scenario groups, 4 benchmark-harness tests**. No baseline suite failures. New regression assertions against the original source exposed ten failures followed by an accessibility-evidence lookup failure caused by the original redactor discarding that evidence.
 
@@ -35,10 +37,10 @@ Baseline benchmark: `KUJO_BIN="$PWD/../kujo/target/release/kujo" scripts/bench.s
 | L08 | P2 | Memory | Visual subtraction allocated multiple int64 pixel arrays | Signed int16 subtract plus in-place absolute; exhaustive pixel equivalence test | Fixed |
 | L09 | P2 | Transport | Axe transferred full node HTML and unused arrays across browser boundary before projecting | Project inside browser; preserve output schema/counts/first five targets | Fixed |
 | L10 | P2 | Supply chain | Composite action used mutable upload-artifact major tag | Pin to same SHA already used by CI | Fixed |
-| L11 | P1 | Browser destinations | Initial target admission does not confine redirects, JavaScript navigation, clicks or subresources | Correct docs; retain as explicit design work with Signal | Open |
-| L12 | P2 | Evidence resources | Console/network/link count caps do not cap individual string or aggregate bytes; receiver limit is after serialization | Preserve source evidence; design observable byte budgets | Open |
-| L13 | P1 upstream | Kujo runtime | Imported recursive object traversal changes nested dictionary keys; minimal reproduction below | Iterative Lens traversal with depth/shape tests; upstream Signal | Lens workaround complete; upstream open |
-| L14 | Needs evidence | Performance | Final wall-clock timings are higher on heavily contended host; causal overhead is not isolated | Preserve all observations; repeat on idle controlled host before latency claims | Open measurement |
+| L11 | P1 | Browser destinations | Initial target admission does not confine redirects, JavaScript navigation, clicks or subresources | Per-context destination proxy; WebKit fails closed without opt-in; service workers blocked in restricted mode | Closed: scoped HTTP(S)/WebSocket boundary |
+| L12 | P2 | Evidence resources | Console/network/link count caps do not cap individual string or aggregate bytes; receiver limit is after serialization | Whole-string omissions, collection byte limits, result ceiling and warning/exit receipts | Closed |
+| L13 | Retracted | Kujo scoping | Original reproducer used bare assignment that updates a caller binding under documented language semantics | Explicit `let fields` preserves keys in both runtimes; regression fixture added | Closed: not a Kujo defect |
+| L14 | Needs evidence | Performance | Final wall-clock timings are higher on heavily contended host; causal overhead is not isolated | Repeat complete benchmark and interleave original/current controls; retain raw samples and host load | See closure receipt |
 
 ## Changes implemented and compatibility
 
@@ -76,47 +78,35 @@ No model calls or token-bearing prompt pipeline exists in Lens. Reviewed compact
 Reviewed CLI/config/flow/repository input, local authority admission, paths/symlinks, storage state, subprocess argv/environment/framing, captured page strings, output files, browser lifecycle and network access. Kept explicit execution opt-in, click/type safety checks, root-path protections, structured provider errors, process termination and stdout isolation. Added negative-path tests instead of weakening diagnostics.
 
 - **P0:** none established.
-- **P1 L11:** browser destination confinement is not implemented. Initial URL admission is not an egress sandbox. A trustworthy policy must cover redirects/popups/service workers and all three engines while defining legitimate external CDN behavior. Playwright routing is not a universal redirect guard: [Page routing documentation](https://playwright.dev/docs/api/class-page) and [Route semantics](https://playwright.dev/docs/api/class-route) describe restrictions. No live external exploit was executed. Avoid a partial route-only patch that claims confinement it cannot provide.
-- **P2 L12:** counts are bounded (console 1,000, network 2,000, links 5,000), but individual strings/serialized aggregate bytes need a documented, observable truncation policy. The transport receiver ceiling does not bound browser-side accumulation. This is source-supported resource risk, not a measured real-world DoS.
-- **P2:** CI Kujo checkout follows the upstream default branch. Consider a tested runtime revision plus a separate latest-runtime compatibility job; this pass did not silently change ecosystem policy.
-- **Needs more evidence:** derived-path symlink/shared-output-directory races; realistic idle-host redaction/CLI timings; Linux/Firefox/WebKit/minimum-version execution. Root symlink policy alone does not prove every derived path safe, and no exploit is asserted.
+- **L11/L12:** closed by the subsequent [closure pass](repository-hardening-closure.md), with explicit WebKit/service-worker compatibility policy and observable byte budgets.
+- **CI runtime:** pinned to `cf785c0a7953717af16b657cda05b85d628144c5`; separate minimum-1.2.3 job uses immutable tag revision. Browser destination controls run for all three engines.
+- **Path/concurrency scope:** invoking-user-controlled output trees remain required. Concurrent mutation by another local actor and simultaneous writers to the same output directory are unsupported; use separate output directories. No demonstrated in-scope exploit justified a filesystem redesign. Parent symlinks retain their documented semantics.
+- **Performance/platform evidence:** see the closure receipt for repeated measurements and remote matrix results; original observations below remain historical.
 - **Not worth changing:** established wrappers/public formats, historical fixtures/evaluation evidence, provider compatibility fallbacks with explicit diagnostics, optional integrations and two pinned runtime dependencies. No unsupported dead-code deletion or style rewrite.
 - **P3:** no cosmetic backlog created.
 
 Security audit records were validated with the security skill contract finalizer and retained locally in `.lens/audit-2026-09-22/security/` (`scan-manifest.json`, `findings.json`, `coverage.json`, `report.md`, exports). Coverage limitations are explicit; no claim of complete dependency or multi-engine security assurance is made.
 
-## Cross-repository follow-up: Kujo recursive module bindings
+## Correction: Kujo recursive module bindings
 
-Affected repository: `kujolang/kujo`; contract: an imported recursive function must preserve caller locals/collection keys across nested calls. On the exact runtime above, this minimal clone transforms `[{"a":[{"b":"hi"}]}]` into `[{"b":[{"b":"hi"}]}]`. This is observed data corruption, not a Lens parser inference. Lens uses an iterative workaround, so its fix does not require a runtime change. Correcting the runtime should preserve intended semantics; audit other imported recursive routines and interpreter/compiled parity upstream.
+**The initial L13 runtime-defect classification is retracted.** Kujo's language
+specification (`docs/LANGUAGE_SPEC.md`, declarations/assignment) specifies that
+bare `name := value` updates an existing mutable binding when present; `let`
+and `mut` introduce locals. The original clone used `fields := keys(value)`,
+which updated the caller's binding during recursion. Changing only that line
+to `let fields := keys(value)` preserves the expected nested keys.
 
-Reproduce from Lens with this file at `tests/tmp/hardening_clone.kujo`:
+`tests/fixtures/scoped_clone.kujo` and the Lens suite now retain the corrected
+regression. Both the default runtime and `--interpreter` produce
+`[{"a":[{"b":"hi"}]}]` on the exact binary previously reported as defective.
+The interpreter emits its pre-existing static warning about `array`, but its
+result is correct. Original evidence remains historical in
+`evidence/2026-09-22/runtime-recursion.txt`; it is not evidence of a runtime bug.
+No Kujo source change is required. Lens keeps iterative redaction for stack
+safety, not as a workaround for corrupted local bindings.
 
-```kujo
-export func clone_nested(value) {
-    if is_array(value) {
-        mut items := array(); mut i := 0
-        while i < len(value) { items = append(items, clone_nested(value[i])); i = i + 1 }
-        return items
-    }
-    if is_dict(value) {
-        mut obj := {}; fields := keys(value); mut k := 0
-        while k < len(fields) { obj[fields[k]] = clone_nested(value[fields[k]]); k = k + 1 }
-        return obj
-    }
-    return value
-}
-```
-
-At `tests/tmp/hardening_clone_probe.kujo`:
-
-```kujo
-from tests.tmp.hardening_clone import clone_nested
-input := array({"a": array({"b": "hi"})})
-print(to_json(input))
-print(to_json(clone_nested(input)))
-```
-
-Run `../kujo/target/release/kujo run tests/tmp/hardening_clone_probe.kujo`; [observed output](evidence/2026-09-22/runtime-recursion.txt) is preserved. No other required cross-repository change was identified.
+The separate upstream Playwright limitations are described in the closure
+receipt. No sibling repository was modified.
 
 ## Verification receipt
 
