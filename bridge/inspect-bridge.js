@@ -13,7 +13,7 @@
  */
 
 const { Timings, launchBrowser, withDeadline, closeContext } = require('./runtime');
-const { pushBounded, evaluateBounded, finishEvidence, stringifyResult } = require('./evidence');
+const { evaluateBounded, finishEvidence, stringifyResult } = require('./evidence');
 const { createContext } = require('./network-policy');
 const { observeReadiness } = require('./readiness');
 

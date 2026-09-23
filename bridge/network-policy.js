@@ -8,7 +8,7 @@ function destination(raw, connect = false) {
   if (typeof raw !== 'string' || /[\s\\]/.test(raw)) return null;
   try {
     if (!connect && !/^http:\/\//i.test(raw)) return null;
-    const url = new URL(connect ? `http://${raw}` : raw);
+    const url = new URL(connect ? `https://${raw}` : raw);
     if (url.username || url.password || (connect && (url.pathname !== '/' || url.search || url.hash))) return null;
     const host = url.hostname.toLowerCase();
     if (!['localhost', '127.0.0.1', '[::1]'].includes(host)) return null;

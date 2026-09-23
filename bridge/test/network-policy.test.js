@@ -17,6 +17,8 @@ test('destination admission normalizes authorities, pins loopback, and rejects a
   for (const url of ['http://localhost.evil/', 'http://localhost@evil/', 'http://127.0.0.2/', 'http://localhost./', 'file:///etc/passwd', 'http://localhost\\@evil/', '/origin-form']) assert.equal(destination(url), null, url);
   assert.equal(destination('localhost:443', true).host, 'localhost');
   assert.equal(destination('example.com:443', true), null);
+  assert.equal(destination('localhost:80', true).port, 80);
+  assert.equal(destination('localhost:443', true).port, 443);
 });
 test('proxy rejects an external CONNECT before any socket and cleans up idle connections', async () => {
   const policy = await createNetworkPolicy();
