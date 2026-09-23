@@ -19,5 +19,12 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: bash .github/scripts/check-kujo-tool-artifacts.sh
+        run: |
+          # A force-push can leave the previous commit outside fetched refs.
+          # Fetch that exact base; keep the guard's complete-range validation.
+          if [[ -n "$BASE_SHA" && "$BASE_SHA" != "0000000000000000000000000000000000000000" ]] &&
+             ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$BASE_SHA"
+          fi
+          bash .github/scripts/check-kujo-tool-artifacts.sh
 

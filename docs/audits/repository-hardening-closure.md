@@ -45,6 +45,14 @@ Exact local commands are below; full logs remain in ignored `.lens/closure-2026-
 | `node --check` for every `bridge/*.js`; Python `ast.parse` for tracked Python; `bash -n lens scripts/bench.sh` | Pass |
 | `npm audit --omit=dev --json --prefix bridge` | Zero known advisories; two production dependencies |
 | `git diff --check` | Pass |
+| `bash .github/scripts/check-kujo-tool-artifacts.sh fd388efd4f55f3f844cf7de4fc541abfd07a6785 HEAD` | Pass; all commits inspected |
+
+The artifact guard rejected the raw `.log` evidence extension; the same failure
+output is retained as a `.txt` fixture. Amending that branch-only commit exposed
+a push-workflow defect: checkout can omit the previous SHA after a force-push.
+The workflow now fetches that exact missing SHA before invoking the unchanged
+guard. A clean shallow clone reproduced the missing-base condition and verified
+the exact-SHA fetch plus full guard invocation. No ignore rule was weakened.
 
 The initial proxy-only WebKit tests failed on page/worker WebSockets; those failed experiments were removed. WebKit's shipped test asserts rejection before page creation plus successful opted-in navigation. The independent Firefox successful-worker control failed without Lens; its [source](evidence/2026-09-22-closure/firefox-ws-control.cjs) and [output](evidence/2026-09-22-closure/firefox-ws-control.txt) remain visible rather than marking the crash as a passing Lens capability. Run it from the repository with `node docs/audits/evidence/2026-09-22-closure/firefox-ws-control.cjs` after installing Firefox. Denied Firefox worker sockets remain part of the boundary regression suite.
 
