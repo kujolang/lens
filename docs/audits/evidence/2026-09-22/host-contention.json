@@ -1,0 +1,6 @@
+{
+  "observed_at": "2026-09-22T17:33:17.546095+00:00",
+  "uptime": "13:33  up 4 days, 21:20, 2 users, load averages: 589.68 454.26 254.85",
+  "logical_cpus": 12,
+  "consequence": "Timing evidence is confounded; unchanged benchmark-harness resume hit its existing 30-second timeout twice. No limits were changed."
+}

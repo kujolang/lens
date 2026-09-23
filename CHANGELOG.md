@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Fix localhost target admission for userinfo, malformed IPv6 suffixes and ports.
+- Redact complete URL userinfo, encoded parameter names, OAuth fragments, nested DOM evidence,
+  network status text and accessibility errors before JSON serialization;
+  preserve quoted and deeply nested evidence without fail-open fallbacks.
+- Keep optional-check report/Eval verdicts and blocked-step walkthrough verdicts
+  consistent with exit codes; avoid duplicate Spec findings in Eval output.
+- Apply CLI bounds to file configuration and fix explicit fractional visual
+  thresholds. Allow opted-in baseline updates to replace their metadata.
+- Project accessibility evidence inside the browser and reduce visual-diff
+  temporary array memory without changing pixel classification.
+- Add browser privacy/verdict regressions and exhaustive byte-channel visual
+  comparison tests in CI; pin the composite artifact upload Action.
+- Enforce loopback HTTP(S)/WebSocket destinations in Chromium/Firefox, including
+  redirects; block service workers in restricted contexts. WebKit now requires
+  explicit external-access opt-in because worker sockets bypass its proxy.
+- Bound evidence string/collection bytes with observable whole-value omissions;
+  reject oversized bridge results and retain actionable warning/exit semantics.
+- Pin CI's Kujo runtime and exercise destination policy across all browser engines.
+- Correct the audit's recursive-binding claim: explicit `let` locals preserve
+  nested keys under documented Kujo assignment semantics.
+
 ## [1.1.0] - 2026-09-07
 
 - Keep unconfigured single checks one-shot; activate owned hosts for crawl/watch/configuration-driven checks.

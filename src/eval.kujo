@@ -5,7 +5,7 @@
 # when --spec is used.
 
 from src.common import is_trueish, is_falseish
-from src.redact import redact_url, redact_text
+from src.redact import redact_value, redact_url, redact_text
 
 # Generate Eval-compatible JSON output.
 # check_results: array of check result dicts (from run_all_checks)
@@ -95,7 +95,7 @@ export func generate_eval_output(config, meta, check_results, spec_results) {
 		}
 	}
 	
-	return to_json(eval_doc)
+	return to_json(redact_value(eval_doc))
 }
 
 # Convert a Lens finding to an Eval-compatible result entry.

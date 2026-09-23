@@ -35,6 +35,8 @@ export func run_provider(url, config, out_dir) {
 	# only requested when the run enabled it, keeping default runs lean.
 	mut bridge_args := array("node", bridge_script, "--url", url, "--viewports", viewports_str, "--timeout", timeout, "--screenshot-dir", screenshots_dir, "--format", "json")
 
+	if is_trueish(has_key(config, "allow_external")) && is_trueish(config["allow_external"]) { bridge_args = append(bridge_args, "--allow-external") }
+
 	# Extra evidence horizon; shared readiness handles activity quiet.
 	if is_trueish(has_key(config, "settle_ms")) {
 		bridge_args = append(bridge_args, "--settle-ms")

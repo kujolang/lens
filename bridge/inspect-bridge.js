@@ -13,6 +13,8 @@
  */
 
 const { Timings, launchBrowser, withDeadline, closeContext } = require('./runtime');
+const { evaluateBounded, finishEvidence, stringifyResult } = require('./evidence');
+const { createContext } = require('./network-policy');
 const { observeReadiness } = require('./readiness');
 
 function nowISO() { return new Date().toISOString(); }
@@ -22,6 +24,7 @@ function parseArgs() {
   const opts = { url: '', timeout: 30, maxElements: 250 };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--url') opts.url = args[++i] || '';
+    else if (args[i] === '--allow-external') opts.allowExternal = true;
     else if (args[i] === '--timeout') opts.timeout = parseInt(args[++i], 10) || 30;
     else if (args[i] === '--max-elements') opts.maxElements = parseInt(args[++i], 10) || 250;
   }
@@ -80,7 +83,8 @@ const COLLECT = (maxElements) => {
   for (const el of nodes) {
     if (out.length >= maxElements) break;
     if (!visible(el)) continue;
-    const selector = suggest(el);
+    const rawSelector = suggest(el);
+    const selector = rawSelector.length > 16384 ? '[Lens omitted oversized evidence]' : rawSelector;
     const text = (controlText(el) || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 80);
     const key = kindOf(el) + '|' + selector + '|' + text;
     if (seen.has(key)) continue;
@@ -104,19 +108,19 @@ async function main() {
   const timeoutMs = opts.timeout * 1000;
   const result = { url: opts.url, final_url: opts.url, started_at: nowISO(), title: '', elements: [], error: null };
 
-  let browser = null, context = null, readiness = null;
+  let browser = null, context = null, readiness = null, page;
   try {
     await timings.measure('runtime_load_ms', async () => require('playwright-core'));
     browser = await timings.measure('browser_launch_ms', () => launchBrowser());
-    context = await timings.measure('context_create_ms', () => browser.newContext({ viewport: { width: 1440, height: 900 } }), timeoutMs);
-    const page = await timings.measure('page_create_ms', () => context.newPage(), timeoutMs);
+    context = await timings.measure('context_create_ms', () => createContext(browser, { viewport: { width: 1440, height: 900 } }, opts.allowExternal, timeoutMs), timeoutMs);
+    page = await timings.measure('page_create_ms', () => context.newPage(), timeoutMs);
     readiness = await withDeadline(() => observeReadiness(page), timeoutMs);
     try {
       await timings.measure('navigation_ms', () => page.goto(opts.url, { waitUntil: 'load', timeout: timeoutMs }));
       result.readiness = await timings.measure('readiness_ms', () => readiness.wait({ timeoutMs }));
     } catch (err) { result.error = 'navigation: ' + err.message; }
-    try { result.final_url = page.url(); result.title = await withDeadline(() => page.title(), timeoutMs); } catch (_) {}
-    try { result.elements = await timings.measure('dom_capture_ms', () => page.evaluate(COLLECT, opts.maxElements), timeoutMs); } catch (err) { result.error = 'collect: ' + err.message; }
+    try { result.final_url = page.url(); result.title = await withDeadline(() => evaluateBounded(page, () => document.title || ''), timeoutMs); } catch (_) {}
+    try { result.elements = await timings.measure('dom_capture_ms', () => evaluateBounded(page, COLLECT, opts.maxElements), timeoutMs); } catch (err) { result.error = 'collect: ' + err.message; }
   } catch (err) {
     result.error = 'launch: ' + err.message;
   } finally {
@@ -125,9 +129,11 @@ async function main() {
     if (browser) await timings.measure('browser_close_ms', () => browser.close().catch(() => {}));
   }
 
+  result.network_policy = context?.networkPolicy;
+  if (context?.networkPolicy?.blocked_requests) result.error = 'Browser destination policy blocked a request.';
   result.timings = timings.finish();
   result.finished_at = nowISO();
-  process.stdout.write(JSON.stringify(result));
+  process.stdout.write(stringifyResult(finishEvidence(result, page)));
   process.exitCode = result.elements.length > 0 || !result.error ? 0 : 1;
 }
 

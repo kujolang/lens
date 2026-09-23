@@ -8,6 +8,7 @@
 #   kujo test
 #   kujo run tests/lens_tests.kujo
 
+from tests.fixtures.scoped_clone import clone_nested
 from src.config import parse_viewport, parse_severity, severity_index
 from src.config import severity_meets_threshold, has_flag, flag_value
 from src.config import parse_subcommand, parse_viewports, parse_fail_on
@@ -15,7 +16,7 @@ from src.config import is_json_mode, is_quick, is_verbose, is_check_links
 from src.config import is_allow_external, parse_timeout, parse_max_links
 from src.config import parse_out_dir, build_config
 from src.config import is_accessibility, parse_a11y_tags, parse_a11y_include, parse_a11y_exclude
-from src.config import parse_settle_ms, parse_max_concurrency, parse_config_path
+from src.config import parse_diff_threshold, parse_settle_ms, parse_max_concurrency, parse_config_path
 from src.config import is_size_token, is_digits, merge_file_config
 from src.config import parse_browser, parse_throttle, parse_device, is_perf
 from src.config import is_crawl, parse_max_depth, parse_max_pages, parse_auth_file
@@ -43,7 +44,7 @@ from src.validate import validate_url, has_valid_scheme, validate_auth_storage_s
 from src.redact import is_sensitive_header, is_sensitive_query_param
 from src.redact import redact_url, redact_console_entry, redact_header_value
 from src.redact import redact_text, redact_finding, redact_check_results
-from src.redact import redact_console_message, redact_network_event, redact_dom_summary, redact_accessibility_scans
+from src.redact import redact_console_message, redact_network_event, redact_dom_summary, redact_accessibility_scans, redact_value
 from src.checks import new_check_result, new_finding, add_finding, worst_severity
 from src.checks import count_findings_by_severity, check_page_load, check_capture_limits
 from src.provider import provider_failed, redacted_bridge_command_for_display, parse_provider_output
@@ -1408,6 +1409,8 @@ func test_redact_text_preserves_benign() {
 }
 
 func test_redact_url_basic_auth_and_fragment() {
+	check_eq(redact_url("http://user:PRIVATE@TAIL@localhost:3000/path"), "http://[REDACTED]@localhost:3000/path", "redact complete userinfo through last at")
+	check_eq(redact_url("http://PRIVATE@localhost/path"), "http://[REDACTED]@localhost/path", "redact username-only URL userinfo")
 	r := redact_url("https://user:pass@host.com/x?api_key=zzzsecretval#frag")
 	check(is_falseish(contains(r, "user:pass")), "redact_url: basic-auth credentials removed")
 	check(is_falseish(contains(r, "zzzsecretval")), "redact_url: sensitive param removed")
@@ -1627,11 +1630,22 @@ func test_check_page_load_clean() {
 	check_eq(cr["status"], "pass", "page_load: clean navigation -> pass")
 }
 
+func test_scoped_recursive_clone() {
+	let input := array({"a": array({"b": "hi"})})
+	check_eq(to_json(clone_nested(input)), to_json(input), "explicit local declarations preserve recursive dictionary keys")
+}
+test_scoped_recursive_clone()
+
 func test_check_capture_limits() {
 	clean := check_capture_limits({}, { "provider_result": { "viewports": array(
 		{ "evidence_limits": { "dropped_console_messages": 0, "dropped_network_events": 0, "dropped_links": 0 } }
 	) } })
 	check_eq(clean["status"], "pass", "evidence limits: no drops passes")
+	byte_bounded := check_capture_limits({}, { "provider_result": { "viewports": array(
+		{ "evidence_limits": { "byte_limit_reached": true } }
+	) } })
+	check_eq(byte_bounded["severity"], "warning", "evidence limits: byte omissions warn without count drops")
+
 
 	bounded := check_capture_limits({}, { "provider_result": { "viewports": array(
 		{ "evidence_limits": { "dropped_console_messages": 3, "dropped_network_events": 2, "dropped_links": 1 } }
@@ -1882,6 +1896,79 @@ check_eq(secret_program["secret"], true, "flow: secret marking reaches browser")
 
 ready_display := redacted_bridge_command_for_display(array("node", "--ready-selector", "input[value=PRIVATE_READINESS]"))
 check_eq(index_of(ready_display, "PRIVATE_READINESS"), -1, "readiness: verbose selector is hidden")
+
+func test_hardening_regressions() {
+	# Authority parsing must agree with the browser, including userinfo and ports.
+	check_eq(extract_host("http://localhost:pass@example.com/"), "example.com", "userinfo is not a localhost authority")
+	check_eq(validate_url("http://localhost:pass@example.com/", false)["valid"], false, "userinfo cannot bypass external opt-in")
+	check_eq(validate_url("http://user:pass@localhost:3000/", false)["valid"], true, "local basic auth remains supported")
+	check_eq(validate_url("http://[::1]evil.example/", false)["valid"], false, "IPv6 authority suffix is rejected")
+	check_eq(validate_url("http://localhost:bad/", false)["valid"], false, "invalid port rejected")
+	check_eq(validate_url("http://localhost:65536/", false)["valid"], false, "out of range port rejected")
+	check_eq(validate_url("http://local\nhost/", false)["valid"], false, "control characters rejected")
+	check_eq(redact_url("http://localhost/?%74oken=ENCODED_PRIVATE&ok=yes#access_token=FRAGMENT_PRIVATE"), "http://localhost/?%74oken=[REDACTED]&ok=yes#access_token=[REDACTED]", "encoded query and fragment secrets")
+	check_eq(redact_url("http://localhost/#/callback?access_token=ROUTER_PRIVATE&tab=home"), "http://localhost/#/callback?access_token=[REDACTED]&tab=home", "hash-router credentials")
+	check_eq(redact_url("http://localhost/?ok=yes#section"), "http://localhost/?ok=yes#section", "benign URL structure preserved")
+	check_eq(index_of(redact_text("failed http://localhost/?%74oken=ENCODED_PRIVATE"), "ENCODED_PRIVATE"), -1, "encoded URL in diagnostic text")
+	quoted_flow := redact_flow_for_output({"name": "Safe flow", "description": "password=\"QUOTED_PRIVATE\"", "url": "http://localhost/?token=URL_PRIVATE", "steps": array({"visit": "http://localhost/"})})
+	check_eq(index_of(to_json(quoted_flow), "PRIVATE"), -1, "quoted secret cannot trigger fail-open flow redaction")
+	quoted_scans := redact_accessibility_scans(array({"error": "password=\"QUOTED_PRIVATE\"", "count": 7, "nested": array({"target": "token=NESTED_PRIVATE"})}))
+	check_eq(len(quoted_scans), 1, "quoted secrets do not discard accessibility evidence")
+	check_eq(quoted_scans[0]["count"], 7, "structured redaction preserves numbers")
+	check_eq(index_of(to_json(quoted_scans), "PRIVATE"), -1, "structured scan secrets removed")
+	check_eq(index_of(to_json(redact_dom_summary({"overflow_elements": array({"selector": "div#token=DOM_PRIVATE", "width": 2000}), "error": "password=DOM_PRIVATE"})), "PRIVATE"), -1, "nested DOM evidence and errors redacted")
+	check_eq(index_of(to_json(redact_network_event({"status_text": "token=STATUS_PRIVATE", "status": 500})), "PRIVATE"), -1, "HTTP reason phrase redacted")
+	check_eq(index_of(to_json(redact_check_results(array({"engine_note": "token=ENGINE_PRIVATE", "findings": array()}))), "PRIVATE"), -1, "accessibility engine note redacted")
+}
+
+func test_merged_numeric_limits() {
+	check_eq(parse_diff_threshold(array("check", "--diff-threshold", "0.02")), 0.02, "explicit fractional threshold parses")
+	check_eq(parse_diff_threshold(array("check", "--diff-threshold", "2")), 0.01, "invalid threshold uses default")
+	# Config-file limits must match CLI parsing, including CLI precedence.
+	bounded_cfg := merge_file_config(build_config(array("check", "http://localhost/")), array("check", "http://localhost/"), {"timeout": 900, "max_links": 10000, "max_pages": 1000000, "max_depth": 99, "max_concurrency": 100, "settle_ms": 50000, "watch_interval": 9999})
+	check_eq(bounded_cfg["timeout"], 300, "config timeout bound")
+	check_eq(bounded_cfg["max_links"], 500, "config link bound")
+	check_eq(bounded_cfg["max_pages"], 200, "config crawl page bound")
+	check_eq(bounded_cfg["max_depth"], 5, "config crawl depth bound")
+	check_eq(bounded_cfg["max_concurrency"], 16, "config context bound")
+	check_eq(bounded_cfg["settle_ms"], 10000, "config readiness bound")
+	check_eq(bounded_cfg["watch_interval"], 3600, "config interval bound")
+}
+
+func test_structured_redaction_shape() {
+	assignment_keys := array("access_token", "refresh_token", "id_token", "client_secret", "private_key", "api_key", "api-key", "apikey", "authorization", "password", "passwd", "pwd", "secret", "token", "session_id", "session-id", "sessionid", "jsessionid", "phpsessid", "signature", "sig")
+	mut assignment_index := 0
+	while assignment_index < len(assignment_keys) {
+		assignment_key := assignment_keys[assignment_index]
+		check_eq(redact_text(assignment_key + "=PRIVATE&ok=yes"), assignment_key + "=[REDACTED]&ok=yes", "combined assignment redaction: " + assignment_key)
+		assignment_index = assignment_index + 1
+	}
+
+	check_eq(redact_value({"password": "FIELD_PRIVATE"})["password"], "[REDACTED]", "sensitive string-valued fields scrubbed")
+	check_eq(index_of(redact_text("password=\"secret with spaces\""), "spaces"), -1, "quoted secret with spaces scrubbed")
+	shape_input := {"a": array({"x": "token=NESTED_PRIVATE"}, {"y": array(null, false, 42)}), "b": "unchanged"}
+	shape_result := redact_value(shape_input)
+	check_eq(shape_result["b"], "unchanged", "structured redaction preserves sibling fields")
+	check_eq(shape_result["a"][1]["y"][2], 42, "structured redaction preserves nested siblings")
+	check_eq(shape_result["a"][1]["y"][0], null, "structured redaction preserves null")
+	check_eq(shape_result["a"][1]["y"][1], false, "structured redaction preserves boolean")
+	check_eq(shape_input["a"][0]["x"], "token=NESTED_PRIVATE", "redaction does not mutate original data")
+	check_eq(to_json(redact_value(shape_result)), to_json(shape_result), "structured redaction is idempotent")
+}
+
+func test_deep_structured_redaction() {
+	mut deep_value := "token=DEEP_PRIVATE"
+	mut deep_index := 0
+	while deep_index < 100 { deep_value = array(deep_value); deep_index = deep_index + 1 }
+	mut deep_safe := redact_value(deep_value)
+	deep_index = 0
+	while deep_index < 100 { deep_safe = deep_safe[0]; deep_index = deep_index + 1 }
+	check_eq(deep_safe, "token=[REDACTED]", "deep redaction avoids recursive VM stack growth")
+}
+test_hardening_regressions()
+test_merged_numeric_limits()
+test_structured_redaction_shape()
+test_deep_structured_redaction()
 
 print_summary()
 

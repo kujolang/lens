@@ -266,23 +266,25 @@ export func check_capture_limits(config, bridge_data) {
 	mut dropped_console := 0
 	mut dropped_network := 0
 	mut dropped_links := 0
+	mut byte_limits := 0
 	mut vi := 0
 	while vi < len(viewports) {
 		vp := viewports[vi]
 		if is_trueish(has_key(vp, "evidence_limits")) {
 			limits := vp["evidence_limits"]
+			if is_trueish(has_key(limits, "byte_limit_reached")) && is_trueish(limits["byte_limit_reached"]) { byte_limits = byte_limits + 1 }
 			if is_trueish(has_key(limits, "dropped_console_messages")) { dropped_console = dropped_console + to_int(to_string(limits["dropped_console_messages"])) }
 			if is_trueish(has_key(limits, "dropped_network_events")) { dropped_network = dropped_network + to_int(to_string(limits["dropped_network_events"])) }
 			if is_trueish(has_key(limits, "dropped_links")) { dropped_links = dropped_links + to_int(to_string(limits["dropped_links"])) }
 		}
 		vi = vi + 1
 	}
-	total := dropped_console + dropped_network + dropped_links
+	total := dropped_console + dropped_network + dropped_links + byte_limits
 	if total == 0 { return cr }
 	return add_finding(cr, new_finding(
 		"warning", "EVIDENCE",
 		"Browser evidence capture reached a safety limit",
-		"Lens omitted " + to_string(dropped_console) + " console message(s), " + to_string(dropped_network) + " network event(s), and " + to_string(dropped_links) + " link(s) after reaching configured hard bounds.",
+		"Lens omitted " + to_string(dropped_console) + " console message(s), " + to_string(dropped_network) + " network event(s), and " + to_string(dropped_links) + " link(s) after reaching configured hard bounds; " + to_string(byte_limits) + " viewport(s) also reached an evidence byte limit.",
 		"metadata.json provider.evidence_limits",
 		"Reduce page noise or inspect the application with a purpose-built trace before relying on conclusions that require the omitted evidence."
 	))

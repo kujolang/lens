@@ -4,7 +4,7 @@
 # JSON reports from check results and run metadata.
 
 from src.common import str_join, is_trueish, is_falseish, str_starts_with
-from src.redact import redact_url, redact_text
+from src.redact import redact_value, redact_url, redact_text
 
 # Lifecycle phase emitted in metadata/JSON reports. All MVP phases (1-10)
 # are complete; the tool now reports a stable lifecycle marker.
@@ -634,7 +634,7 @@ export func generate_json_report(config, meta, check_results, provider_result) {
 		}
 	}
 	
-	return redact_text(to_json(report))
+	return to_json(redact_value(report))
 }
 
 # Build the repair_brief object for JSON report.
@@ -867,7 +867,7 @@ export func generate_metadata_json(config, meta, check_results, provider_meta) {
 		"provider": provider_meta
 	}
 	
-	return redact_text(to_json(md))
+	return to_json(redact_value(md))
 }
 
 # Helper: count findings of a given severity across all checks.

@@ -1,0 +1,19 @@
+import subprocess,os,time,json,tempfile,urllib.request,statistics
+from pathlib import Path
+root=Path.cwd();out=root/'.lens/audit-2026-09-22';base=out/'baseline-tree';env=dict(os.environ,KUJO_BIN=str(root.parent/'kujo/target/release/kujo'))
+server=subprocess.Popen(['python3','scripts/benchmark-fixture-server.py','--port','9973'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+try:
+ for _ in range(100):
+  try:urllib.request.urlopen('http://127.0.0.1:9973/trivial',timeout=1).close();break
+  except OSError:time.sleep(.05)
+ results={}
+ with tempfile.TemporaryDirectory() as td:
+  for case,flags in [('realistic',[]),('many-links',['--quick']),('spa',['--quick'])]:
+   rows={'before':[],'after':[]}
+   for i in range(3):
+    for label,target in ([('before',base),('after',root)] if i%2==0 else [('after',root),('before',base)]):
+     start=time.perf_counter();p=subprocess.run([str(target/'lens'),'check','http://127.0.0.1:9973/'+case,*flags,'--out',td+'/'+label],cwd=target,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+     assert p.returncode in (0,1),p.stdout[-2000:];rows[label].append(time.perf_counter()-start)
+   results[case]={**rows,'medians':{k:statistics.median(v) for k,v in rows.items()}}
+   (out/'paired-runtime.json').write_text(json.dumps(results,indent=2)+'\n');print(case,results[case]['medians'],flush=True)
+finally:server.terminate();server.wait()

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "completed": true,
+  "iterations": 3,
+  "unit": "seconds",
+  "lower_is_better": true,
+  "environment": {
+    "system": "Darwin",
+    "machine": "x86_64"
+  },
+  "medians": {
+    "bridge_trivial": 2.8439979850081727,
+    "bridge_realistic": 3.2047912609996274,
+    "cli_trivial": 5.169891283963807,
+    "cli_realistic": 5.428645130014047,
+    "quick_trivial": 4.23246209701756,
+    "quick_realistic": 4.50159421301214,
+    "quick_spa": 4.857972502999473,
+    "quick_image_heavy": 4.354762470989954,
+    "quick_late_network": 4.610940610000398,
+    "quick_many_links": 4.114948340982664
+  }
+}

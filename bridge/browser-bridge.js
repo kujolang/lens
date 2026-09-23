@@ -20,6 +20,8 @@
  */
 
 const { Timings, launchBrowser, closeContext, withDeadline } = require('./runtime');
+const { pushBounded, evaluateBounded, finishEvidence, stringifyResult } = require('./evidence');
+const { createContext } = require('./network-policy');
 const { observeReadiness } = require('./readiness');
 const path = require('path');
 
@@ -31,11 +33,7 @@ const MAX_NETWORK_EVENTS = 2000;
 const MAX_CAPTURED_LINKS = 5000;
 const MAX_VIEWPORT_DIMENSION = 4096;
 
-function pushBounded(items, value, limit) {
-  if (items.length >= limit) return false;
-  items.push(value);
-  return true;
-}
+
 
 // ── CLI argument parsing ──────────────────────────────────────────────
 
@@ -66,6 +64,7 @@ function parseArgs() {
       case '--ready-selector':
         opts.readySelector = args[++i] || '';
         break;
+      case '--allow-external': opts.allowExternal = true; break;
       case '--url':
         opts.url = args[++i] || '';
         break;
@@ -220,7 +219,7 @@ async function runAxeScan(page, opts) {
 
   try {
     await page.evaluate(axeSource);
-    const axeResult = await page.evaluate(async (cfg) => {
+    const axeResult = await evaluateBounded(page, async (cfg) => {
       const runOptions = {};
       if (cfg.tags && cfg.tags.length) {
         runOptions.runOnly = { type: 'tag', values: cfg.tags };
@@ -235,32 +234,32 @@ async function runAxeScan(page, opts) {
       } else {
         context = document;
       }
+      // Project in the browser: node HTML and unused result collections must
+      // not cross the browser-to-Node transport just to be discarded.
       // eslint-disable-next-line no-undef
-      return await axe.run(context, runOptions);
+      const raw = await axe.run(context, runOptions);
+      return {
+        violations: (raw.violations || []).map(v => ({
+          id: v.id,
+          impact: v.impact || 'moderate',
+          description: v.description || '',
+          help: v.help || '',
+          help_url: v.helpUrl || '',
+          tags: v.tags || [],
+          node_count: (v.nodes || []).length,
+          targets: (v.nodes || []).slice(0, 5).map(n => (n.target || []).join(' ')),
+        })),
+        passes_count: (raw.passes || []).length,
+        incomplete_count: (raw.incomplete || []).length,
+        inapplicable_count: (raw.inapplicable || []).length,
+      };
     }, { tags: opts.a11yTags, include: opts.a11yInclude, exclude: opts.a11yExclude });
-
-    // Map to a compact, privacy-safe shape. We deliberately do NOT include
-    // node.html (which can contain rendered secrets); only CSS-selector
-    // targets and counts are retained.
-    const violations = (axeResult.violations || []).map((v) => ({
-      id: v.id,
-      impact: v.impact || 'moderate',
-      description: v.description || '',
-      help: v.help || '',
-      help_url: v.helpUrl || '',
-      tags: v.tags || [],
-      node_count: (v.nodes || []).length,
-      targets: (v.nodes || []).slice(0, 5).map((n) => (n.target || []).join(' ')),
-    }));
 
     return {
       engine_available: true,
       engine: 'axe-core',
       version: axeVersion,
-      violations,
-      passes_count: (axeResult.passes || []).length,
-      incomplete_count: (axeResult.incomplete || []).length,
-      inapplicable_count: (axeResult.inapplicable || []).length,
+      ...axeResult,
     };
   } catch (err) {
     return { engine_available: false, error: 'axe-core scan failed: ' + err.message };
@@ -292,7 +291,8 @@ const COLLECT_LINKS = (maxLinks = 5000) => {
   for (const a of anchorNodes) {
     const style = getComputedStyle(a);
     if (style.display === 'none' || style.visibility === 'hidden' || a.getClientRects().length === 0) continue;
-    const href = a.getAttribute('href') || '';
+    const rawHref = a.getAttribute('href') || '';
+    const href = rawHref.length > 16384 ? '[Lens omitted oversized evidence]' : rawHref;
     const text = (a.textContent || '').trim().substring(0, 200);
     const title = (a.getAttribute('title') || '').trim().substring(0, 200);
     const ariaLabel = (a.getAttribute('aria-label') || '').trim().substring(0, 200);
@@ -324,7 +324,7 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
     contextOptions.storageState = opts.authFile;
   }
 
-  const context = await timings.measure('context_create_ms', () => browser.newContext(contextOptions), timeoutMs);
+  const context = await timings.measure('context_create_ms', () => createContext(browser, contextOptions, opts?.allowExternal, timeoutMs), timeoutMs);
   if (opts?.captureStats) opts.captureStats.contexts_created++;
   let readiness, closed = false;
   try {
@@ -428,7 +428,7 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
     // Capture DOM summary
     let domSummary = null;
     try {
-      domSummary = await timings.measure('dom_capture_ms', () => page.evaluate(() => {
+      domSummary = await timings.measure('dom_capture_ms', () => evaluateBounded(page, () => {
         const body = document.body;
         const bodyText = body ? body.innerText : '';
         return {
@@ -507,7 +507,7 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
     // Capture links
     let links = [];
     try {
-      links = await timings.measure('link_capture_ms', () => page.evaluate(COLLECT_LINKS, MAX_CAPTURED_LINKS), timeoutMs);
+      links = await timings.measure('link_capture_ms', () => evaluateBounded(page, COLLECT_LINKS, MAX_CAPTURED_LINKS), timeoutMs);
     } catch (_) {
       links = [];
     }
@@ -530,7 +530,7 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
     const contextClosed = await timings.measure('context_close_ms', () => closeContext(context, timeoutMs));
     closed = true;
 
-    return {
+    return finishEvidence({
       timings: timings.finish(),
       context_cleanup_failed: !contextClosed,
       readiness: ready,
@@ -539,11 +539,12 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
       height: size.height,
       final_url: finalUrl,
       screenshot: screenshotPath,
+      network_policy: context.networkPolicy,
       console_messages: consoleMessages,
       network_events: networkEvents,
       dom_summary: domSummary,
       links: links,
-      navigation_error: navigationError,
+      navigation_error: navigationError || (context.networkPolicy?.blocked_requests ? 'Browser destination policy blocked a request; use --allow-external only for trusted access.' : null),
       accessibility: accessibility,
       metrics: metrics,
       evidence_limits: {
@@ -556,7 +557,7 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
           ? Math.max(0, domSummary.link_count - links.length)
           : 0,
       },
-    };
+    }, page, [consoleMessages, networkEvents]);
   } finally {
     if (readiness) readiness.dispose();
     if (!closed) await closeContext(context, timeoutMs);
@@ -708,7 +709,7 @@ async function main() {
       metadata: { failure_kind: 'browser-session' },
     }))
     : await capture(opts);
-  process.stdout.write(JSON.stringify(result));
+  process.stdout.write(stringifyResult(result));
   const usable = result.viewports.some(v => v && (v.dom_summary || v.screenshot || !v.navigation_error));
   process.exitCode = usable ? 0 : 1;
 }
@@ -722,7 +723,7 @@ if (require.main === module) {
   });
 } else {
   module.exports = {
-    capture, captureViewport, parseArgs, resolveViewport, mapWithConcurrency, COLLECT_LINKS,
+    capture, captureViewport, runAxeScan, parseArgs, resolveViewport, mapWithConcurrency, COLLECT_LINKS,
     VIEWPORT_SIZES, THROTTLE_PROFILES, pushBounded,
     MAX_CONSOLE_MESSAGES, MAX_NETWORK_EVENTS, MAX_CAPTURED_LINKS,
     MAX_VIEWPORT_DIMENSION,

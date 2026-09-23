@@ -62,6 +62,11 @@ actually work?"* Lens answers it the same way every time:
 - **🔒 Secret-safe** — tokens, JWTs, credentials, and sensitive params are redacted from every artifact *and* report.
 - **👀 Observe, don't touch** — opens a URL and watches. It never clicks, types, logs in, or submits forms unless you opt into a safety-gated flow.
 
+Restricted Chromium/Firefox runs enforce loopback HTTP(S)/WebSocket destinations,
+including redirects. WebKit requires `--allow-external`; restricted contexts
+block service workers. See [network policy](SECURITY.md#browser-network-policy)
+for the exact boundary and trusted-app opt-in.
+
 ## Production posture
 
 Lens 1.0 is **stable within its deterministic local-first scope**: the core
@@ -168,7 +173,9 @@ Reports are redacted by default. See [Redaction & Privacy](docs/reference.md#red
 
 Lens bounds high-volume evidence so CI artifacts stay predictable: each
 viewport retains at most 1,000 console messages, 2,000 failed network events,
-and 5,000 links. A warning finding records any truncation. Custom viewports are
+and 5,000 links. Strings above 16 KiB are omitted whole; captured arrays are
+bounded to 1 MiB. A warning finding records omissions; oversized bridge results
+fail explicitly at 16 MiB. Custom viewports are
 limited to 4096×4096, and recordings above 100 MiB are removed with a warning.
 
 Screenshots and flow recordings capture rendered pixels. They can therefore

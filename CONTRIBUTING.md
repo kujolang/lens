@@ -128,7 +128,12 @@ The full per-step detail lives in `docs/enhancements.md`.
    `python3 scripts/compare-benchmarks.py /tmp/before.json /tmp/after.json`.
 8. If capture, storage, or report surfaces change, prove no secret leaks with a
    secret-bearing URL or flow data and add redaction coverage.
-9. Run the real CLI end to end and read the generated report.
+9. Run `npm test --prefix bridge` and `python3 scripts/runtime-e2e.py` for real
+   browser lifecycle, privacy and verdict contracts (Chromium and the pinned
+   visual dependencies must be installed).
+10. Run `python3 scripts/test-visual-diff.py` after pixel comparison changes.
+    It checks every RGB channel byte pair and the rendered diff image.
+11. Read the generated report and compare its verdict with the process exit code.
 
 Tests should stay offline and deterministic unless the repo explicitly marks a
 live-provider or network test as opt-in.

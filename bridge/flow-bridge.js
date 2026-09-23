@@ -17,6 +17,8 @@
  */
 
 const { Timings, launchBrowser, closeContext, withDeadline } = require('./runtime');
+const { pushBounded, evaluateBounded, finishEvidence, stringifyResult } = require('./evidence');
+const { createContext } = require('./network-policy');
 const { observeReadiness } = require('./readiness');
 const fs = require('fs');
 const path = require('path');
@@ -26,11 +28,7 @@ const MAX_NETWORK_EVENTS = 2000;
 const MAX_VIEWPORT_DIMENSION = 4096;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
-function pushBounded(items, value, limit) {
-  if (items.length >= limit) return false;
-  items.push(value);
-  return true;
-}
+
 
 function recordingExceedsLimit(filePath, maxBytes = MAX_VIDEO_BYTES) {
   return fs.statSync(filePath).size > maxBytes;
@@ -186,12 +184,12 @@ async function runFlow(program, opts) {
 
   await timings.measure('runtime_load_ms', async () => require('playwright-core'));
   const browser = await timings.measure('browser_launch_ms', () => launchBrowser());
-  let context, readiness;
+  let context, readiness, page;
   try {
     const contextOptions = { viewport: { width: size.width, height: size.height } };
     if (program.auth_file) contextOptions.storageState = program.auth_file;
-    context = await timings.measure('context_create_ms', () => browser.newContext(contextOptions), program.timeout || 30000);
-    const page = await timings.measure('page_create_ms', () => context.newPage(), program.timeout || 30000);
+    context = await timings.measure('context_create_ms', () => createContext(browser, contextOptions, program.allow_external, program.timeout || 30000), program.timeout || 30000);
+    page = await timings.measure('page_create_ms', () => context.newPage(), program.timeout || 30000);
     readiness = await withDeadline(() => observeReadiness(page), program.timeout || 30000);
     opts = { ...opts, readiness, recording: !!(program.record && opts.videoDir) };
     const videoPath = opts.recording ? path.join(opts.videoDir, 'walkthrough.webm') : '';
@@ -236,7 +234,7 @@ async function runFlow(program, opts) {
 
     try { result.final_url = page.url(); } catch (_) {}
     try {
-      result.dom_summary = await withDeadline(() => page.evaluate(() => ({
+      result.dom_summary = await withDeadline(() => evaluateBounded(page, () => ({
         title: document.title || '',
         body_text_length: document.body ? document.body.innerText.length : 0,
         document_width: document.documentElement.scrollWidth,
@@ -270,9 +268,11 @@ async function runFlow(program, opts) {
     if (context) result.context_cleanup_failed = !(await timings.measure('context_close_ms', () => closeContext(context)));
     await timings.measure('browser_close_ms', () => browser.close().catch(() => {}));
   }
+  result.network_policy = context?.networkPolicy;
+  if (context?.networkPolicy?.blocked_requests) { result.error = true; result.message = 'Browser destination policy blocked a request; use allow_external only for trusted external access.'; }
   result.timings = timings.finish();
   result.finished_at = nowISO();
-  return redactTypedValues(result, program);
+  return finishEvidence(redactTypedValues(result, program), page, [result.console_messages, result.network_events]);
 }
 
 function redactTypedValues(result, program) {
@@ -293,7 +293,7 @@ async function main() {
   const opts = parseArgs();
   if (!opts.program) throw new Error("Program is required");
   const program = JSON.parse(fs.readFileSync(opts.program === "-" ? 0 : opts.program, "utf8"));
-  process.stdout.write(JSON.stringify(await runFlow(program, opts)));
+  process.stdout.write(stringifyResult(await runFlow(program, opts)));
 }
 
 if (require.main === module) {

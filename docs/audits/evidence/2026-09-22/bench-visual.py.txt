@@ -1,0 +1,17 @@
+import importlib.util,json,resource,sys,time
+from pathlib import Path
+from PIL import Image
+import numpy as np
+root=Path(__file__).resolve().parents[2]
+work=Path(__file__).parent
+if sys.argv[1]=='fixture':
+ a=np.random.default_rng(0).integers(0,256,(2048,2048,3),dtype=np.uint8)
+ Image.fromarray(a).save(work/'visual-a.png')
+ a[::10]=0
+ Image.fromarray(a).save(work/'visual-b.png')
+else:
+ source=work/'visual-before.py' if sys.argv[1]=='before' else root/'bridge/visual-diff.py'
+ spec=importlib.util.spec_from_file_location('visual',source);v=importlib.util.module_from_spec(spec);spec.loader.exec_module(v)
+ start=time.perf_counter();r=v.compare_images(work/'visual-a.png',work/'visual-b.png',0.01,str(work/'visual-diff.png'));elapsed=time.perf_counter()-start
+ assert r['status']=='fail'
+ print(json.dumps({'side':sys.argv[1],'seconds':elapsed,'peak_rss_bytes':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,'changed_pixels':r['changed_pixels'],'total_pixels':r['total_pixels'],'difference_ratio':r['difference_ratio']}))

@@ -8,6 +8,7 @@ const net = require('node:net');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { BrowserHost } = require('./runtime');
+const { stringifyResult } = require('./evidence');
 
 async function serve(socketPath, { idleMs = 60000 } = {}) {
   const host = new BrowserHost();
@@ -49,7 +50,7 @@ async function serve(socketPath, { idleMs = 60000 } = {}) {
         contexts += result.metadata.contexts_created || 0;
         pages += result.metadata.pages_captured || 0;
         result.metadata.session = { browser_launches: host.launches, contexts_created: contexts, pages_captured: pages };
-        socket.end(JSON.stringify(result));
+        socket.end(stringifyResult(result));
       } catch (_) {
         socket.end(JSON.stringify({ viewports: [], provider_errors: ['Browser session capture failed'] }));
       } finally { ownsJob = false; busy = false; idle(); }
