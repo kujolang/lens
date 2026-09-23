@@ -46,7 +46,7 @@ Exact local commands are below; full logs remain in ignored `.lens/closure-2026-
 | `npm audit --omit=dev --json --prefix bridge` | Zero known advisories; two production dependencies |
 | `git diff --check` | Pass |
 
-The initial proxy-only WebKit tests failed on page/worker WebSockets; those failed experiments were removed. WebKit's shipped test asserts rejection before page creation plus successful opted-in navigation. The independent Firefox successful-worker control failed without Lens; its [source](evidence/2026-09-22-closure/firefox-ws-control.cjs) and [output](evidence/2026-09-22-closure/firefox-ws-control.log) remain visible rather than marking the crash as a passing Lens capability. Run it from the repository with `node docs/audits/evidence/2026-09-22-closure/firefox-ws-control.cjs` after installing Firefox. Denied Firefox worker sockets remain part of the boundary regression suite.
+The initial proxy-only WebKit tests failed on page/worker WebSockets; those failed experiments were removed. WebKit's shipped test asserts rejection before page creation plus successful opted-in navigation. The independent Firefox successful-worker control failed without Lens; its [source](evidence/2026-09-22-closure/firefox-ws-control.cjs) and [output](evidence/2026-09-22-closure/firefox-ws-control.txt) remain visible rather than marking the crash as a passing Lens capability. Run it from the repository with `node docs/audits/evidence/2026-09-22-closure/firefox-ws-control.cjs` after installing Firefox. Denied Firefox worker sockets remain part of the boundary regression suite.
 
 ## Performance and efficiency
 

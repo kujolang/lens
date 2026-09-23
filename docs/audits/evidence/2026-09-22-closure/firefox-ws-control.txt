@@ -1,0 +1,14 @@
+PAGE ok
+/Users/robertdevore/2026/Kujolang/kujo-repos/lens/bridge/node_modules/playwright-core/lib/coreBundle.js:663
+    throw new Error(message || "Assertion error");
+          ^
+
+Error: Assertion error
+    at assert (/Users/robertdevore/2026/Kujolang/kujo-repos/lens/bridge/node_modules/playwright-core/lib/coreBundle.js:663:11)
+    at FFPage._onWebSocketOpened (/Users/robertdevore/2026/Kujolang/kujo-repos/lens/bridge/node_modules/playwright-core/lib/coreBundle.js:44292:9)
+    at FFSession.emit (node:events:514:20)
+    at /Users/robertdevore/2026/Kujolang/kujo-repos/lens/bridge/node_modules/playwright-core/lib/coreBundle.js:43648:45
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at process.processImmediate (node:internal/timers:541:9)
+
+Node.js v26.7.0
