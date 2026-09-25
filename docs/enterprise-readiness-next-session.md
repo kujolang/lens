@@ -14,7 +14,7 @@ deferred with rationale.
 - Root files are still intentional: `lens` is the executable launcher,
   `lens.kujo` is the Kujo entry point, `kujo.toml`/`kennel.toml` are project and
   package manifests, and `lens.spec.yml` is the product contract.
-- Tests pass at 525/525 after the hardening follow-through.
+- Tests pass at 532/532 after the 2026-09-25 hardening follow-through.
 - Lens 1.1.0 is stable within its documented deterministic, local-first scope.
   Broader product features and presentation work remain optional roadmap items,
   not correctness blockers.
