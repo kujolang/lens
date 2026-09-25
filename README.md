@@ -69,7 +69,7 @@ for the exact boundary and trusted-app opt-in.
 
 ## Production posture
 
-Lens 1.0 is **stable within its deterministic local-first scope**: the core
+Lens 1.1.0 is **stable within its deterministic local-first scope**: the core
 contracts are intentionally small, documented, and tested. The repo is structured as a Kujo showcase: source
 lives under `src/`, browser-only work is isolated in `bridge/`, examples are
 copyable, and the test suite covers CLI parsing, safety rules, redaction,

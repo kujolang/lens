@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Align the project manifest's minimum Kujo runtime with the documented and
+  packaged 1.2.3 requirement, add a regression ratchet, and refresh active
+  documentation/test-count contracts.
 - Fix localhost target admission for userinfo, malformed IPv6 suffixes and ports.
 - Redact complete URL userinfo, encoded parameter names, OAuth fragments, nested DOM evidence,
   network status text and accessibility errors before JSON serialization;

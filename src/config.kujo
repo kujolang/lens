@@ -5,8 +5,8 @@
 
 from src.common import is_trueish, is_falseish, str_starts_with, str_contains, print_lines
 
-# Single source of truth for the Lens version string. Keep kennel.toml and
-# lens.spec.yml in sync with this when releasing.
+# Single source of truth for the Lens version string. Keep the release surfaces
+# listed in docs/release-readiness.md in sync with this when releasing.
 export func lens_version() {
 	return "1.1.0"
 }

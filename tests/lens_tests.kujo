@@ -942,6 +942,13 @@ func test_lens_version_consistent() {
 	check_eq(LENS_VERSION, "1.1.0", "test-local LENS_VERSION matches")
 }
 
+func test_minimum_runtime_consistent() {
+	project_manifest := parse_toml(read_file("kujo.toml"))
+	package_manifest := parse_toml(read_file("kennel.toml"))
+	check_eq(project_manifest["kujo"]["minimum_version"], "1.2.3", "project manifest requires the supported Kujo minimum")
+	check_eq(package_manifest["kujo"]["minimum_version"], "1.2.3", "package manifest requires the supported Kujo minimum")
+}
+
 func test_flow_step_cap() {
 	# Build a flow with 201 visit steps → should be rejected by the cap.
 	mut steps := "["
@@ -1852,6 +1859,7 @@ test_generate_html_report()
 test_html_reports_escape_user_controlled_fields()
 test_phase4_flags()
 test_lens_version_consistent()
+test_minimum_runtime_consistent()
 test_flow_step_cap()
 test_flow_normal_loads()
 test_is_destructive()

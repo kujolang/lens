@@ -1,6 +1,7 @@
 # Lens Enterprise Readiness Next Session
 
-This is the next-session worklist from the June 2026 readiness review. Lens is
+This is the next-session worklist from the June 2026 readiness review, updated
+after the September 2026 hardening closure. Lens is
 already a strong beta/stabilizing Kujo showcase, but it should not be marketed
 as universally enterprise-ready until the items below are handled or explicitly
 deferred with rationale.
@@ -13,8 +14,8 @@ deferred with rationale.
 - Root files are still intentional: `lens` is the executable launcher,
   `lens.kujo` is the Kujo entry point, `kujo.toml`/`kennel.toml` are project and
   package manifests, and `lens.spec.yml` is the product contract.
-- Tests pass at 448/448 after the hardening follow-through.
-- Lens 1.0.1 is stable within its documented deterministic, local-first scope.
+- Tests pass at 525/525 after the hardening follow-through.
+- Lens 1.1.0 is stable within its documented deterministic, local-first scope.
   Broader product features and presentation work remain optional roadmap items,
   not correctness blockers.
 
@@ -74,8 +75,8 @@ deferred with rationale.
 
 1. Add `lens doctor` as the first support command users run before opening an
    issue.
-2. Add configurable readiness hints, such as waiting for a selector or text
-   before capture, while keeping defaults deterministic.
+2. **Completed (2026-09-07):** add the deterministic `--ready-selector` /
+   `ready_selector` readiness hint while keeping the default bounded heuristic.
 3. Add a safe `--headers-file` or explicit decision not to support one; if
    added, route it through the same auth/redaction model as `--auth-file`.
 4. Extend Spec selector support beyond known selectors by reusing inspect
@@ -94,8 +95,8 @@ deferred with rationale.
    Percy/Chromatic, and why the agent-ready repair brief matters.
 4. Add a `docs/architecture.md` with the pipeline, invariants, data redaction
    layers, and module ownership.
-5. **Completed (2026-08-30):** added `docs/release-readiness.md` and used it
-   for the v1.0.1 release.
+5. **Completed (2026-08-30):** added `docs/release-readiness.md`; it remains the
+   release checklist for 1.1.x and later.
 
 ## Definition of done for the next session
 

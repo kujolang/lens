@@ -177,9 +177,9 @@ Expected:
 
 ```
 === Lens Test Results ===
-Passed: 521
+Passed: 525
 Failed: 0
-Total:  521
+Total:  525
 
 All tests passed.
 ```
