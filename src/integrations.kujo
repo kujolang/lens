@@ -27,17 +27,22 @@ export func write_ledger_record(path, tool_version, redacted_url, status, exit_c
 	}
 	line := to_json(record)
 
-	# Append: preserve any existing JSONL history.
+	# Bound pre-existing state before materializing it. Preserve the established
+	# newline repair behavior for ledgers created by older or external tools.
 	mut existing := ""
+	mut existing_size := 0
 	if is_trueish(file_exists(path)) {
+		existing_size = file_size(path)
+	}
+	# Four bytes per character is a conservative UTF-8 upper bound and keeps
+	# this compatible with the declared Kujo 1.2.3 minimum.
+	if existing_size + len(line) * 4 + 2 > 8 * 1024 * 1024 { return false }
+	if existing_size > 0 {
 		existing = read_file(path)
 	}
 	mut out := existing
-	if existing != "" && is_falseish(ends_with_newline(existing)) {
-		out = out + "\n"
-	}
-	out = out + line + "\n"
-	write_file(path, out, true)
+	if existing != "" && is_falseish(ends_with_newline(existing)) { out = out + "\n" }
+	write_file(path, out + line + "\n", true)
 	return true
 }
 

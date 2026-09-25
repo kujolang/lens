@@ -169,7 +169,7 @@ async function collectMetrics(page) {
 
 // Resolve a viewport token to { name, width, height }. Accepts the presets
 // "desktop"/"mobile" and custom "<width>x<height>" tokens (e.g. "1024x768").
-// Unknown tokens fall back to desktop dimensions but keep their name.
+// Unknown tokens are rejected: viewport names are also artifact filenames.
 function resolveViewport(token) {
   const preset = VIEWPORT_SIZES[token];
   if (preset) return { name: token, width: preset.width, height: preset.height };
@@ -180,7 +180,7 @@ function resolveViewport(token) {
       return { name: token, width, height };
     }
   }
-  return { name: token, width: VIEWPORT_SIZES.desktop.width, height: VIEWPORT_SIZES.desktop.height };
+  throw new Error(`Invalid viewport token: ${String(token)}`);
 }
 
 // Run an array of async task factories with a bounded concurrency. Results are

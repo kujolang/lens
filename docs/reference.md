@@ -191,6 +191,8 @@ Flags:
   --browser <name>     Browser engine: chromium, firefox, or webkit
   --auth-file <path>   Inject Playwright storage-state into the browser
   --crawl              Run a bounded same-origin crawl
+  --allow-authenticated-crawl
+                       Explicitly permit crawl with --auth-file
   --max-depth <n>      Crawl depth, default 1, max 5
   --max-pages <n>      Crawl page cap, default 20, max 200
   --html               Also write lens-report.html
@@ -278,6 +280,7 @@ are unchanged and fully deterministic.
 | `--browser <name>` | Run on `chromium` (default), `firefox`, or `webkit` | Non-default engines require `npx playwright-core install <engine>`; a missing engine exits 3 with a clear message. |
 | `--auth-file <path>` | Inject a Playwright **storage-state** JSON so Lens can check an authenticated page | **Opt-in.** Lens validates the JSON envelope, then passes the path to Playwright. Contents are never logged or written to an artifact. Missing, malformed, or invalid-shape files exit 2. |
 | `--crawl` | Bounded, same-origin, safety-gated crawl from the start URL | See below. |
+| `--allow-authenticated-crawl` | Permit `--crawl` together with `--auth-file` | **CLI-only high-trust opt-in.** GET routes can mutate a misdesigned application even when their URL is not destructive-looking. |
 | `--max-depth <n>` | Crawl depth from the start URL | Default 1, max 5. |
 | `--max-pages <n>` | Total pages a crawl may visit | Default 20, max 200. |
 
@@ -307,8 +310,11 @@ A crawl is a breadth-first sweep of a local app's **own** pages — not a genera
 web crawler. Every link is re-validated before navigation and must be
 same-origin; unsafe schemes (`mailto:`, `javascript:`, …) and destructive paths
 (`/logout`, `/delete`, …) are skipped. Explicit external link targets are not
-queued. Browser redirects and subresources are not confined by this admission
-check; see the open navigation finding in the [hardening audit](audits/repository-hardening.md).
+queued. Restricted Chromium/Firefox contexts apply the same loopback policy to
+redirects and subresources; opt-in link checks do not follow HTTP redirects.
+An authenticated crawl is refused unless `--allow-authenticated-crawl` is also
+present on the command line; use that opt-in only for an application whose GET
+routes are known to be observational. Project configuration cannot grant it.
 Each page gets a lightweight health assessment (page load, console errors,
 network failures, blank content); results are aggregated into `crawl.json` and
 `LENS-CRAWL` findings, with per-page screenshots under `pages/<n>/`.
@@ -454,8 +460,9 @@ existing files, and final-target symlinks are rejected. `--eval-out`, `--ledger`
 and `--howl` must name files whose parent directory already exists; existing
 directories, final-target symlinks, trailing-slash paths, and duplicate direct
 file destinations are rejected. Paths containing a `..` traversal component
-are rejected. Parent-directory symlinks retain ordinary host
-filesystem behavior (for example, macOS `/tmp`). Invalid destinations exit 2.
+are rejected. Workspace-relative ancestor symlinks are also rejected. Absolute
+path ancestors retain ordinary host filesystem behavior (for example, macOS
+`/tmp`). Invalid destinations exit 2.
 
 ## Checks
 
@@ -686,7 +693,7 @@ within a run and appear in both Markdown and JSON reports.
 
 ```bash
 kujo run tests/lens_tests.kujo
-# 525 assertions covering CLI parsing, URL validation, checks, findings,
+# 532 assertions covering CLI parsing, URL validation, checks, findings,
 # report generation, redaction (free-text, URL, finding, sweep, console,
 # network, DOM), provider partial-failure resilience, error/exit-code
 # paths, page-load classification, accessibility engine handling,
@@ -748,7 +755,7 @@ bridge/
 └── visual-diff.py            — Pixel-level screenshot diff (Pillow + numpy)
 
 tests/
-└── lens_tests.kujo           — 525 unit/integration assertions
+└── lens_tests.kujo           — 532 unit/integration assertions
 
 docs/
 └── reference.md              — This reference manual

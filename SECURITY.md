@@ -38,7 +38,8 @@ surface. Key guarantees:
 - **Write destinations are validated.** Lens refuses root/current-directory
   artifact targets, final-target symlinks, file/directory type mismatches,
   missing parents for direct files, and duplicate Eval/RunLedger/Howl paths.
-  Parent-directory symlinks follow normal host filesystem semantics.
+  Workspace-relative ancestor symlinks are rejected; absolute-path ancestors
+  follow normal host filesystem semantics (for example, macOS `/tmp`).
 - **Bounded evidence and visuals.** Per viewport, Lens retains at most 1,000
   console messages, 2,000 failed network events, and 5,000 links. Custom
   viewports are capped at 4096×4096; recordings above 100 MiB are removed and
@@ -77,7 +78,7 @@ mutable output directory is unsupported.
 - **Recordings can film on-screen content.** With `--record`, a video may show
   whatever the page renders. Password fields render masked, but review
   recordings before sharing them externally.
-- **`--allow-external` and `--auth-file` are powerful.** Only point Lens at
+- **`--allow-external`, `--auth-file`, and `--allow-authenticated-crawl` are powerful.** Only point Lens at
   hosts and credentials you control.
 
 ## Scope

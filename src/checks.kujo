@@ -714,7 +714,12 @@ export func check_screenshots(config, bridge_data) {
 UNSAFE_SCHEMES := array("mailto:", "tel:", "sms:", "javascript:", "data:", "blob:", "file:", "ftp:", "chrome:", "about:")
 
 # Destructive-looking path patterns to skip.
-DESTRUCTIVE_PATTERNS := array("/delete", "/destroy", "/remove", "/logout", "/signout", "/sign-out", "/admin/delete")
+DESTRUCTIVE_PATTERNS := array(
+	"delete", "destroy", "remove", "logout", "signout", "sign-out",
+	"cancel-subscription", "cancel_subscription", "unsubscribe", "payment",
+	"purchase", "checkout", "submit-payment", "confirm", "archive",
+	"disable", "deactivate", "revoke", "reset", "drop", "truncate"
+)
 
 # Check if a link href starts with an unsafe scheme.
 export func has_unsafe_scheme(href) {
@@ -943,8 +948,14 @@ export func check_links(config, bridge_data) {
 	mut checked_count := 0
 	mut link_idx := 0
 	mut checked_urls := array()
+	deadline_ms := current_timestamp() + to_int(to_string(config["timeout"])) * 1000
+	mut deadline_reached := false
 	
 	while link_idx < len(raw_links) && checked_count < max_links {
+		if current_timestamp() >= deadline_ms {
+			deadline_reached = true
+			break
+		}
 		raw := raw_links[link_idx]
 		href := ""
 		text := ""
@@ -1111,17 +1122,19 @@ export func check_links(config, bridge_data) {
 		mut status := -1
 		mut error_msg := ""
 		
-		# Use http_get (Kujo builtin)
-		response := http_get(request_url)
-		
-		# Check if response is an error
-		if is_trueish(has_key(response, "status")) {
-			status = to_int(to_string(response["status"]))
-			if status >= 200 && status < 400 {
-				request_ok = true
+		# Disable automatic redirects so every network destination remains within
+		# the already-admitted same-origin boundary. A short per-link deadline and
+		# the aggregate deadline above keep hostile link sets bounded.
+		response := http_request(request_url, {
+			"method": "GET", "timeout": 2, "max_response_bytes": 1024 * 1024,
+			"redirects": "none", "pin_dns": true
+		})
+		match response {
+			case Ok(value): {
+				status = to_int(to_string(value["status"]))
+				if status >= 200 && status < 400 { request_ok = true }
 			}
-		} else {
-			error_msg = "Request failed"
+			case Err(message): { error_msg = "Request failed" }
 		}
 		
 		link_result["status"] = status
@@ -1158,6 +1171,13 @@ export func check_links(config, bridge_data) {
 		}
 		
 		link_idx = link_idx + 1
+	}
+	if is_trueish(deadline_reached) {
+		cr = add_finding(cr, new_finding(
+			"warning", "LINKS", "Link-check deadline reached",
+			"Lens stopped checking links when the configured run timeout was exhausted.",
+			"links.json", "Reduce --max-links or investigate slow same-origin endpoints."
+		))
 	}
 	
 	return cr

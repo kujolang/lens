@@ -26,6 +26,8 @@ class Handler(bench.Handler):
             self.send_header('Location', f'http://localhost.:{self.server.server_port}/policy-sink')
             self.end_headers()
             return
+        if self.path == '/link-policy':
+            return self.send(200, 'text/html', bench.fixture.html('<a href="/policy-redirect">Redirect</a>'))
         if self.path == '/oversized':
             return self.send(200, 'text/html', bench.fixture.html('<h1>Bounded evidence</h1><button>Button</button>',
                 "<script>document.title='🔑'.repeat(5000);console.error('🔑'.repeat(5000));</script>"))
@@ -75,6 +77,17 @@ def main():
             assert Handler.policy_hits == 0
             run('check', url+'/policy-redirect', '--allow-external', '--quick', '--out', str(work/'policy-opt-in'))
             assert Handler.policy_hits > 0
+            passed+=1
+            Handler.policy_hits=0
+            run('check', url+'/link-policy', '--quick', '--check-links', '--out', str(work/'link-policy'))
+            assert Handler.policy_hits == 0
+            links=json.loads((work/'link-policy/links.json').read_text())
+            assert any(item['status']==302 and item['ok'] for item in links)
+            passed+=1
+            auth_state=work/'auth-state.json'
+            auth_state.write_text(json.dumps({'cookies':[], 'origins':[]}))
+            run('check', url+'/tree', '--crawl', '--auth-file', str(auth_state), '--out', str(work/'auth-crawl-blocked'), allowed=(2,))
+            run('check', url+'/tree', '--quick', '--crawl', '--max-pages', '1', '--auth-file', str(auth_state), '--allow-authenticated-crawl', '--out', str(work/'auth-crawl-opt-in'))
             passed+=1
             run('check', url+'/oversized', '--quick', '--fail-on', 'warning', '--out', str(work/'oversized'), allowed=(1,))
             bounded=json.loads((work/'oversized/lens-report.json').read_text())

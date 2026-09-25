@@ -6,7 +6,7 @@
 from src.common import format_timestamp_dir, is_trueish, is_falseish, str_starts_with, str_join, print_lines
 from src.config import severity_meets_threshold, build_config, print_help, print_version, merge_file_config, lens_version
 from src.config_file import resolve_config_path, load_config_file
-from src.validate import validate_url, validate_auth_storage_state, validate_config_write_paths
+from src.validate import validate_url, validate_auth_storage_state, validate_config_write_paths, validate_artifact_tree
 from src.checks import run_all_checks, worst_severity, get_link_results
 from src.report import generate_markdown_report, generate_json_report, generate_metadata_json
 from src.provider import run_provider, provider_failed, extract_console_messages, extract_network_events, extract_dom_summaries, extract_all_links, extract_metrics
@@ -79,6 +79,10 @@ export func run(argv) {
 			"Usage: lens inspect <url> [flags]",
 			"Run 'lens --help' for more information."
 		))
+		return EXIT_INVALID_INPUT
+	}
+	if subcommand == "check" && is_trueish(config["crawl"]) && to_string(config["auth_file"]) != "" && is_falseish(config["allow_authenticated_crawl"]) {
+		print_lens_failed("Authenticated crawl requires explicit --allow-authenticated-crawl opt-in because GET routes can change application state.")
 		return EXIT_INVALID_INPUT
 	}
 
@@ -184,6 +188,11 @@ export func run(argv) {
 		out_dir = ".lens/runs/" + timestamp_dir
 	}
 	config["out_dir"] = out_dir
+	effective_out := validate_artifact_tree(out_dir, "--out")
+	if is_falseish(effective_out["valid"]) {
+		print_lens_error(to_string(effective_out["error"]))
+		return EXIT_INVALID_INPUT
+	}
 	
 	# Create output directory if it doesn't exist.
 	if is_falseish(path_exists(out_dir)) {
@@ -823,6 +832,11 @@ export func run_flow(config) {
 		out_dir = ".lens/runs/" + timestamp_dir
 	}
 	config["out_dir"] = out_dir
+	effective_out := validate_artifact_tree(out_dir, "--out")
+	if is_falseish(effective_out["valid"]) {
+		print_lens_error(to_string(effective_out["error"]))
+		return EXIT_INVALID_INPUT
+	}
 	
 	if is_falseish(path_exists(out_dir)) {
 		create_dir(out_dir)
@@ -1181,6 +1195,11 @@ export func run_flow_exec(config) {
 		out_dir = ".lens/runs/" + format_timestamp_dir(0)
 	}
 	config["out_dir"] = out_dir
+	effective_out := validate_artifact_tree(out_dir, "--out")
+	if is_falseish(effective_out["valid"]) {
+		print_lens_error(to_string(effective_out["error"]))
+		return EXIT_INVALID_INPUT
+	}
 	if is_falseish(path_exists(out_dir)) {
 		create_dir(out_dir)
 	}
@@ -1442,6 +1461,11 @@ export func run_inspect(config) {
 	mut out_dir := to_string(config["out_dir"])
 	if out_dir == "" {
 		out_dir = ".lens/runs/" + format_timestamp_dir(0)
+	}
+	effective_out := validate_artifact_tree(out_dir, "--out")
+	if is_falseish(effective_out["valid"]) {
+		print_lens_error(to_string(effective_out["error"]))
+		return EXIT_INVALID_INPUT
 	}
 	if is_falseish(path_exists(out_dir)) {
 		create_dir(out_dir)

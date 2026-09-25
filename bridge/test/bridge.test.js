@@ -49,13 +49,12 @@ test('browser-bridge resolveViewport: presets', () => {
 
 test('browser-bridge resolveViewport: custom WxH', () => {
   assert.deepStrictEqual(browser.resolveViewport('1024x768'), { name: '1024x768', width: 1024, height: 768 });
-  assert.deepStrictEqual(browser.resolveViewport('99999x99999'), { name: '99999x99999', width: 1440, height: 900 });
+  assert.throws(() => browser.resolveViewport('99999x99999'), /Invalid viewport token/);
 });
 
-test('browser-bridge resolveViewport: unknown falls back to desktop size, keeps name', () => {
-  const r = browser.resolveViewport('garbage');
-  assert.strictEqual(r.width, 1440);
-  assert.strictEqual(r.name, 'garbage');
+test('browser-bridge resolveViewport: unknown token is rejected', () => {
+  assert.throws(() => browser.resolveViewport('../../outside'), /Invalid viewport token/);
+  assert.throws(() => browser.resolveViewport('garbage'), /Invalid viewport token/);
 });
 
 test('browser-bridge parseArgs: defaults and flags', () => {

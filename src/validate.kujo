@@ -156,6 +156,9 @@ export func validate_auth_storage_state(auth_path) {
 	if is_falseish(file_exists(auth_path)) {
 		return { "valid": false, "error": "Auth storage-state file was not found." }
 	}
+	if is_falseish(path_is_file(auth_path)) || is_trueish(path_is_symlink_safe(auth_path)) || file_size(auth_path) > 8 * 1024 * 1024 {
+		return { "valid": false, "error": "Auth storage-state must be a regular file no larger than 8 MiB." }
+	}
 
 	raw := read_file(auth_path)
 	if str_trim(raw) == "" {
@@ -186,9 +189,9 @@ export func validate_auth_storage_state(auth_path) {
 # overwrites artifacts. Directory destinations may be created, but cannot be a
 # filesystem root, the current/parent directory, an existing file, or a symlink.
 # Direct file destinations must have an existing real directory parent and may
-# not be an existing directory or symlink. Parent-directory symlinks retain the
-# host filesystem's normal semantics (notably /tmp on macOS); the final target
-# itself is never followed when it is a symlink.
+# not be an existing directory or symlink. Relative paths may not traverse
+# workspace symlinks; absolute-path ancestors retain host filesystem semantics
+# (notably /tmp on macOS). Final target symlinks are never followed.
 export func validate_config_write_paths(config) {
 	dir_specs := array(
 		array("out_dir", "--out"),
@@ -199,7 +202,7 @@ export func validate_config_write_paths(config) {
 		key := to_string(dir_specs[di][0])
 		label := to_string(dir_specs[di][1])
 		if is_trueish(has_key(config, key)) {
-			result := validate_directory_write_path(to_string(config[key]), label)
+			result := validate_artifact_tree(to_string(config[key]), label)
 			if is_falseish(result["valid"]) { return result }
 		}
 		di = di + 1
@@ -244,9 +247,52 @@ export func validate_config_write_paths(config) {
 	return { "valid": true, "error": "" }
 }
 
+# Validate an existing artifact tree without following descendant symbolic
+# links. Reusing ordinary output directories remains supported, but artifacts
+# must not escape a selected root through a pre-existing internal link.
+export func validate_artifact_tree(raw_path, label) {
+	root := validate_directory_write_path(raw_path, label)
+	if is_falseish(root["valid"]) { return root }
+	path := str_trim(to_string(raw_path))
+	if path == "" || is_falseish(path_exists(path)) { return root }
+	return validate_artifact_tree_at(path, to_string(label), 0, 0)
+}
+
+func validate_artifact_tree_at(path, label, depth, visited) {
+	if depth > 8 || visited > 10000 {
+		return { "valid": false, "error": label + " contains an artifact tree that is too deep or large to validate safely." }
+	}
+	mut count := visited
+	mut names := array()
+	try { names = list_dir(path) } except e {
+		return { "valid": false, "error": label + " artifact tree could not be inspected safely." }
+	}
+	mut idx := 0
+	while idx < len(names) {
+		child := path + "/" + to_string(names[idx])
+		count = count + 1
+		if count > 10000 {
+			return { "valid": false, "error": label + " contains an artifact tree that is too deep or large to validate safely." }
+		}
+		if is_trueish(path_is_symlink_safe(child)) {
+			return { "valid": false, "error": label + " artifact tree must not contain symbolic links." }
+		}
+		if is_trueish(path_is_dir(child)) {
+			nested := validate_artifact_tree_at(child, label, depth + 1, count)
+			if is_falseish(nested["valid"]) { return nested }
+			count = to_int(to_string(nested["visited"]))
+		}
+		idx = idx + 1
+	}
+	return { "valid": true, "error": "", "visited": count }
+}
+
 export func validate_directory_write_path(raw_path, label) {
 	path := str_trim(to_string(raw_path))
 	if path == "" { return { "valid": true, "error": "" } }
+	if is_trueish(relative_path_has_symlink(path)) {
+		return { "valid": false, "error": to_string(label) + " must not traverse a symbolic link inside the working directory." }
+	}
 	normalized := normalize_write_path_text(path)
 	if normalized == "/" || normalized == "." || normalized == ".." || is_trueish(has_parent_segment(normalized)) {
 		return { "valid": false, "error": to_string(label) + " must name a dedicated output directory, not a filesystem root or working directory." }
@@ -265,6 +311,9 @@ export func validate_directory_write_path(raw_path, label) {
 export func validate_file_write_path(raw_path, label) {
 	path := str_trim(to_string(raw_path))
 	if path == "" { return { "valid": true, "error": "" } }
+	if is_trueish(relative_path_has_symlink(path)) {
+		return { "valid": false, "error": to_string(label) + " must not traverse a symbolic link inside the working directory." }
+	}
 	normalized := normalize_write_path_text(path)
 	if normalized == "/" || normalized == "." || normalized == ".." || is_trueish(has_parent_segment(normalized)) || is_trueish(ends_with_slash(path)) {
 		return { "valid": false, "error": to_string(label) + " must name a file, not a directory." }
@@ -295,6 +344,26 @@ func normalize_write_path_text(raw_path) {
 	if path == "./" { return "." }
 	if path == "../" { return ".." }
 	return path
+}
+
+# Absolute-path ancestors keep the documented host semantics (for example
+# macOS /tmp). Relative destinations are workspace-controlled, so reject every
+# existing symlink component, including an implicit `.lens` root.
+func relative_path_has_symlink(path) {
+	normalized := replace(to_string(path), "\\", "/")
+	if str_starts_with(normalized, "/") { return false }
+	parts := split(normalized, "/")
+	mut current := ""
+	mut idx := 0
+	while idx < len(parts) {
+		part := to_string(parts[idx])
+		if part != "" && part != "." {
+			if current == "" { current = part } else { current = current + "/" + part }
+			if is_trueish(path_is_symlink_safe(current)) { return true }
+		}
+		idx = idx + 1
+	}
+	return false
 }
 
 func ends_with_slash(path) {

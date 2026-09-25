@@ -16,6 +16,7 @@ SUPPORTED_SPEC_KEYS := array(
 	"layout",
 	"links"
 )
+MAX_SPEC_FILE_BYTES := 8 * 1024 * 1024
 
 # Load and parse a Spec file (JSON format).
 # Returns a dict with "valid", "assertions", "warnings", "error".
@@ -42,6 +43,9 @@ export func load_spec_file(spec_path) {
 		}
 	}
 	
+	if is_falseish(path_is_file(spec_path)) || is_trueish(path_is_symlink(spec_path)) || file_size(spec_path) > MAX_SPEC_FILE_BYTES {
+		return { "valid": false, "error": "Spec file must be a regular file no larger than 8 MiB: " + spec_path, "assertions": {}, "warnings": array(), "supported_count": 0, "unsupported_count": 0 }
+	}
 	raw := read_file(spec_path)
 	if raw == "" {
 		return {

@@ -10,6 +10,7 @@ from src.common import is_trueish, is_falseish, str_starts_with
 
 # Default config file name, looked up in the current working directory.
 DEFAULT_CONFIG_FILENAME := ".lens.toml"
+MAX_CONFIG_BYTES := 1024 * 1024
 
 # Resolve the config file path from CLI args.
 # Returns a dict: { "path": <string>, "explicit": <bool> }.
@@ -53,6 +54,9 @@ export func load_config_file(path, explicit) {
 		}
 		# Implicit .lens.toml absence is not an error.
 		return { "valid": true, "present": false, "data": {} }
+	}
+	if is_falseish(path_is_file(path)) || is_trueish(path_is_symlink(path)) || file_size(path) > MAX_CONFIG_BYTES {
+		return { "valid": false, "present": true, "data": {}, "error": "config file must be a regular file no larger than 1 MiB: " + path }
 	}
 
 	raw := read_file(path)

@@ -40,7 +40,7 @@ from src.accessibility import map_a11y_severity, is_a11y_enabled
 LENS_VERSION := "1.1.0"
 from src.common import is_trueish, is_falseish
 from src.validate import extract_host, is_localhost_host, is_localhost_url
-from src.validate import validate_url, has_valid_scheme, validate_auth_storage_state, validate_config_write_paths, validate_directory_write_path, validate_file_write_path
+from src.validate import validate_url, has_valid_scheme, validate_auth_storage_state, validate_config_write_paths, validate_directory_write_path, validate_file_write_path, validate_artifact_tree
 from src.redact import is_sensitive_header, is_sensitive_query_param
 from src.redact import redact_url, redact_console_entry, redact_header_value
 from src.redact import redact_text, redact_finding, redact_check_results
@@ -829,6 +829,10 @@ func test_is_perf() {
 func test_is_crawl() {
 	check_eq(is_crawl(array("check", "http://localhost:3000")), false, "crawl: default off")
 	check_eq(is_crawl(array("check", "--crawl", "http://localhost:3000")), true, "crawl: enabled")
+	plain := build_config(array("check", "--crawl", "--auth-file", "/tmp/state.json", "http://localhost:3000"))
+	check_eq(plain["allow_authenticated_crawl"], false, "authenticated crawl: separate opt-in defaults off")
+	opted_in := build_config(array("check", "--crawl", "--auth-file", "/tmp/state.json", "--allow-authenticated-crawl", "http://localhost:3000"))
+	check_eq(opted_in["allow_authenticated_crawl"], true, "authenticated crawl: explicit CLI opt-in enabled")
 }
 
 func test_parse_max_depth() {
@@ -973,6 +977,21 @@ func test_flow_normal_loads() {
 	check_eq(res["valid"], true, "flow cap: normal flow still loads")
 }
 
+func test_flow_rejects_unsafe_viewport_names() {
+	path := "/tmp/lens-unsafe-viewport-flow.json"
+	write_file(path, "{\"name\":\"unsafe\",\"url\":\"http://localhost:3000/\",\"viewports\":[\"../../outside\"],\"steps\":[]}", true)
+	res := load_flow_file(path)
+	check_eq(res["valid"], false, "flow viewports: path traversal token rejected")
+}
+
+func test_flow_rejects_oversized_file_before_read() {
+	path := "/tmp/lens-oversized-flow.json"
+	spawn_process(array("truncate", "-s", "8388609", path))
+	res := load_flow_file(path)
+	check_eq(res["valid"], false, "flow size: file above runtime read ceiling rejected")
+	delete_file(path)
+}
+
 # ============================================================
 # Flow safety model + validation field checks
 # ============================================================
@@ -1101,6 +1120,11 @@ func test_write_ledger_record_appends() {
 	check(is_trueish(contains(content, "FAIL")), "ledger: first record present")
 	check(is_trueish(contains(content, "PASS")), "ledger: second record appended")
 	check(is_trueish(contains(content, "schema_version")), "ledger: schema field present")
+	oversized := "/tmp/lens-test-ledger-limit.jsonl"
+	spawn_process(array("truncate", "-s", "8388608", oversized))
+	accepted := write_ledger_record(oversized, "1.1.0", "http://localhost", "PASS", 0, "t0", "t1", 1, counts)
+	check_eq(accepted, false, "ledger: final record cannot exceed runtime write ceiling")
+	delete_file(oversized)
 }
 
 func test_write_howl_summary() {
@@ -1590,6 +1614,18 @@ func test_validate_write_paths() {
 	check(validate_file_write_path(broken_link, "--eval-out")["valid"] == false, "write paths: broken file symlink is rejected")
 	delete_file(broken_link)
 
+	artifact_root := "/tmp/lens-artifact-tree-test"
+	if is_falseish(path_exists(artifact_root)) { create_dir(artifact_root) }
+	artifact_link := artifact_root + "/screenshots"
+	spawn_process(array("ln", "-sfn", "/tmp/lens-artifact-tree-outside", artifact_link))
+	check(validate_artifact_tree(artifact_root, "--out")["valid"] == false, "write paths: nested artifact symlink is rejected")
+	delete_file(artifact_link)
+	os_rmdir(artifact_root)
+	workspace_link := ".lens-test-linked-root"
+	spawn_process(array("ln", "-sfn", "/tmp", workspace_link))
+	check(validate_artifact_tree(workspace_link + "/runs/new", "--out")["valid"] == false, "write paths: relative parent symlink is rejected")
+	delete_file(workspace_link)
+
 	valid := validate_config_write_paths({
 		"out_dir": "/tmp/lens-run-safe",
 		"baseline_dir": "/tmp/lens-baseline-safe",
@@ -1862,6 +1898,8 @@ test_lens_version_consistent()
 test_minimum_runtime_consistent()
 test_flow_step_cap()
 test_flow_normal_loads()
+test_flow_rejects_unsafe_viewport_names()
+test_flow_rejects_oversized_file_before_read()
 test_is_destructive()
 test_check_click_safety_requires_safe()
 test_check_click_safety_allows_safe()

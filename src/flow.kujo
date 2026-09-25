@@ -5,6 +5,7 @@
 
 from src.common import is_trueish, is_falseish, str_starts_with, str_contains, str_lower
 from src.redact import redact_text, redact_value
+from src.config import parse_viewport
 
 # Return a copy of a flow safe to persist to flow.json: typed-input values are
 # replaced with [REDACTED] so credentials/secrets entered via `type` steps
@@ -52,6 +53,7 @@ STEP_TYPES := array(
 
 # Maximum number of steps a flow file may declare (robustness bound).
 MAX_FLOW_STEPS := 200
+MAX_FLOW_FILE_BYTES := 8 * 1024 * 1024
 
 # Destructive keywords for safety blocking.
 DESTRUCTIVE_KEYWORDS := array(
@@ -81,6 +83,9 @@ export func load_flow_file(flow_path) {
 		}
 	}
 	
+	if is_falseish(path_is_file(flow_path)) || is_trueish(path_is_symlink(flow_path)) || file_size(flow_path) > MAX_FLOW_FILE_BYTES {
+		return { "valid": false, "error": "Flow file must be a regular file no larger than 8 MiB: " + flow_path, "flow": {} }
+	}
 	raw := read_file(flow_path)
 	if raw == "" {
 		return {
@@ -136,7 +141,20 @@ func validate_flow(flow_data, flow_path) {
 	# Viewports
 	flow["viewports"] = array("desktop", "mobile")
 	if is_trueish(has_key(flow_data, "viewports")) {
-		flow["viewports"] = flow_data["viewports"]
+		if type(flow_data["viewports"]) != "array" || len(flow_data["viewports"]) == 0 || len(flow_data["viewports"]) > 16 {
+			return { "valid": false, "error": "Flow viewports must be a non-empty array with at most 16 entries: " + flow_path, "flow": {} }
+		}
+		mut safe_viewports := array()
+		mut vpi := 0
+		while vpi < len(flow_data["viewports"]) {
+			viewport := parse_viewport(flow_data["viewports"][vpi])
+			if viewport == "" {
+				return { "valid": false, "error": "Flow contains an invalid viewport token: " + flow_path, "flow": {} }
+			}
+			safe_viewports = append(safe_viewports, viewport)
+			vpi = vpi + 1
+		}
+		flow["viewports"] = safe_viewports
 	}
 	
 	# Timeout

@@ -580,6 +580,7 @@ export func build_config(argv) {
 		"throttle": parse_throttle(argv),
 		"device": parse_device(argv),
 		"crawl": is_crawl(argv),
+		"allow_authenticated_crawl": is_allow_authenticated_crawl(argv),
 		"max_depth": parse_max_depth(argv),
 		"max_pages": parse_max_pages(argv),
 		"auth_file": parse_auth_file(argv),
@@ -628,6 +629,12 @@ export func parse_device(argv) {
 # Parse the --crawl flag (Phase 2.5). Bounded same-origin crawl, opt-in.
 export func is_crawl(argv) {
 	return has_flag(argv, "--crawl")
+}
+
+# Authenticated crawling is a separate high-trust capability because a GET
+# route can mutate state even when its URL has no destructive keyword.
+export func is_allow_authenticated_crawl(argv) {
+	return has_flag(argv, "--allow-authenticated-crawl")
 }
 
 # Parse --max-depth (Phase 2.5). Crawl depth from the start URL (default 1).
@@ -840,6 +847,7 @@ export func print_help() {
 		"  --device <name>     Emulate a Playwright device descriptor",
 		"  --ready-selector <s> Wait for visible app-ready selector (optional)",
 		"  --crawl             Bounded same-origin crawl (opt-in)",
+		"  --allow-authenticated-crawl  Explicitly permit crawl with --auth-file",
 		"  --max-depth <n>     Crawl depth from start URL (default: 1, max: 5)",
 		"  --max-pages <n>     Max pages to crawl (default: 20, max: 200)",
 		"  --auth-file <path>  Inject Playwright storage-state (opt-in; never logged)",

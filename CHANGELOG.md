@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Reject symbolic links anywhere inside reused output and baseline artifact trees,
+  including effective default output paths.
+- Validate flow viewport tokens at the Kujo and browser boundaries so viewport
+  names cannot escape screenshot or baseline directories.
+- Make opt-in link checks non-following, DNS-pinned, and bounded by per-request
+  and aggregate deadlines; broaden destructive-route filtering.
+- Require a CLI-only high-trust opt-in before combining crawl with auth state.
+- Bound and regular-file-check config, flow, Spec, auth, and RunLedger inputs
+  before whole-file reads.
 - Align the project manifest's minimum Kujo runtime with the documented and
   packaged 1.2.3 requirement, add a regression ratchet, and refresh active
   documentation/test-count contracts.

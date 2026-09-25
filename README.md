@@ -99,6 +99,7 @@ cd /path/to/lens
 | `lens check <url> --accessibility` | Add automated axe-core accessibility scanning |
 | `lens check <url> --perf` | Capture opt-in performance evidence |
 | `lens check <url> --crawl --max-depth 1` | Run a bounded same-origin crawl |
+| `lens check <url> --crawl --auth-file state.json --allow-authenticated-crawl` | Explicitly opt into a high-trust authenticated crawl |
 | `lens check <url> --html` | Write a self-contained HTML report |
 | `lens check <url> --browser firefox` | Run with another Playwright browser engine |
 | `lens check <url> --spec spec.json` | Verify deterministic browser assertions |
