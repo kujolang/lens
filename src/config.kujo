@@ -8,7 +8,7 @@ from src.common import is_trueish, is_falseish, str_starts_with, str_contains, p
 # Single source of truth for the Lens version string. Keep the release surfaces
 # listed in docs/release-readiness.md in sync with this when releasing.
 export func lens_version() {
-	return "1.1.0"
+	return "1.1.1"
 }
 
 # Severity levels ordered from least to most severe.

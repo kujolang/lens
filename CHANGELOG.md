@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-21
+
+- Require patched Node.js versions for browser bridge and release tooling.
+
 - Reject symbolic links anywhere inside reused output and baseline artifact trees,
   including effective default output paths.
 - Validate flow viewport tokens at the Kujo and browser boundaries so viewport

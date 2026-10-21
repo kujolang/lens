@@ -15,10 +15,10 @@ You need three things before installing Lens:
 | Tool | Why | Check |
 |------|-----|-------|
 | [Kujo](https://github.com/kujolang/kujo) runtime | Lens requires Kujo >=1.2.3 (private process stdin) | `kujo --version` |
-| Node.js ≥ 18 | Drives the headless browser | `node --version` |
+| Node.js 22.23.4+, 24.22.1+, or 26.12.1+ | Drives the headless browser | `node --version` |
 | bash | The `lens` launcher is a bash script | `bash --version` |
 
-If `node --version` prints something below 18, upgrade from
+If `node --version` does not meet the supported patched versions above, upgrade from
 [nodejs.org](https://nodejs.org) before continuing.
 
 ## 2. Verify the Kujo runtime
@@ -60,7 +60,7 @@ export PATH="/path/to/lens:$PATH"
 
 ```bash
 ./lens --version
-# Lens v1.1.0
+# Lens v1.1.1
 
 ./lens --help
 # Usage, flags, and examples

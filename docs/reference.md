@@ -74,7 +74,7 @@ Lens integrates with the ecosystem through:
 
 - **Kujo** runtime — built from `/2026/kujo` (`cargo build` produces
   `kujo`)
-- **Node.js** >= 18 — required for the Playwright browser bridge
+- **Node.js** 22.23.4+, 24.22.1+, or 26.12.1+ — required for the Playwright browser bridge
 - **bash** — for the `lens` shell wrapper
 
 ### Build
@@ -898,7 +898,7 @@ Use `--out` with a writable directory. Check disk space with `df -h`.
 ## Dependencies
 
 - **Kujo** runtime — built from `/2026/kujo`
-- **Node.js** >= 18 — for Playwright browser bridge
+- **Node.js** 22.23.4+, 24.22.1+, or 26.12.1+ — for Playwright browser bridge
 - **Playwright Core** + **Chromium headless shell** — in `bridge/node_modules`
 - **bash** — for the `lens` shell wrapper
 

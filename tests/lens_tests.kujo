@@ -37,7 +37,7 @@ from src.runner import step_required_field_error
 from src.config import lens_version
 from src.accessibility import map_a11y_severity, is_a11y_enabled
 
-LENS_VERSION := "1.1.0"
+LENS_VERSION := "1.1.1"
 from src.common import is_trueish, is_falseish
 from src.validate import extract_host, is_localhost_host, is_localhost_url
 from src.validate import validate_url, has_valid_scheme, validate_auth_storage_state, validate_config_write_paths, validate_directory_write_path, validate_file_write_path, validate_artifact_tree
@@ -505,7 +505,7 @@ func test_parse_out_dir_custom() {
 
 func test_version_defined() {
 	check(LENS_VERSION != "", "LENS_VERSION is defined")
-	check_eq(LENS_VERSION, "1.1.0", "LENS_VERSION is 1.1.0")
+	check_eq(LENS_VERSION, "1.1.1", "LENS_VERSION is 1.1.1")
 }
 
 # ============================================================
@@ -942,8 +942,8 @@ func test_phase4_flags() {
 }
 
 func test_lens_version_consistent() {
-	check_eq(lens_version(), "1.1.0", "lens_version: single source is 1.1.0")
-	check_eq(LENS_VERSION, "1.1.0", "test-local LENS_VERSION matches")
+	check_eq(lens_version(), "1.1.1", "lens_version: single source is 1.1.1")
+	check_eq(LENS_VERSION, "1.1.1", "test-local LENS_VERSION matches")
 }
 
 func test_minimum_runtime_consistent() {
@@ -1122,7 +1122,7 @@ func test_write_ledger_record_appends() {
 	check(is_trueish(contains(content, "schema_version")), "ledger: schema field present")
 	oversized := "/tmp/lens-test-ledger-limit.jsonl"
 	spawn_process(array("truncate", "-s", "8388608", oversized))
-	accepted := write_ledger_record(oversized, "1.1.0", "http://localhost", "PASS", 0, "t0", "t1", 1, counts)
+	accepted := write_ledger_record(oversized, "1.1.1", "http://localhost", "PASS", 0, "t0", "t1", 1, counts)
 	check_eq(accepted, false, "ledger: final record cannot exceed runtime write ceiling")
 	delete_file(oversized)
 }

@@ -1,6 +1,6 @@
 # Lens
 
-[![Version](https://img.shields.io/badge/version-1.1.0-black)](https://github.com/kujolang/lens)
+[![Version](https://img.shields.io/badge/version-1.1.1-black)](https://github.com/kujolang/lens)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 [![built with Kujo](https://img.shields.io/badge/built%20with-Kujo-white.svg)](https://github.com/kujolang/kujo)
 [![CI](https://github.com/kujolang/lens/actions/workflows/ci.yml/badge.svg)](https://github.com/kujolang/lens/actions/workflows/ci.yml)
@@ -40,7 +40,7 @@ the recording uses native Playwright pointer and action highlights:
 Unrecorded flows run without recording animation or pacing. Typed values never
 appear in action annotations.
 
-Lens **v1.1.0** is released. See the [release notes](https://github.com/kujolang/lens/releases/tag/v1.1.0)
+Lens **v1.1.1** is released. See the [release notes](https://github.com/kujolang/lens/releases/tag/v1.1.1)
 for runtime improvements, compatibility requirements, and measured tradeoffs.
 
 ## Contents
@@ -69,7 +69,7 @@ for the exact boundary and trusted-app opt-in.
 
 ## Production posture
 
-Lens 1.1.0 is **stable within its deterministic local-first scope**: the core
+Lens 1.1.1 is **stable within its deterministic local-first scope**: the core
 contracts are intentionally small, documented, and tested. The repo is structured as a Kujo showcase: source
 lives under `src/`, browser-only work is isolated in `bridge/`, examples are
 copyable, and the test suite covers CLI parsing, safety rules, redaction,
