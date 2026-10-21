@@ -5,7 +5,7 @@
   "description": "Minimal Playwright browser automation bridge for Lens (Kujo ecosystem). Captures screenshots, console logs, network events, and DOM summaries.",
   "main": "browser-bridge.js",
   "engines": {
-    "node": ">=18"
+    "node": ">=22.23.4 <23 || >=24.22.1 <25 || >=26.12.1"
   },
   "scripts": {
     "test": "node --test",
