@@ -1624,7 +1624,11 @@ func test_validate_write_paths() {
 	workspace_link := ".lens-test-linked-root"
 	spawn_process(array("ln", "-sfn", "/tmp", workspace_link))
 	check(validate_artifact_tree(workspace_link + "/runs/new", "--out")["valid"] == false, "write paths: relative parent symlink is rejected")
-	delete_file(workspace_link)
+	# Kujo 1.2.3 follows directory symlinks in delete_file's type check.
+	# Unlink this fixture without following its target on every supported runtime.
+	spawn_process(array("node", "-e", "require('node:fs').unlinkSync(process.argv[1])", workspace_link))
+	check(is_falseish(path_exists(workspace_link)), "write paths: fixture symlink is removed")
+	check(path_exists("/tmp"), "write paths: fixture cleanup preserves the symlink target")
 
 	valid := validate_config_write_paths({
 		"out_dir": "/tmp/lens-run-safe",
