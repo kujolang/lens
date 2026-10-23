@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 [![built with Kujo](https://img.shields.io/badge/built%20with-Kujo-white.svg)](https://github.com/kujolang/kujo)
 [![CI](https://github.com/kujolang/lens/actions/workflows/ci.yml/badge.svg)](https://github.com/kujolang/lens/actions/workflows/ci.yml)
-[![node](https://img.shields.io/badge/node-%E2%89%A518-339933.svg?logo=node.js&logoColor=white)](#quick-start)
+[![node](https://img.shields.io/badge/node-%E2%89%A518-black.svg?logo=node.js&logoColor=white)](#quick-start)
 
 **Give your AI agents eyes.** Lens opens what you just built in a real browser,
 captures what actually renders, and hands back a deterministic, agent-ready
