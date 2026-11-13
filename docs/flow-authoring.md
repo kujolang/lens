@@ -286,3 +286,7 @@ asynchronous outcomes. An explicit `wait` step still waits as requested.
 Recordings retain a short final-screen hold; the WebM and optional MP4 filenames
 are unchanged. Typed values and selectors are not used as recording labels.
 Flow programs are passed through private stdin instead of a persisted program file.
+
+Page Spec selector assertions support only `main` and `body`; unsupported CSS
+selectors are rejected instead of silently skipped. Use `lens flow --execute`
+with `assert_selector` or `assert_not_selector` for full CSS matching.

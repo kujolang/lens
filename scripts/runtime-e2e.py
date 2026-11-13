@@ -68,6 +68,17 @@ def main():
                 assert p.returncode in allowed, (args[0],p.returncode,p.stdout,p.stderr)
                 assert 'PRIVATE_SECRET_123' not in p.stdout+p.stderr
                 return p
+            selector_spec=work/'selectors.json'
+            for operation in ['exists', 'not_exists']:
+                selector_spec.write_text(json.dumps({'selectors':{operation:['input[type=search]']}}))
+                run('check', url+'/state', '--spec', str(selector_spec), '--quick', '--fail-on', 'critical', '--out', str(work/('unsupported-'+operation)), allowed=(2,))
+            selector_spec.write_text(json.dumps({'selectors':{'exists':['body']}}))
+            run('check', url+'/state', '--spec', str(selector_spec), '--quick', '--out', str(work/'selector-pass'))
+            selector_spec.write_text(json.dumps({'selectors':{'not_exists':['body']}}))
+            run('check', url+'/state', '--spec', str(selector_spec), '--quick', '--out', str(work/'selector-fail'), allowed=(1,))
+            selector_report=json.loads((work/'selector-fail'/'lens-report.json').read_text())
+            assert selector_report['status']=='FAIL' and selector_report['exit_code']==1
+            passed+=1
             for command in ['check', 'inspect']:
                 run(command, url+'/policy-redirect', '--out', str(work/('policy-'+command)), allowed=(1,3))
                 assert Handler.policy_hits == 0

@@ -3,8 +3,7 @@
   "url": { "path_contains": "/dashboard" },
   "text": { "contains": ["Welcome", "Recent Activity"] },
   "selectors": {
-    "exists": ["main"],
-    "not_exists": [".error-boundary"]
+    "exists": ["main", "body"]
   },
   "console": { "no_errors": true },
   "network": { "no_5xx": true },

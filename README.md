@@ -261,3 +261,7 @@ scripts/bench.sh 3 /tmp/lens-bench.json
 ## License
 
 MIT © Robert DeVore — see [LICENSE](LICENSE).
+
+Page Spec selector assertions support only `main` and `body`; unsupported CSS
+selectors are rejected instead of silently skipped. Use `lens flow --execute`
+with `assert_selector` or `assert_not_selector` for full CSS matching.

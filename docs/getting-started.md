@@ -245,3 +245,7 @@ If an application has an explicit readiness marker, use
 `lens check http://localhost:3000 --ready-selector '#app-ready'`.
 See [readiness semantics](reference.md#browser-runtime-readiness-and-lifecycle)
 and the [measured upgrade report](browser-runtime-upgrade.md).
+
+Page Spec selector assertions support only `main` and `body`; unsupported CSS
+selectors are rejected instead of silently skipped. Use `lens flow --execute`
+with `assert_selector` or `assert_not_selector` for full CSS matching.

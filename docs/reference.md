@@ -934,6 +934,12 @@ Lens can optionally verify browser-focused Spec assertions via `--spec <path>`.
 | `layout` | `no_horizontal_overflow` | No horizontal overflow in any viewport |
 | `links` | `no_broken_same_origin` | No broken same-origin links (requires `--check-links`) |
 
+Page selectors accept only exact `main` and `body` strings in nonempty
+`exists`/`not_exists` assertion sets. Unsupported CSS selectors, unknown selector
+operations and malformed lists are input errors (exit 2), independent of
+`--fail-on`. Use a Lens flow for full CSS matching. Missing or malformed DOM
+presence evidence fails at every severity threshold; it is never a pass.
+
 ### Example Spec File
 
 ```json
@@ -942,8 +948,7 @@ Lens can optionally verify browser-focused Spec assertions via `--spec <path>`.
   "url": { "path_contains": "/dashboard" },
   "text": { "contains": ["Welcome", "Recent Activity"] },
   "selectors": {
-    "exists": ["main"],
-    "not_exists": [".error-boundary"]
+    "exists": ["main", "body"]
   },
   "console": { "no_errors": true },
   "network": { "no_5xx": true },

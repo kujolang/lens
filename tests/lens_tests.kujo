@@ -21,6 +21,7 @@ from src.config import is_size_token, is_digits, merge_file_config
 from src.config import parse_browser, parse_throttle, parse_device, is_perf
 from src.config import is_crawl, parse_max_depth, parse_max_pages, parse_auth_file
 from src.config_file import resolve_config_path, load_config_file
+from src.checks import run_spec_checks
 from src.checks import check_performance
 from src.checks import normalize_url, prepare_link_url, link_url_was_seen
 from src.crawl import collect_crawl_candidates, enqueue_candidates, collect_queue_candidates
@@ -2019,6 +2020,46 @@ test_hardening_regressions()
 test_merged_numeric_limits()
 test_structured_redaction_shape()
 test_deep_structured_redaction()
+
+func test_selector_evidence() {
+	path := "/tmp/lens-selector-regression.json"
+	for selector in array("#missing", "input[type=search]", "[data-testid=fixture]", "", " main") {
+		for operation in array("exists", "not_exists") {
+			mut selection := {}; selection[operation] = array(selector)
+			write_file(path, to_json({ "selectors": selection }), true)
+			check_eq(load_spec_file(path)["valid"], false, "unsupported selector is rejected before capture")
+		}
+	}
+	for invalid in array({}, {"exists": "main"}, {"exists": array(1)}, {"other": array("main")}, {"exists": array()}) {
+		write_file(path, to_json({"selectors": invalid}), true)
+		check_eq(load_spec_file(path)["valid"], false, "malformed selector assertion rejected")
+	}
+	write_file(path, to_json({"selectors": {"exists": array("main", "body")}}), true)
+	check_eq(load_spec_file(path)["valid"], true, "supported selectors accepted")
+	for operation in array("exists", "not_exists") {
+		for selector in array("main", "body") {
+			mut selection := {}; selection[operation] = array(selector)
+			spec := {"assertions": {"selectors": selection}}
+			for present in array(true, false) {
+				mut dom := {}; dom["has_" + selector] = present
+				result := run_spec_checks({}, spec, {"dom_summaries": array(dom)})[0]
+				mut expected := "fail"
+				if (operation == "exists" && present) || (operation == "not_exists" && is_falseish(present)) { expected = "pass" }
+				check_eq(result["status"], expected, "positive and negative selectors use captured boolean")
+			}
+			for dom in array({}, {"has_main": null, "has_body": "false"}) {
+				result := run_spec_checks({}, spec, {"dom_summaries": array(dom)})[0]
+				check_eq(result["status"], "fail", "missing or malformed evidence cannot pass")
+				check_eq(result["severity"], "critical", "incomplete coverage fails at every severity threshold")
+			}
+		}
+	}
+	mixed := run_spec_checks({}, {"assertions": {"selectors": {"exists": array("main"), "not_exists": array("body")}}}, {"dom_summaries": array({"has_main": true, "has_body": true})})[0]
+	check_eq(mixed["status"], "fail", "mixed positive and negative assertions both run")
+	reversed := run_spec_checks({}, {"assertions": {"selectors": {"exists": array("main"), "not_exists": array("body")}}}, {"dom_summaries": array({"has_main": false, "has_body": false})})[0]
+	check_eq(reversed["status"], "fail", "later passing negative assertion cannot erase earlier failure")
+}
+test_selector_evidence()
 
 print_summary()
 

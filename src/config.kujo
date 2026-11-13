@@ -834,7 +834,7 @@ export func print_help() {
 		"  --allow-external    Allow checking external/public URLs",
 		"  --fail-on <level>   Severity threshold: info, warning, error, critical",
 		"                      (default: error)",
-		"  --spec <path>       Spec file with browser assertions (JSON)",
+		"  --spec <path>       Spec assertions (JSON; page selectors: main/body)",
 		"  --eval-out <path>   Write Eval-compatible JSON output",
 		"  --baseline          Save screenshots as visual baselines",
 		"  --compare-baseline  Compare screenshots against baselines",

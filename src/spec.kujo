@@ -82,6 +82,13 @@ export func load_spec_file(spec_path) {
 		}
 	}
 	
+	if is_trueish(has_key(parsed, "selectors")) {
+		selector_error := validate_selector_spec(parsed["selectors"])
+		if selector_error != "" {
+			return { "valid": false, "error": selector_error, "assertions": {}, "warnings": array(), "supported_count": 0, "unsupported_count": 0 }
+		}
+	}
+
 	return validate_spec(parsed, spec_path)
 }
 
@@ -187,4 +194,23 @@ func spec_get_array(assertions, category, sub_key) {
 	val := cat[sub_key]
 	# Kujo arrays are always arrays; if somehow not, return empty
 	return val
+}
+
+# Page checks only capture these exact DOM-presence observations. Reject other
+# selectors before browser execution; flows provide full CSS selector assertions.
+export func validate_selector_spec(selectors) {
+	if is_falseish(is_dict(selectors)) { return "Spec selectors must be an object." }
+	mut count := 0
+	for key in keys(selectors) {
+		if key != "exists" && key != "not_exists" { return "Unsupported Spec selector assertion; use exists or not_exists." }
+		values := selectors[key]
+		if is_falseish(is_array(values)) { return "Spec selector assertions must be arrays." }
+		for selector in values {
+			if type(selector) != "string" { return "Spec selectors must be strings." }
+			if selector != "main" && selector != "body" { return "Page Spec supports only main and body selectors; use Lens flow for CSS assertions." }
+			count = count + 1
+		}
+	}
+	if count == 0 { return "Spec selectors must contain at least one assertion." }
+	return ""
 }

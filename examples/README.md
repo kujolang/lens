@@ -42,3 +42,7 @@ Report: .lens/runs/<timestamp>/lens-report.md
 
 The `flows/login.json` example uses a `secret: true` field — its typed value is
 redacted to `[REDACTED]` in `flow.json` and omitted from the written artifacts.
+
+Page Spec selector assertions support only `main` and `body`; unsupported CSS
+selectors are rejected instead of silently skipped. Use `lens flow --execute`
+with `assert_selector` or `assert_not_selector` for full CSS matching.
