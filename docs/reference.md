@@ -464,7 +464,8 @@ are rejected. Workspace-relative ancestor symlinks are also rejected. Absolute
 path ancestors retain ordinary host filesystem behavior (for example, macOS
 `/tmp`). Invalid destinations exit 2. Direct file comparisons resolve
 relative paths against the current directory and collapse equivalent separators
-and dot components.
+and dot components. Direct integrations may share the run directory with Lens
+when they use filenames outside the reserved report and capture paths.
 
 Run reports and evidence files are published individually with atomic
 replacement. Failures writing structured artifacts, baselines, or integrations

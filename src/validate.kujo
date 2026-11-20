@@ -248,6 +248,38 @@ export func validate_config_write_paths(config) {
 	return { "valid": true, "error": "" }
 }
 
+# Direct outputs can share the run directory with Lens artifacts. Reserve the
+# paths written by the command so an integration cannot overwrite its report
+# or turn browser evidence into a different file format.
+export func validate_run_output_roles(config, out_dir) {
+	root := normalize_write_path_text(out_dir) + "/"
+	reserved := {
+		"lens-report.json": true, "lens-report.md": true, "lens-report.html": true,
+		"metadata.json": true, "console.json": true, "network.json": true,
+		"dom-summary.json": true, "metrics.json": true, "links.json": true,
+		"accessibility.json": true, "crawl.json": true, "visual-diffs.json": true,
+		"flow.json": true, "flow-steps.json": true, "walkthrough.html": true,
+		"screenshots": true, "diffs": true, "video": true, "pages": true
+	}
+	keys := array("eval_out", "ledger", "howl")
+	labels := array("--eval-out", "--ledger", "--howl")
+	mut idx := 0
+	while idx < len(keys) {
+		key := keys[idx]
+		if is_trueish(has_key(config, key)) && to_string(config[key]) != "" {
+			path := normalize_write_path_text(config[key])
+			if is_trueish(str_starts_with(path, root)) {
+				segments := split(substring(path, len(root), len(path)), "/")
+				if is_trueish(has_key(reserved, segments[0])) {
+					return { "valid": false, "error": labels[idx] + " must use a path separate from Lens run artifacts." }
+				}
+			}
+		}
+		idx = idx + 1
+	}
+	return { "valid": true, "error": "" }
+}
+
 # Validate an existing artifact tree without following descendant symbolic
 # links. Reusing ordinary output directories remains supported, but artifacts
 # must not escape a selected root through a pre-existing internal link.

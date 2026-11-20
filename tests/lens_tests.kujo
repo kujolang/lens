@@ -40,7 +40,7 @@ from src.accessibility import map_a11y_severity, is_a11y_enabled
 LENS_VERSION := "1.1.1"
 from src.common import is_trueish, is_falseish
 from src.validate import extract_host, is_localhost_host, is_localhost_url
-from src.validate import validate_url, has_valid_scheme, validate_auth_storage_state, validate_config_write_paths, validate_directory_write_path, validate_file_write_path, validate_artifact_tree
+from src.validate import validate_url, has_valid_scheme, validate_auth_storage_state, validate_config_write_paths, validate_directory_write_path, validate_file_write_path, validate_artifact_tree, validate_run_output_roles
 from src.redact import is_sensitive_header, is_sensitive_query_param
 from src.redact import redact_url, redact_console_entry, redact_header_value
 from src.redact import redact_text, redact_finding, redact_check_results
@@ -1655,6 +1655,10 @@ func test_validate_write_paths() {
 	check(collision["valid"] == false, "write paths: colliding direct outputs are rejected")
 	aliased := validate_config_write_paths({ "eval_out": "./lens-shared.json", "ledger": os_getcwd() + "//lens-shared.json" })
 	check_eq(aliased["valid"], false, "write paths: relative and absolute aliases cannot use the same file")
+	run_out := "/tmp/lens-run-roles"
+	check_eq(validate_run_output_roles({ "eval_out": run_out + "/./lens-report.json" }, run_out)["valid"], false, "write paths: Eval cannot replace the Lens report")
+	check_eq(validate_run_output_roles({ "ledger": run_out + "/screenshots/desktop.png" }, run_out)["valid"], false, "write paths: ledger cannot replace a screenshot")
+	check_eq(validate_run_output_roles({ "howl": run_out + "/howl.json" }, run_out)["valid"], true, "write paths: custom integration path can share output directory")
 	check_eq(validate_directory_write_path(os_getcwd() + "/.", "--out")["valid"], false, "write paths: absolute working directory alias is rejected")
 }
 

@@ -6,7 +6,7 @@
 from src.common import format_timestamp_dir, is_trueish, is_falseish, str_starts_with, str_join, print_lines, browser_result_max_bytes
 from src.config import severity_meets_threshold, build_config, print_help, print_version, merge_file_config, lens_version
 from src.config_file import resolve_config_path, load_config_file
-from src.validate import validate_url, validate_auth_storage_state, validate_config_write_paths, validate_artifact_tree
+from src.validate import validate_url, validate_auth_storage_state, validate_config_write_paths, validate_artifact_tree, validate_run_output_roles
 from src.checks import run_all_checks, worst_severity, get_link_results
 from src.report import generate_markdown_report, generate_json_report, generate_metadata_json
 from src.provider import run_provider, provider_failed, extract_console_messages, extract_network_events, extract_dom_summaries, extract_all_links, extract_metrics, parse_browser_result
@@ -189,6 +189,11 @@ export func run(argv) {
 	effective_out := validate_artifact_tree(out_dir, "--out")
 	if is_falseish(effective_out["valid"]) {
 		print_lens_error(to_string(effective_out["error"]))
+		return EXIT_INVALID_INPUT
+	}
+	output_roles := validate_run_output_roles(config, out_dir)
+	if is_falseish(output_roles["valid"]) {
+		print_lens_error(output_roles["error"])
 		return EXIT_INVALID_INPUT
 	}
 	
@@ -789,6 +794,11 @@ export func run_flow(config) {
 		print_lens_error(to_string(effective_out["error"]))
 		return EXIT_INVALID_INPUT
 	}
+	output_roles := validate_run_output_roles(config, out_dir)
+	if is_falseish(output_roles["valid"]) {
+		print_lens_error(output_roles["error"])
+		return EXIT_INVALID_INPUT
+	}
 	
 	if is_falseish(path_exists(out_dir)) {
 		create_dir(out_dir)
@@ -1149,6 +1159,11 @@ export func run_flow_exec(config) {
 	effective_out := validate_artifact_tree(out_dir, "--out")
 	if is_falseish(effective_out["valid"]) {
 		print_lens_error(to_string(effective_out["error"]))
+		return EXIT_INVALID_INPUT
+	}
+	output_roles := validate_run_output_roles(config, out_dir)
+	if is_falseish(output_roles["valid"]) {
+		print_lens_error(output_roles["error"])
 		return EXIT_INVALID_INPUT
 	}
 	if is_falseish(path_exists(out_dir)) {
