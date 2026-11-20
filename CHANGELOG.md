@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Preserve bounded browser evidence across the Kujo subprocess boundary and
+  report over-limit results without repeating the capture.
+- Publish run artifacts atomically and return exit 4 when structured artifacts, baselines,
+  or integrations cannot be written. Append RunLedger records without
+  rewriting history.
+- Keep verbose check diagnostics off JSON stdout and honor watch intervals
+  longer than 30 seconds.
+- Prevent stale screenshots or diff images from being reported as current
+  evidence. Verify the URL of existing visual baselines before reuse.
+- Fail explicit flow assertions when dropped evidence prevents verification,
+  and close proxy responses promptly when an upstream body is interrupted.
+
 ## [1.1.1] - 2026-10-21
 
 - Require patched Node.js versions for browser bridge and release tooling.

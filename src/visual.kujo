@@ -3,7 +3,7 @@
 # Manages baseline storage, screenshot comparison via Python bridge,
 # and visual diff findings.
 
-from src.common import is_trueish, is_falseish
+from src.common import is_trueish, is_falseish, str_trim
 from src.redact import redact_url, redact_text
 
 # Default baseline directory.
@@ -67,15 +67,33 @@ func baseline_base_dir(config) {
 	return DEFAULT_BASELINE_DIR
 }
 
+# Older or manually seeded baselines may have no identity metadata.
+# When an identity is available, it must agree with the current redacted URL.
+export func baseline_matches_url(baseline_dir, url) {
+	path := baseline_dir + "/baseline-metadata.json"
+	if is_falseish(file_exists(path)) { return true }
+	try {
+		metadata := parse_json(read_file(path))
+		if is_trueish(has_key(metadata, "url")) && to_string(metadata["url"]) != "" {
+			return to_string(metadata["url"]) == redact_url(url)
+		}
+		return true
+	} except e {
+		return false
+	}
+}
+
 # ── Baseline management ─────────────────────────────────────────────
 
 # Save current screenshots as baselines.
-# Returns array of saved baseline paths.
+# Returns saved baseline paths, or null on a write failure.
 export func save_baselines(config, run_dir, viewports, baseline_dir) {
 	mut saved := array()
 	
-	if is_falseish(path_exists(baseline_dir)) {
-		create_dir(baseline_dir)
+	try {
+		if is_falseish(path_exists(baseline_dir)) { create_dir(baseline_dir) }
+	} except e {
+		return null
 	}
 	
 	mut vi := 0
@@ -86,24 +104,10 @@ export func save_baselines(config, run_dir, viewports, baseline_dir) {
 		src := run_dir + "/screenshots/" + vp_name + ".png"
 		dst := baseline_dir + "/" + vp_name + ".png"
 		
-		if is_trueish(file_exists(src)) {
-			# Check if baseline already exists
-			mut should_save := true
-			if is_trueish(file_exists(dst)) {
-				if is_falseish(is_trueish(config["update_baseline"])) {
-					should_save = false
-				} else {
-					delete_file(dst)
-				}
-			}
-
-			if is_trueish(should_save) {
-				# Copy the PNG with a binary-safe copy. read_file/write_file
-				# operate on UTF-8 text and corrupt (or fail on) binary data,
-				# so we shell out to `cp` instead.
-				if is_trueish(copy_file_binary(src, dst)) {
-					saved = append(saved, dst)
-				}
+		if is_trueish(has_key(vp, "screenshot")) && to_string(vp["screenshot"]) != "" && is_trueish(file_exists(src)) {
+			if is_falseish(file_exists(dst)) || is_trueish(config["update_baseline"]) {
+				if is_falseish(copy_file_binary(src, dst)) { return null }
+				saved = append(saved, dst)
 			}
 		}
 		vi = vi + 1
@@ -125,7 +129,11 @@ export func save_baselines(config, run_dir, viewports, baseline_dir) {
 			mi = mi + 1
 		}
 		meta_json := to_json(meta)
-		write_file(baseline_dir + "/baseline-metadata.json", meta_json, true)
+		try {
+			write_file_atomic(baseline_dir + "/baseline-metadata.json", meta_json, true)
+		} except e {
+			return null
+		}
 	}
 	
 	return saved
@@ -163,7 +171,7 @@ export func compare_baselines(config, run_dir, viewports, baseline_dir) {
 		result["viewport"] = vp_name
 		result["current_path"] = current_path
 		result["baseline_path"] = baseline_path
-		result["diff_path"] = diff_path
+		result["diff_path"] = ""
 		result["threshold"] = threshold
 		result["status"] = "error"
 		
@@ -177,7 +185,7 @@ export func compare_baselines(config, run_dir, viewports, baseline_dir) {
 		}
 		
 		# Check current exists
-		if is_falseish(file_exists(current_path)) {
+		if is_falseish(has_key(vp, "screenshot")) || to_string(vp["screenshot"]) == "" || is_falseish(file_exists(current_path)) {
 			result["status"] = "error"
 			result["error"] = "Current screenshot not found: " + current_path
 			results = append(results, result)
@@ -193,6 +201,9 @@ export func compare_baselines(config, run_dir, viewports, baseline_dir) {
 			parsed := parse_json(raw)
 			if is_trueish(has_key(parsed, "status")) {
 				result["status"] = to_string(parsed["status"])
+				if is_trueish(has_key(parsed, "diff_path")) && parsed["diff_path"] == diff_path && is_trueish(file_exists(diff_path)) {
+					result["diff_path"] = diff_path
+				}
 				result["difference_ratio"] = parsed["difference_ratio"]
 				result["changed_pixels"] = parsed["changed_pixels"]
 				result["total_pixels"] = parsed["total_pixels"]
@@ -219,19 +230,20 @@ export func compare_baselines(config, run_dir, viewports, baseline_dir) {
 	return results
 }
 
-# Copy a binary file from src to dst using the system `cp` command.
-# Returns true on success (destination exists afterward).
-# Kujo's read_file/write_file are UTF-8 only and cannot safely copy
-# binary content such as PNG screenshots.
+# Stage the binary copy beside the target, then replace it in one rename.
+# This preserves the previous baseline if copying the new PNG fails.
 export func copy_file_binary(src, dst) {
-	if is_falseish(file_exists(src)) {
+	if is_falseish(file_exists(src)) { return false }
+	temp := spawn_process(array("mktemp", dirname(dst) + "/.lens-baseline.XXXXXXXX"))
+	if is_falseish(temp.success) { return false }
+	staged := str_trim(to_string(temp.stdout))
+	try {
+		copy_file(src, staged)
+		return rename_file(staged, dst)
+	} except e {
+		delete_file(staged)
 		return false
 	}
-	result := spawn_process(array("cp", src, dst))
-	if is_falseish(result.success) {
-		return false
-	}
-	return is_trueish(file_exists(dst))
 }
 
 # Helper: pad a number to 3 digits.

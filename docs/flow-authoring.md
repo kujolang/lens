@@ -121,6 +121,10 @@ Lens enforces these even with `--execute` — author with them in mind:
   `"secret": true`; the value is redacted in every artifact.
 - **Public URLs** need `allow_external: true` (or `--allow-external`).
 
+Explicit console and network assertions fail if Lens drops matching evidence and
+cannot verify that the run was clean. The flow report records the evidence limit
+and the assertion result.
+
 ## 4. Validate before running
 
 ```bash
@@ -177,7 +181,7 @@ browser/runtime failure · `4` artifact-write failure.
 | step `fail` on an `assert_*` | real bug **or** wrong expectation | inspect the screenshot; if the app is correct, fix the assertion; otherwise report the bug |
 | step `blocked` | safety gate (missing `safe: true`, destructive, external) | add the required opt-in **only if the task intends it** |
 | step `fail`, error "Timeout" | slow page / element not ready | add a `wait_for_selector` before it, or raise `timeout_seconds` |
-| `bridge produced no output` (exit 3) | browser missing / very slow | `cd bridge && npm run install-browser`; ensure Node ≥ 18 |
+| `bridge produced no output` (exit 3) | browser missing / very slow | `cd bridge && npm run install-browser`; use a supported Node version from [Getting Started](getting-started.md) |
 
 **Guardrails for an agent:** cap iterations (≈3) and stop with a clear summary
 rather than looping forever; never invent selectors — only use `inspect` output

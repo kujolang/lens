@@ -31,6 +31,14 @@ class Handler(bench.Handler):
         if self.path == '/oversized':
             return self.send(200, 'text/html', bench.fixture.html('<h1>Bounded evidence</h1><button>Button</button>',
                 "<script>document.title='🔑'.repeat(5000);console.error('🔑'.repeat(5000));</script>"))
+        if self.path == '/flow-console-overflow':
+            return self.send(200, 'text/html', bench.fixture.html('<h1>Flow evidence</h1>',
+                "<script>for(let i=0;i<1001;i++)console.warn('fixture warning '+i);console.error('fixture error');</script>"))
+        if self.path == '/large-bridge-result':
+            # Each viewport stays below the collection bound. Together the two
+            # captures exceed Kujo's default 1 MiB subprocess output ceiling.
+            links = ''.join(f'<a href="/{n}/{"x" * 8000}">Link {n}</a>' for n in range(72))
+            return self.send(200, 'text/html', bench.fixture.html('<h1>Links</h1>' + links))
         if self.path.startswith('/privacy'):
             self.send_response(500, 'token=PRIVATE_SECRET_123')
             self.send_header('Content-Type', 'text/html')
@@ -96,6 +104,22 @@ def main():
             run('inspect', url+'/oversized', '--out', str(work/'oversized-inspect'), allowed=(1,))
             assert json.loads((work/'oversized-inspect/elements.json').read_text())['evidence_limits']['byte_limit_reached']
             passed+=1
+            large = run('check',url+'/large-bridge-result','--json','--verbose','--out',str(work/'large-bridge'))
+            assert json.loads(large.stdout)['status'] == 'PASS'
+            assert 'Running browser bridge' in large.stderr
+            passed+=1
+            failed_artifact = work/'failed-artifact'
+            (failed_artifact/'metrics.json').mkdir(parents=True)
+            result = run('check',url+'/trivial','--quick','--perf','--out',str(failed_artifact),allowed=(4,))
+            assert 'metrics.json' in result.stdout + result.stderr
+            ledger = work/'full-ledger.jsonl'
+            with ledger.open('wb') as file:
+                file.truncate(8 * 1024 * 1024)
+            result = run('check',url+'/trivial','--quick','--ledger',str(ledger),'--verbose','--out',str(work/'ledger-limit'),allowed=(4,))
+            assert 'failed to append RunLedger' in result.stdout + result.stderr
+            assert 'record appended' not in result.stdout + result.stderr
+            assert ledger.stat().st_size == 8 * 1024 * 1024
+            passed+=1
             run('check',url+'/trivial?token=PRIVATE_SECRET_123','--html','--accessibility','--perf','--baseline','--baseline-dir',str(work/'baselines'),'--out',str(work/'check'))
             for name in ['lens-report.json','lens-report.html','metadata.json','accessibility.json','metrics.json','screenshots/desktop.png','screenshots/mobile.png']:
                 assert (work/'check'/name).stat().st_size>0,name
@@ -104,6 +128,11 @@ def main():
             run('check',url+'/trivial?token=PRIVATE_SECRET_123','--baseline','--update-baseline','--baseline-dir',str(work/'baselines'),'--out',str(work/'check'))
             passed+=1
             run('check',url+'/trivial?token=PRIVATE_SECRET_123','--compare-baseline','--baseline-dir',str(work/'baselines'),'--out',str(work/'compare'))
+            diff = work/'compare/diffs/desktop.diff.png'
+            diff.write_bytes(b'old diff')
+            run('check',url+'/trivial?token=PRIVATE_SECRET_123','--compare-baseline','--baseline-dir',str(work/'baselines'),'--out',str(work/'compare'))
+            assert all(item['diff_path'] == '' for item in json.loads((work/'compare/visual-diffs.json').read_text()))
+            assert 'diffs/desktop.diff.png' not in (work/'compare/metadata.json').read_text()
             passed+=1
             run('check',url+'/many-links','--quick','--crawl','--max-pages','10','--out',str(work/'crawl'))
             crawl=json.loads((work/'crawl/crawl.json').read_text())
@@ -148,6 +177,8 @@ def main():
             passed+=1
             run('inspect',url+'/flow','--json','--out',str(work/'inspect'))
             assert (work/'inspect/elements.json').stat().st_size>0
+            (work/'inspect-failed/elements.json').mkdir(parents=True)
+            run('inspect',url+'/flow','--json','--out',str(work/'inspect-failed'),allowed=(4,))
             passed+=1
             flow={'name':'Fixture journey','description':'password="PRIVATE_SECRET_123"','url':url+'/flow','viewports':['desktop'],'steps':[
                 {'visit':url+'/flow'},{'click':{'selector':'#go','safe':True}},
@@ -162,8 +193,17 @@ def main():
             if shutil.which('ffmpeg'):
                 assert (work/'flow/video/walkthrough.mp4').stat().st_size>0
             assert (work/'flow/walkthrough.html').stat().st_size>0
+            assert 'walkthrough.html' in json.loads((work/'flow/metadata.json').read_text())['artifacts']
             assert not (work/'flow/flow-program.json').exists()
             passed+=1
+            overflow_flow = work/'overflow-flow.json'
+            overflow_flow.write_text(json.dumps({'name':'Bounded console', 'url':url+'/flow-console-overflow',
+                'steps':[{'visit':url+'/flow-console-overflow'},{'assert_no_console_errors':True}]}))
+            run('flow',str(overflow_flow),'--execute','--out',str(work/'overflow-flow'),allowed=(1,))
+            assert 'some messages were omitted' in (work/'overflow-flow/flow-steps.json').read_text()
+            passed+=1
+            (work/'flow-failed/lens-report.json').mkdir(parents=True)
+            run('flow',str(program),'--execute','--out',str(work/'flow-failed'),allowed=(4,))
             flow['steps'][1]={'click':{'selector':'#go'}}
             program.write_text(json.dumps(flow))
             run('flow',str(program),'--validate','--out',str(work/'blocked'),allowed=(1,2))
@@ -179,8 +219,8 @@ def main():
                     if file.is_file() and file.suffix in ('.json','.md','.html'):
                         assert 'PRIVATE_SECRET_123' not in file.read_text(),file.name
             passed+=1
-            with (work/'watch.log').open('w') as log:
-                watch=subprocess.Popen([str(ROOT/'lens'),'check',url+'/state','--quick','--watch','--watch-interval','1','--out',str(work/'watch')],cwd=ROOT,stdout=log,stderr=log,start_new_session=True)
+            with (work/'watch.log').open('w') as log, (work/'watch.stderr').open('w') as diagnostics:
+                watch=subprocess.Popen([str(ROOT/'lens'),'check',url+'/state','--quick','--watch','--watch-interval','1','--out',str(work/'watch')],cwd=ROOT,stdout=log,stderr=diagnostics,start_new_session=True)
                 try:
                     deadline=time.monotonic()+40
                     while time.monotonic()<deadline:
@@ -188,7 +228,7 @@ def main():
                         if meta.exists():
                             try:
                                 state=json.loads(meta.read_text())['provider']['session']
-                                if state['contexts_created']>=2:
+                                if state['contexts_created']>=2 and len((work/'watch.log').read_text().splitlines()) >= 2:
                                     assert state['browser_launches']==1
                                     break
                             except (ValueError,KeyError): pass
@@ -197,6 +237,7 @@ def main():
                 finally:
                     watch.terminate()
                     watch.wait(timeout=10)
+            assert all(json.loads(line)['status'] == 'PASS' for line in (work/'watch.log').read_text().splitlines())
             assert len(Handler.cookies)>=2 and all(cookie is None for cookie in Handler.cookies)
             assert not json.loads((work/'watch/console.json').read_text())
             passed+=1

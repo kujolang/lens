@@ -5,7 +5,7 @@
 # These never include unredacted data — they consume already-redacted summary
 # values (status, counts, redacted URL).
 
-from src.common import is_trueish, is_falseish
+from src.common import is_trueish, is_falseish, str_ends_with
 
 # Append a RunLedger-compatible record (Phase 3.3).
 #
@@ -27,23 +27,20 @@ export func write_ledger_record(path, tool_version, redacted_url, status, exit_c
 	}
 	line := to_json(record)
 
-	# Bound pre-existing state before materializing it. Preserve the established
-	# newline repair behavior for ledgers created by older or external tools.
-	mut existing := ""
-	mut existing_size := 0
-	if is_trueish(file_exists(path)) {
-		existing_size = file_size(path)
+	# Keep the established newline repair for records from older writers.
+	# Keep the same 8 MiB budget across supported Kujo runtimes.
+	mut separator := ""
+	try {
+		mut existing_size := 0
+		if is_trueish(file_exists(path)) { existing_size = file_size(path) }
+		if existing_size + len(line) * 4 + 2 > 8 * 1024 * 1024 { return false }
+		if existing_size > 0 && is_falseish(str_ends_with(read_file(path), "\n")) {
+			separator = "\n"
+		}
+		return append_file(path, separator + line + "\n")
+	} except e {
+		return false
 	}
-	# Four bytes per character is a conservative UTF-8 upper bound and keeps
-	# this compatible with the declared Kujo 1.2.3 minimum.
-	if existing_size + len(line) * 4 + 2 > 8 * 1024 * 1024 { return false }
-	if existing_size > 0 {
-		existing = read_file(path)
-	}
-	mut out := existing
-	if existing != "" && is_falseish(ends_with_newline(existing)) { out = out + "\n" }
-	write_file(path, out + line + "\n", true)
-	return true
 }
 
 # Write a Howl pass/fail summary (Phase 3.4).
@@ -66,14 +63,9 @@ export func write_howl_summary(path, tool_version, redacted_url, status, exit_co
 		"findings": counts,
 		"report": report_path
 	}
-	write_file(path, to_json(summary), true)
-	return true
-}
-
-# Whether a string ends with a newline character.
-func ends_with_newline(s) {
-	if len(s) == 0 {
+	try {
+		return write_file_atomic(path, to_json(summary), true)
+	} except e {
 		return false
 	}
-	return s[len(s) - 1] == "\n"
 }

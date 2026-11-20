@@ -3,18 +3,18 @@
 # Ties together config, validation, checks, reports, and artifact
 # writing into a single run pipeline.
 
-from src.common import format_timestamp_dir, is_trueish, is_falseish, str_starts_with, str_join, print_lines
+from src.common import format_timestamp_dir, is_trueish, is_falseish, str_starts_with, str_join, print_lines, browser_result_max_bytes
 from src.config import severity_meets_threshold, build_config, print_help, print_version, merge_file_config, lens_version
 from src.config_file import resolve_config_path, load_config_file
 from src.validate import validate_url, validate_auth_storage_state, validate_config_write_paths, validate_artifact_tree
 from src.checks import run_all_checks, worst_severity, get_link_results
 from src.report import generate_markdown_report, generate_json_report, generate_metadata_json
-from src.provider import run_provider, provider_failed, extract_console_messages, extract_network_events, extract_dom_summaries, extract_all_links, extract_metrics
+from src.provider import run_provider, provider_failed, extract_console_messages, extract_network_events, extract_dom_summaries, extract_all_links, extract_metrics, parse_browser_result
 from src.redact import redact_value, redact_url, redact_text, redact_console_entry, redact_console_message, redact_network_event, redact_dom_summary, redact_check_results, redact_finding, redact_accessibility_scans
 from src.spec import load_spec_file
 from src.eval import generate_eval_output
 from src.flow import load_flow_file, get_step_type, check_click_safety, check_type_safety, is_destructive, get_step_value, get_step_dict, redact_flow_for_output
-from src.visual import save_baselines, compare_baselines, visual_results_to_findings, baseline_dir_for_check, baseline_dir_for_flow
+from src.visual import save_baselines, compare_baselines, visual_results_to_findings, baseline_dir_for_check, baseline_matches_url
 from src.accessibility import check_accessibility, is_a11y_enabled
 from src.crawl import run_crawl
 from src.report_html import generate_html_report, generate_walkthrough_html
@@ -120,7 +120,7 @@ export func run(argv) {
 	# iteration is a fresh full run with --watch stripped, so there is no
 	# special-cased pipeline to maintain.
 	if is_trueish(config["watch"]) {
-		return run_watch(argv, to_int(to_string(config["watch_interval"])))
+		return run_watch(argv, to_int(to_string(config["watch_interval"])), config["json_output"])
 	}
 
 	# Validate URL.
@@ -167,10 +167,8 @@ export func run(argv) {
 		config["spec_data"] = spec_data
 		
 		if is_trueish(config["verbose"]) {
-			print_lines(array(
-				"[lens] Spec loaded: " + spec_path,
-				"[lens] Supported assertions: " + to_string(spec_data["supported_count"])
-			))
+			print_lens_info("Spec loaded: " + spec_path)
+			print_lens_info("Supported assertions: " + to_string(spec_data["supported_count"]))
 			if spec_data["unsupported_count"] > 0 {
 				print_lens_info("Unsupported assertions (skipped): " + to_string(spec_data["unsupported_count"]))
 			}
@@ -275,14 +273,7 @@ export func run(argv) {
 	}
 	console_json := to_json(redacted_console)
 	console_path := out_dir + "/console.json"
-	if is_trueish(file_exists(console_path)) {
-		delete_file(console_path)
-	}
-	write_file(console_path, console_json)
-	if is_falseish(file_exists(console_path)) {
-		print_lens_error("failed to write console.json")
-		return EXIT_ARTIFACT_FAIL
-	}
+	if is_falseish(write_artifact(console_path, console_json)) { return EXIT_ARTIFACT_FAIL }
 	
 	# Network log.
 	network_events := extract_network_events(provider_result)
@@ -295,14 +286,7 @@ export func run(argv) {
 	}
 	network_json := to_json(redacted_network)
 	network_path := out_dir + "/network.json"
-	if is_trueish(file_exists(network_path)) {
-		delete_file(network_path)
-	}
-	write_file(network_path, network_json)
-	if is_falseish(file_exists(network_path)) {
-		print_lens_error("failed to write network.json")
-		return EXIT_ARTIFACT_FAIL
-	}
+	if is_falseish(write_artifact(network_path, network_json)) { return EXIT_ARTIFACT_FAIL }
 	
 	# DOM summaries.
 	dom_summaries := extract_dom_summaries(provider_result)
@@ -315,14 +299,7 @@ export func run(argv) {
 	}
 	dom_json := to_json(redacted_dom)
 	dom_path := out_dir + "/dom-summary.json"
-	if is_trueish(file_exists(dom_path)) {
-		delete_file(dom_path)
-	}
-	write_file(dom_path, dom_json)
-	if is_falseish(file_exists(dom_path)) {
-		print_lens_error("failed to write dom-summary.json")
-		return EXIT_ARTIFACT_FAIL
-	}
+	if is_falseish(write_artifact(dom_path, dom_json)) { return EXIT_ARTIFACT_FAIL }
 	
 	# ── Run checks (pass provider data) ────────────────────────────
 	
@@ -341,7 +318,7 @@ export func run(argv) {
 	# Phase 2.1: write metrics.json when performance capture is enabled.
 	# Metric values are non-secret timing numbers; no redaction needed.
 	if is_trueish(config["perf"]) && len(metrics) > 0 {
-		write_file(out_dir + "/metrics.json", to_json(metrics), true)
+		if is_falseish(write_artifact(out_dir + "/metrics.json", to_json(metrics))) { return EXIT_ARTIFACT_FAIL }
 	}
 
 	check_results := run_all_checks(config, bridge_data)
@@ -415,14 +392,7 @@ export func run(argv) {
 		}
 		links_json := to_json(redacted_links)
 		links_path := out_dir + "/links.json"
-		if is_trueish(file_exists(links_path)) {
-			delete_file(links_path)
-		}
-		write_file(links_path, links_json)
-		if is_falseish(file_exists(links_path)) {
-			print_lens_error("failed to write links.json")
-			return EXIT_ARTIFACT_FAIL
-		}
+		if is_falseish(write_artifact(links_path, links_json)) { return EXIT_ARTIFACT_FAIL }
 		meta["artifacts"] = append(meta["artifacts"], "links.json")
 	}
 	
@@ -434,16 +404,26 @@ export func run(argv) {
 	mut visual_results := array()
 	mut visual_findings := array()
 	
+	mut baseline_dir := ""
+	if is_trueish(config["baseline"]) || is_trueish(config["compare_baseline"]) {
+		baseline_dir = baseline_dir_for_check(config)
+		if is_falseish(baseline_matches_url(baseline_dir, url)) {
+			print_lens_error("Baseline metadata is unreadable or identifies another URL. Choose a separate --baseline-dir.")
+			return EXIT_INVALID_INPUT
+		}
+	}
 	if is_trueish(config["baseline"]) {
-		baseline_dir := baseline_dir_for_check(config)
 		saved := save_baselines(config, out_dir, provider_viewports, baseline_dir)
+		if saved == null {
+			print_lens_error("failed to save baseline artifacts to " + baseline_dir)
+			return EXIT_ARTIFACT_FAIL
+		}
 		if is_trueish(config["verbose"]) {
 			print_lens_info("Baselines saved: " + to_string(len(saved)))
 		}
 	}
 	
 	if is_trueish(config["compare_baseline"]) {
-		baseline_dir := baseline_dir_for_check(config)
 		visual_results = compare_baselines(config, out_dir, provider_viewports, baseline_dir)
 		visual_findings = visual_results_to_findings(visual_results)
 		
@@ -485,7 +465,7 @@ export func run(argv) {
 		
 		# Write visual-diffs.json
 		vis_json := to_json(visual_results)
-		write_file(out_dir + "/visual-diffs.json", vis_json, true)
+		if is_falseish(write_artifact(out_dir + "/visual-diffs.json", vis_json)) { return EXIT_ARTIFACT_FAIL }
 		meta["artifacts"] = append(meta["artifacts"], "visual-diffs.json")
 		
 		# Add diff paths to artifacts
@@ -502,10 +482,8 @@ export func run(argv) {
 		}
 		
 		if is_trueish(config["verbose"]) {
-			print_lines(array(
-				"[lens] Visual comparisons: " + to_string(len(visual_results)),
-				"[lens] Visual findings: " + to_string(len(visual_findings))
-			))
+			print_lens_info("Visual comparisons: " + to_string(len(visual_results)))
+			print_lens_info("Visual findings: " + to_string(len(visual_findings)))
 		}
 	}
 	
@@ -527,7 +505,7 @@ export func run(argv) {
 		if is_trueish(has_key(a11y_check, "scans")) {
 			redacted_scans := redact_accessibility_scans(a11y_check["scans"])
 			a11y_json := to_json(redacted_scans)
-			write_file(out_dir + "/accessibility.json", a11y_json, true)
+			if is_falseish(write_artifact(out_dir + "/accessibility.json", a11y_json)) { return EXIT_ARTIFACT_FAIL }
 			meta["artifacts"] = append(meta["artifacts"], "accessibility.json")
 		}
 		
@@ -608,14 +586,14 @@ export func run(argv) {
 			redacted_pages = append(redacted_pages, rp)
 			rpi = rpi + 1
 		}
-		write_file(out_dir + "/crawl.json", to_json({
+		if is_falseish(write_artifact(out_dir + "/crawl.json", to_json({
 			"start_url": redact_url(url),
 			"visited_count": crawl_result["visited_count"],
 			"runtime": crawl_result["runtime"],
 			"max_depth": config["max_depth"],
 			"max_pages": config["max_pages"],
 			"pages": redacted_pages
-		}), true)
+		}))) { return EXIT_ARTIFACT_FAIL }
 		meta["artifacts"] = append(meta["artifacts"], "crawl.json")
 
 		if is_trueish(config["verbose"]) {
@@ -646,39 +624,18 @@ export func run(argv) {
 	# Generate Markdown report.
 	md_report := generate_markdown_report(config, meta, check_results)
 	md_path := out_dir + "/lens-report.md"
-	if is_trueish(file_exists(md_path)) {
-		delete_file(md_path)
-	}
-	write_file(md_path, md_report)
-	if is_falseish(file_exists(md_path)) {
-		print_lens_error("failed to write Markdown report to " + md_path)
-		return EXIT_ARTIFACT_FAIL
-	}
+	if is_falseish(write_artifact(md_path, md_report)) { return EXIT_ARTIFACT_FAIL }
 	
 	# Generate JSON report.
 	json_report := generate_json_report(config, meta, check_results, provider_result)
 	json_path := out_dir + "/lens-report.json"
-	if is_trueish(file_exists(json_path)) {
-		delete_file(json_path)
-	}
-	write_file(json_path, json_report)
-	if is_falseish(file_exists(json_path)) {
-		print_lens_error("failed to write JSON report to " + json_path)
-		return EXIT_ARTIFACT_FAIL
-	}
+	if is_falseish(write_artifact(json_path, json_report)) { return EXIT_ARTIFACT_FAIL }
 
 	# ── Phase 3.1: Self-contained HTML report (opt-in via --html) ──────
 	if is_trueish(config["html"]) {
 		html_report := generate_html_report(config, meta, check_results)
 		html_path := out_dir + "/lens-report.html"
-		if is_trueish(file_exists(html_path)) {
-			delete_file(html_path)
-		}
-		write_file(html_path, html_report)
-		if is_falseish(file_exists(html_path)) {
-			print_lens_error("failed to write HTML report to " + html_path)
-			return EXIT_ARTIFACT_FAIL
-		}
+		if is_falseish(write_artifact(html_path, html_report)) { return EXIT_ARTIFACT_FAIL }
 		meta["artifacts"] = append(meta["artifacts"], "lens-report.html")
 	}
 
@@ -689,14 +646,7 @@ export func run(argv) {
 	}
 	metadata_json := generate_metadata_json(config, meta, check_results, provider_meta)
 	meta_path := out_dir + "/metadata.json"
-	if is_trueish(file_exists(meta_path)) {
-		delete_file(meta_path)
-	}
-	write_file(meta_path, metadata_json)
-	if is_falseish(file_exists(meta_path)) {
-		print_lens_error("failed to write metadata to " + meta_path)
-		return EXIT_ARTIFACT_FAIL
-	}
+	if is_falseish(write_artifact(meta_path, metadata_json)) { return EXIT_ARTIFACT_FAIL }
 	
 	# ── Phase 7: Write Eval output (if --eval-out provided) ────────
 	
@@ -704,14 +654,7 @@ export func run(argv) {
 	if eval_out_path != "" {
 		# Spec results are already included in check_results.
 		eval_json := generate_eval_output(config, meta, check_results, array())
-		if is_trueish(file_exists(eval_out_path)) {
-			delete_file(eval_out_path)
-		}
-		write_file(eval_out_path, eval_json)
-		if is_falseish(file_exists(eval_out_path)) {
-			print_lens_error("failed to write Eval output to " + eval_out_path)
-			return EXIT_ARTIFACT_FAIL
-		}
+		if is_falseish(write_artifact(eval_out_path, eval_json)) { return EXIT_ARTIFACT_FAIL }
 	}
 
 	# ── Phase 3.3 / 3.4: ecosystem integrations (opt-in) ───────────
@@ -724,14 +667,20 @@ export func run(argv) {
 	}
 	ledger_path := to_string(config["ledger"])
 	if ledger_path != "" {
-		write_ledger_record(ledger_path, LENS_VERSION, to_string(config["url"]), status, exit_code, started_at, finished_at, duration_ms, counts)
+		if is_falseish(write_ledger_record(ledger_path, LENS_VERSION, to_string(config["url"]), status, exit_code, started_at, finished_at, duration_ms, counts)) {
+			print_lens_error("failed to append RunLedger record to " + ledger_path)
+			return EXIT_ARTIFACT_FAIL
+		}
 		if is_trueish(config["verbose"]) {
 			print_lens_info("RunLedger record appended: " + ledger_path)
 		}
 	}
 	howl_path := to_string(config["howl"])
 	if howl_path != "" {
-		write_howl_summary(howl_path, LENS_VERSION, to_string(config["url"]), status, exit_code, duration_ms, counts, md_path)
+		if is_falseish(write_howl_summary(howl_path, LENS_VERSION, to_string(config["url"]), status, exit_code, duration_ms, counts, md_path)) {
+			print_lens_error("failed to write Howl summary to " + howl_path)
+			return EXIT_ARTIFACT_FAIL
+		}
 		if is_trueish(config["verbose"]) {
 			print_lens_info("Howl summary written: " + howl_path)
 		}
@@ -897,6 +846,7 @@ export func run_flow(config) {
 			if is_falseish(provider_failed(provider_result)) {
 				provider_ok = true
 				bridge_data = write_runtime_artifacts(provider_result, out_dir)
+				if bridge_data == null { return EXIT_ARTIFACT_FAIL }
 				provider_viewports = provider_result["viewports"]
 				if is_trueish(has_key(provider_result, "metadata")) {
 					provider_meta = provider_result["metadata"]
@@ -974,10 +924,10 @@ func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_view
 
 	# Write flow artifacts
 	flow_json := to_json(safe_flow)
-	write_file(out_dir + "/flow.json", flow_json, true)
+	if is_falseish(write_artifact(out_dir + "/flow.json", flow_json)) { return EXIT_ARTIFACT_FAIL }
 
 	steps_json := to_json(step_results)
-	write_file(out_dir + "/flow-steps.json", steps_json, true)
+	if is_falseish(write_artifact(out_dir + "/flow-steps.json", steps_json)) { return EXIT_ARTIFACT_FAIL }
 	
 	# Build metadata
 	finished_at := now_utc()
@@ -1076,8 +1026,10 @@ func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_view
 		if flow_video != "" {
 			flow_artifacts = append(flow_artifacts, flow_video)
 		}
+		if is_trueish(config["walkthrough"]) || flow_video != "" {
+			flow_artifacts = append(flow_artifacts, "walkthrough.html")
+		}
 	}
-
 	# Write markdown report
 	meta := {
 		"status": status,
@@ -1104,20 +1056,13 @@ func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_view
 		"timeout": flow["timeout_seconds"]
 	}
 	flow_metadata_json := generate_metadata_json(meta_config, meta, array(), provider_meta)
-	write_file(out_dir + "/metadata.json", flow_metadata_json, true)
+	if is_falseish(write_artifact(out_dir + "/metadata.json", flow_metadata_json)) { return EXIT_ARTIFACT_FAIL }
 
 	md_report := generate_flow_report(config, meta, safe_flow, step_results, passed, failed, blocked, skipped, errored, flow_findings)
-	write_file(out_dir + "/lens-report.md", md_report, true)
+	if is_falseish(write_artifact(out_dir + "/lens-report.md", md_report)) { return EXIT_ARTIFACT_FAIL }
 	
 	json_report := generate_flow_json_report(config, meta, safe_flow, step_results, passed, failed, blocked, skipped, errored, flow_findings)
-	write_file(out_dir + "/lens-report.json", json_report, true)
-
-	# Note: the Phase 4.3 walkthrough.html is generated by run_flow_exec at a
-	# shallow call depth (the Kujo VM's native stack cannot afford to build it
-	# from inside this large finalize frame). It is listed here if present.
-	if is_trueish(executed) && is_trueish(file_exists(out_dir + "/walkthrough.html")) {
-		flow_artifacts = append(flow_artifacts, "walkthrough.html")
-	}
+	if is_falseish(write_artifact(out_dir + "/lens-report.json", json_report)) { return EXIT_ARTIFACT_FAIL }
 
 	# Eval output if requested
 	eval_out_path := to_string(config["eval_out"])
@@ -1139,7 +1084,7 @@ func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_view
 			},
 			"results": step_results
 		})
-		write_file(eval_out_path, eval_json, true)
+		if is_falseish(write_artifact(eval_out_path, eval_json)) { return EXIT_ARTIFACT_FAIL }
 	}
 	
 	# Terminal output
@@ -1262,7 +1207,7 @@ export func run_flow_exec(config) {
 	}
 
 	mut step_results := map_flow_results(flow_steps, bridge_res, plan["blocked"])
-	write_flow_evidence(out_dir, bridge_res["console_messages"], bridge_res["network_events"])
+	if is_falseish(write_flow_evidence(out_dir, bridge_res["console_messages"], bridge_res["network_events"])) { return EXIT_ARTIFACT_FAIL }
 	mut flow_video := to_string(bridge_res["video"])
 	mut artifact_warnings := array()
 	if is_trueish(has_key(bridge_res, "artifact_warnings")) {
@@ -1386,7 +1331,7 @@ export func run_flow_exec(config) {
 			"final_url": w_final_url
 		}
 		walk_html := generate_walkthrough_html(redact_flow_for_output(flow), w_meta, red_steps, flow_video, w_pass, w_fail, w_blocked, w_skipped)
-		write_file(out_dir + "/walkthrough.html", walk_html, true)
+		if is_falseish(write_artifact(out_dir + "/walkthrough.html", walk_html)) { return EXIT_ARTIFACT_FAIL }
 	}
 
 	mut flow_runtime := {}
@@ -1422,22 +1367,25 @@ export func run_inspect(config) {
 	timeout := to_string(config["timeout"])
 	mut args := array("node", "bridge/inspect-bridge.js", "--url", url, "--timeout", timeout)
 	if is_trueish(config["allow_external"]) { args = append(args, "--allow-external") }
-	res := spawn_process(args, { "timeout_ms": 120000 })
+	res := spawn_process(args, { "timeout_ms": 120000, "max_output_bytes": browser_result_max_bytes() })
 	out := trim(to_string(res.stdout))
 	if out == "" {
 		print_lens_error("inspect bridge produced no output. " + trim(to_string(res.stderr)))
 		return EXIT_BROWSER_FAIL
 	}
 
-	parsed := parse_json(out)
+	parsed := parse_browser_result(out, res.stdout_truncated)
 	if is_trueish(has_key(parsed, "error")) && parsed["error"] != null && to_string(parsed["error"]) != "" {
-		print_lens_error(redact_text(to_string(parsed["error"])))
+		mut detail := to_string(parsed["error"])
+		if is_trueish(has_key(parsed, "message")) { detail = to_string(parsed["message"]) }
+		print_lens_error(detail)
 		return EXIT_BROWSER_FAIL
 	}
-	mut elements := array()
-	if is_trueish(has_key(parsed, "elements")) {
-		elements = parsed["elements"]
+	if is_falseish(has_key(parsed, "elements")) || type(parsed["elements"]) != "array" {
+		print_lens_error("Inspect bridge returned an invalid element list.")
+		return EXIT_BROWSER_FAIL
 	}
+	elements := parsed["elements"]
 
 	# Redact each element's text/selector/href before output (defense in depth).
 	mut clean := array()
@@ -1470,14 +1418,14 @@ export func run_inspect(config) {
 	if is_falseish(path_exists(out_dir)) {
 		create_dir(out_dir)
 	}
-	write_file(out_dir + "/elements.json", to_json({
+	if is_falseish(write_artifact(out_dir + "/elements.json", to_json({
 		"url": redact_url(url),
 		"final_url": redact_url(to_string(parsed["final_url"])),
 		"title": redact_text(to_string(parsed["title"])),
 		"count": len(clean),
 		"evidence_limits": parsed["evidence_limits"],
 		"elements": clean
-	}), true)
+	}))) { return EXIT_ARTIFACT_FAIL }
 
 	if is_trueish(has_key(parsed, "evidence_limits")) && is_trueish(parsed["evidence_limits"]["byte_limit_reached"]) {
 		print_lens_error("Inspect evidence exceeded a byte limit; elements.json records the incomplete capture.")
@@ -1718,6 +1666,8 @@ func map_flow_results(flow_steps, bridge_res, blocked) {
 	}
 	console_messages := bridge_res["console_messages"]
 	network_events := bridge_res["network_events"]
+	dropped_console := bridge_res["evidence_limits"]["dropped_console_messages"]
+	dropped_network := bridge_res["evidence_limits"]["dropped_network_events"]
 
 	mut console_errors := 0
 	mut ci := 0
@@ -1740,7 +1690,10 @@ func map_flow_results(flow_steps, bridge_res, blocked) {
 			sr["status"] = "blocked"
 			sr["error"] = to_string(blocked[key])
 		} else if st == "assert_no_console_errors" {
-			if console_errors == 0 {
+			if console_errors == 0 && dropped_console > 0 {
+				sr["status"] = "fail"
+				sr["error"] = "Cannot verify console assertion because some messages were omitted."
+			} else if console_errors == 0 {
 				sr["status"] = "pass"
 				sr["error"] = "No console errors during execution."
 			} else {
@@ -1748,7 +1701,10 @@ func map_flow_results(flow_steps, bridge_res, blocked) {
 				sr["error"] = to_string(console_errors) + " console error(s) during execution. See console.json."
 			}
 		} else if st == "assert_no_failed_requests" {
-			if len(network_events) == 0 {
+			if len(network_events) == 0 && dropped_network > 0 {
+				sr["status"] = "fail"
+				sr["error"] = "Cannot verify network assertion because some failures were omitted."
+			} else if len(network_events) == 0 {
 				sr["status"] = "pass"
 				sr["error"] = "No failed network requests during execution."
 			} else {
@@ -1784,7 +1740,7 @@ func write_flow_evidence(out_dir, console_messages, network_events) {
 		red_console = append(red_console, redact_console_message(console_messages[rci]))
 		rci = rci + 1
 	}
-	write_file(out_dir + "/console.json", to_json(red_console), true)
+	if is_falseish(write_artifact(out_dir + "/console.json", to_json(red_console))) { return false }
 
 	mut red_network := array()
 	mut rni := 0
@@ -1792,8 +1748,7 @@ func write_flow_evidence(out_dir, console_messages, network_events) {
 		red_network = append(red_network, redact_network_event(network_events[rni]))
 		rni = rni + 1
 	}
-	write_file(out_dir + "/network.json", to_json(red_network), true)
-	return true
+	return write_artifact(out_dir + "/network.json", to_json(red_network))
 }
 
 # First viewport name from a flow (defaults to desktop).
@@ -2137,7 +2092,7 @@ func print_lens_error(message) {
 
 # Helper: print a verbose Lens status line.
 func print_lens_info(message) {
-	print("[lens] " + redact_text(to_string(message)))
+	eprint("[lens] " + redact_text(to_string(message)))
 }
 
 # Helper: print the shared browser automation dependency error.
@@ -2170,16 +2125,18 @@ func print_count_if_positive(label, count) {
 # for the interval. Recursion depth stays at 1 because the inner run has no
 # watch flag. The loop is exited by Ctrl-C (SIGINT), the conventional way to
 # stop a watcher.
-func run_watch(argv, interval_seconds) {
+func run_watch(argv, interval_seconds, json_mode) {
 	stripped := remove_flag(argv, "--watch")
-	print("Lens watch — re-running every " + to_string(interval_seconds) + "s. Press Ctrl-C to stop.")
+	if is_falseish(json_mode) {
+		print("Lens watch — re-running every " + to_string(interval_seconds) + "s. Press Ctrl-C to stop.")
+	}
 	mut iteration := 0
 	while true {
 		iteration = iteration + 1
-		print_lines(array(
-			"",
-			"── watch run #" + to_string(iteration) + " ──────────────────────────────"
-		))
+		if is_falseish(json_mode) {
+			print("")
+			print("── watch run #" + to_string(iteration) + " ──────────────────────────────")
+		}
 		# A killed supervisor must not leave an orphaned watch loop.
 		owner := env("LENS_SESSION_OWNER")
 		if owner != "" {
@@ -2187,8 +2144,16 @@ func run_watch(argv, interval_seconds) {
 			if is_falseish(alive.success) { return EXIT_BROWSER_FAIL }
 		}
 		run(stripped)
-		# Sleep between runs via the system sleep (Unix); avoids busy-waiting.
-		spawn_process(array("sleep", to_string(interval_seconds)))
+		# Check the supervisor periodically during long waits as well.
+		# Native sleep avoids the subprocess timeout and launch overhead.
+		mut remaining := interval_seconds
+		while remaining > 30 && owner != "" {
+			sleep(30000)
+			alive := spawn_process(array("/bin/kill", "-0", owner))
+			if is_falseish(alive.success) { return EXIT_BROWSER_FAIL }
+			remaining = remaining - 30
+		}
+		sleep(remaining * 1000)
 	}
 	return EXIT_OK
 }
@@ -2238,14 +2203,22 @@ func count_severity(check_results, severity) {
 	return count
 }
 
+# Publish a completed artifact atomically and use the write result rather
+# than file existence, which can describe a stale artifact from another run.
+func write_artifact(path, contents) {
+	try {
+		return write_file_atomic(path, contents, true)
+	} except e {
+		print_lens_error("failed to write artifact to " + path)
+		return false
+	}
+}
+
 # Helper: write metadata.json (used on early-exit provider failure path).
 func write_metadata_file(config, meta, check_results, out_dir, provider_meta) {
 	metadata_json := generate_metadata_json(config, meta, check_results, provider_meta)
 	meta_path := out_dir + "/metadata.json"
-	if is_trueish(file_exists(meta_path)) {
-		delete_file(meta_path)
-	}
-	write_file(meta_path, metadata_json)
+	return write_artifact(meta_path, metadata_json)
 }
 
 # Helper: check whether Node.js is available without crashing the VM.
@@ -2287,8 +2260,7 @@ func write_runtime_artifacts(provider_result, out_dir) {
 		ci = ci + 1
 	}
 	console_path := out_dir + "/console.json"
-	if is_trueish(file_exists(console_path)) { delete_file(console_path) }
-	write_file(console_path, to_json(redacted_console))
+	if is_falseish(write_artifact(console_path, to_json(redacted_console))) { return null }
 
 	# Network (redacted).
 	mut redacted_network := array()
@@ -2298,8 +2270,7 @@ func write_runtime_artifacts(provider_result, out_dir) {
 		ni = ni + 1
 	}
 	network_path := out_dir + "/network.json"
-	if is_trueish(file_exists(network_path)) { delete_file(network_path) }
-	write_file(network_path, to_json(redacted_network))
+	if is_falseish(write_artifact(network_path, to_json(redacted_network))) { return null }
 
 	# DOM summaries (redacted).
 	mut redacted_dom := array()
@@ -2309,8 +2280,7 @@ func write_runtime_artifacts(provider_result, out_dir) {
 		di = di + 1
 	}
 	dom_path := out_dir + "/dom-summary.json"
-	if is_trueish(file_exists(dom_path)) { delete_file(dom_path) }
-	write_file(dom_path, to_json(redacted_dom))
+	if is_falseish(write_artifact(dom_path, to_json(redacted_dom))) { return null }
 
 	return {
 		"provider_result": provider_result,

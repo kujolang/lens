@@ -100,7 +100,7 @@ export PATH="/path/to/lens:$PATH"
 
 ```bash
 lens --version
-# Lens v1.1.0
+# Lens v1.1.1
 
 lens --help
 # Shows usage and flags
@@ -165,7 +165,7 @@ Flags:
   --max-concurrency <n> Max viewports captured at once (default: 4; maximum: 16)
   --ready-selector <selector> Optional visible app-ready condition
   --timeout <seconds>  Page load timeout in seconds (default: 30, max: 300)
-  --verbose            Enable verbose terminal output
+  --verbose            Enable diagnostics on stderr and an expanded human summary
   --json               Print JSON summary to stdout
   --quick              Compact agent profile: JSON, desktop only, no settle
   --check-links        Enable shallow same-origin link checking
@@ -324,8 +324,8 @@ network failures, blank content); results are aggregated into `crawl.json` and
 | Flag | What it does |
 |------|--------------|
 | `--html` | Also write a self-contained `lens-report.html` (escaped, screenshots embedded, findings by severity). |
-| `--watch` / `--watch-interval <n>` | Re-run the check every `n` seconds until interrupted (Ctrl-C). |
-| `--ledger <path>` | Append a RunLedger-compatible JSONL record (one line per run). |
+| `--watch` / `--watch-interval <n>` | Wait `n` seconds between completed checks (1–3600 seconds). Use Ctrl-C to stop. |
+| `--ledger <path>` | Append a RunLedger-compatible JSONL record (one line per run, up to 8 MiB per ledger). |
 | `--howl <path>` | Write a Howl pass/fail summary (verdict, counts, report pointer). |
 
 A reusable GitHub Action ships as [`action.yml`](../action.yml): it installs the
@@ -462,7 +462,14 @@ directories, final-target symlinks, trailing-slash paths, and duplicate direct
 file destinations are rejected. Paths containing a `..` traversal component
 are rejected. Workspace-relative ancestor symlinks are also rejected. Absolute
 path ancestors retain ordinary host filesystem behavior (for example, macOS
-`/tmp`). Invalid destinations exit 2.
+`/tmp`). Invalid destinations exit 2. Direct file comparisons resolve
+relative paths against the current directory and collapse equivalent separators
+and dot components.
+
+Run reports and evidence files are published individually with atomic
+replacement. Failures writing structured artifacts, baselines, or integrations
+exit 4. RunLedger appends to existing JSONL, repairing a missing final newline when
+needed. Use separate output directories for concurrent runs.
 
 ## Checks
 
@@ -864,7 +871,10 @@ Links may require auth (401/403), be rate-limited (429), or redirect
 externally. Use HTTP status codes in findings to triage.
 
 ### 9. JSON Output Confusion
-`--json` prints a summary to stdout. For full JSON, read `lens-report.json`.
+`--json` prints a summary to stdout when a run reaches reporting, including
+checks with findings. Verbose diagnostics go to stderr. JSON watch mode prints
+one summary per completed report without watch banners. For full JSON, read
+`lens-report.json`.
 
 ### 10. Write/Permission Failure
 Use `--out` with a writable directory. Check disk space with `df -h`.
@@ -893,7 +903,7 @@ Use `--out` with a writable directory. Check disk space with `df -h`.
 10. **Accessibility is automated-only** — axe-core catches common violations but
     cannot detect every issue; manual review remains essential.
 11. **Kujo runtime constraints** — Immutable function params; dict access guarded
-    with `has_key`; binary files copied via the system `cp` (Unix environments).
+    with `has_key`; binary baselines staged and published with Kujo file operations.
 
 ## Dependencies
 
@@ -1244,12 +1254,16 @@ lens check http://localhost:3000 --baseline --update-baseline
 ```
 
 Without `--update-baseline`, existing baselines are never overwritten.
+When the stored baseline metadata identifies another URL, Lens exits 2. Use a
+separate `--baseline-dir` for each URL that maps to the same directory name.
+A missing screenshot in the current capture is never replaced with an older
+screenshot from a reused output directory.
 
 ### Known Limitations
 
 - Requires Python Pillow + numpy (`pip install Pillow numpy`)
 - Pixel comparison uses a fixed per-channel threshold (sub-pixel anti-aliasing may trigger small differences; tune with `--diff-threshold`)
-- Binary PNG copying uses the system `cp` command (requires a Unix environment); `read_file`/`write_file` are UTF-8 only and cannot copy binary data safely
+- Baseline PNG updates use a temporary file beside the destination and a binary-safe rename.
 - Baselines are never overwritten without `--update-baseline`
 - `--diff-threshold` float parsing limited by Kujo runtime `to_number` support
 - No flow-mode visual integration yet

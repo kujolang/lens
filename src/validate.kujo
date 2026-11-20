@@ -3,7 +3,7 @@
 # Lens is local-first. By default, only localhost, 127.0.0.1, and ::1
 # are allowed. External URLs require the --allow-external flag.
 
-from src.common import str_starts_with, str_contains, str_lower, is_trueish, is_falseish, str_trim
+from src.common import str_starts_with, str_contains, str_lower, is_trueish, is_falseish, str_trim, str_join
 
 # Extract the host portion from a URL string.
 # Handles: http://host, https://host, http://host:port, https://host:port,
@@ -233,8 +233,9 @@ export func validate_config_write_paths(config) {
 		key := to_string(file_specs[si][0])
 		label := to_string(file_specs[si][1])
 		if is_trueish(has_key(config, key)) {
-			path := normalize_write_path_text(to_string(config[key]))
-			if path != "" {
+			raw_path := to_string(config[key])
+			if raw_path != "" {
+				path := normalize_write_path_text(raw_path)
 				if is_trueish(has_key(seen, path)) {
 					return { "valid": false, "error": label + " must not reuse another Lens output path." }
 				}
@@ -253,7 +254,7 @@ export func validate_config_write_paths(config) {
 export func validate_artifact_tree(raw_path, label) {
 	root := validate_directory_write_path(raw_path, label)
 	if is_falseish(root["valid"]) { return root }
-	path := str_trim(to_string(raw_path))
+	path := to_string(raw_path)
 	if path == "" || is_falseish(path_exists(path)) { return root }
 	return validate_artifact_tree_at(path, to_string(label), 0, 0)
 }
@@ -288,16 +289,16 @@ func validate_artifact_tree_at(path, label, depth, visited) {
 }
 
 export func validate_directory_write_path(raw_path, label) {
-	path := str_trim(to_string(raw_path))
+	path := to_string(raw_path)
 	if path == "" { return { "valid": true, "error": "" } }
 	if is_trueish(relative_path_has_symlink(path)) {
 		return { "valid": false, "error": to_string(label) + " must not traverse a symbolic link inside the working directory." }
 	}
 	normalized := normalize_write_path_text(path)
-	if normalized == "/" || normalized == "." || normalized == ".." || is_trueish(has_parent_segment(normalized)) {
+	if normalized == "/" || normalized == os_getcwd() || is_trueish(has_parent_segment(path)) {
 		return { "valid": false, "error": to_string(label) + " must name a dedicated output directory, not a filesystem root or working directory." }
 	}
-	if is_trueish(path_is_symlink_safe(path)) {
+	if is_trueish(path_is_symlink_safe(normalized)) {
 		return { "valid": false, "error": to_string(label) + " must not target a symbolic link." }
 	}
 	if is_trueish(path_exists(path)) {
@@ -309,16 +310,16 @@ export func validate_directory_write_path(raw_path, label) {
 }
 
 export func validate_file_write_path(raw_path, label) {
-	path := str_trim(to_string(raw_path))
+	path := to_string(raw_path)
 	if path == "" { return { "valid": true, "error": "" } }
 	if is_trueish(relative_path_has_symlink(path)) {
 		return { "valid": false, "error": to_string(label) + " must not traverse a symbolic link inside the working directory." }
 	}
 	normalized := normalize_write_path_text(path)
-	if normalized == "/" || normalized == "." || normalized == ".." || is_trueish(has_parent_segment(normalized)) || is_trueish(ends_with_slash(path)) {
+	if normalized == "/" || normalized == os_getcwd() || is_trueish(has_parent_segment(path)) || is_trueish(ends_with_slash(path)) {
 		return { "valid": false, "error": to_string(label) + " must name a file, not a directory." }
 	}
-	if is_trueish(path_is_symlink_safe(path)) {
+	if is_trueish(path_is_symlink_safe(normalized)) {
 		return { "valid": false, "error": to_string(label) + " must not target a symbolic link." }
 	}
 	if is_trueish(path_exists(path)) {
@@ -337,20 +338,24 @@ export func validate_file_write_path(raw_path, label) {
 }
 
 func normalize_write_path_text(raw_path) {
-	mut path := replace(str_trim(to_string(raw_path)), "\\", "/")
-	while len(path) > 1 && is_trueish(ends_with_slash(path)) {
-		path = substring(path, 0, len(path) - 1)
+	mut path := to_string(raw_path)
+	if is_falseish(str_starts_with(path, "/")) { path = os_getcwd() + "/" + path }
+	parts := split(path, "/")
+	mut normalized := array()
+	mut idx := 0
+	while idx < len(parts) {
+		part := parts[idx]
+		if part != "" && part != "." { normalized = append(normalized, part) }
+		idx = idx + 1
 	}
-	if path == "./" { return "." }
-	if path == "../" { return ".." }
-	return path
+	return "/" + str_join(normalized, "/")
 }
 
 # Absolute-path ancestors keep the documented host semantics (for example
 # macOS /tmp). Relative destinations are workspace-controlled, so reject every
 # existing symlink component, including an implicit `.lens` root.
 func relative_path_has_symlink(path) {
-	normalized := replace(to_string(path), "\\", "/")
+	normalized := to_string(path)
 	if str_starts_with(normalized, "/") { return false }
 	parts := split(normalized, "/")
 	mut current := ""
@@ -369,14 +374,13 @@ func relative_path_has_symlink(path) {
 func ends_with_slash(path) {
 	if len(path) == 0 { return false }
 	last := path[len(path) - 1]
-	return last == "/" || last == "\\"
+	return last == "/"
 }
 
 func has_parent_segment(path) {
 	# Surrounding separators make the test component-aware: names such as
 	# "reports..old" remain valid while any actual `..` traversal is refused.
-	normalized := replace(to_string(path), "\\", "/")
-	return is_trueish(str_contains("/" + normalized + "/", "/../"))
+	return is_trueish(str_contains("/" + to_string(path) + "/", "/../"))
 }
 
 func path_is_symlink_safe(path) {

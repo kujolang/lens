@@ -47,8 +47,8 @@ from src.redact import redact_text, redact_finding, redact_check_results
 from src.redact import redact_console_message, redact_network_event, redact_dom_summary, redact_accessibility_scans, redact_value
 from src.checks import new_check_result, new_finding, add_finding, worst_severity
 from src.checks import count_findings_by_severity, check_page_load, check_capture_limits
-from src.provider import provider_failed, redacted_bridge_command_for_display, parse_provider_output
-from src.visual import copy_file_binary, baseline_dir_for_check, baseline_dir_for_flow
+from src.provider import provider_failed, redacted_bridge_command_for_display, parse_provider_output, parse_browser_result
+from src.visual import copy_file_binary, baseline_dir_for_check, baseline_dir_for_flow, save_baselines, compare_baselines, baseline_matches_url
 from src.accessibility import check_accessibility
 from src.report import generate_markdown_report, generate_json_report
 # Exit code constants (must be defined locally; Kujo from-import
@@ -1111,12 +1111,12 @@ func test_generate_walkthrough_html() {
 
 func test_write_ledger_record_appends() {
 	path := "/tmp/lens-test-ledger.jsonl"
-	if is_trueish(file_exists(path)) { delete_file(path) }
+	write_file(path, "{\"legacy\":true}", true)
 	counts := { "critical": 0, "error": 1, "warning": 0, "info": 2 }
 	write_ledger_record(path, "0.7.0", "http://localhost:3000", "FAIL", 1, "t0", "t1", 1234, counts)
 	write_ledger_record(path, "0.7.0", "http://localhost:3000", "PASS", 0, "t2", "t3", 1000, { "critical": 0, "error": 0, "warning": 0, "info": 0 })
 	content := read_file(path)
-	# Two JSONL lines (two trailing newlines → splitting yields content).
+	check(is_trueish(starts_with(content, "{\"legacy\":true}\n")), "ledger: repairs a missing final newline without replacing history")
 	check(is_trueish(contains(content, "FAIL")), "ledger: first record present")
 	check(is_trueish(contains(content, "PASS")), "ledger: second record appended")
 	check(is_trueish(contains(content, "schema_version")), "ledger: schema field present")
@@ -1568,6 +1568,12 @@ func test_parse_provider_output_accepts_object() {
 	check_eq(len(result["viewports"]), 0, "provider parse: object fields preserved")
 }
 
+func test_parse_browser_result_rejects_truncation() {
+	result := parse_browser_result("{\"viewports\":[]}", true)
+	check_eq(result["exit_code"], 3, "browser transport: truncation is authoritative")
+	check(is_trueish(contains(result["message"], "16 MiB")), "browser transport: truncation identifies the evidence limit")
+}
+
 # ── Auth storage-state boundary ─────────────────────────────────────
 
 func test_validate_auth_storage_state() {
@@ -1647,6 +1653,9 @@ func test_validate_write_paths() {
 		"howl": ""
 	})
 	check(collision["valid"] == false, "write paths: colliding direct outputs are rejected")
+	aliased := validate_config_write_paths({ "eval_out": "./lens-shared.json", "ledger": os_getcwd() + "//lens-shared.json" })
+	check_eq(aliased["valid"], false, "write paths: relative and absolute aliases cannot use the same file")
+	check_eq(validate_directory_write_path(os_getcwd() + "/.", "--out")["valid"], false, "write paths: absolute working directory alias is rejected")
 }
 
 # ── Page-load classification ─────────────────────────────────────────
@@ -1744,6 +1753,33 @@ func test_copy_file_binary() {
 	check(missing == false, "copy_file_binary: false when source missing")
 }
 
+func test_visual_ignores_screenshot_from_previous_run() {
+	temp := spawn_process(array("mktemp", "-d"))
+	root := trim(to_string(temp.stdout))
+	create_dir(root + "/screenshots")
+	create_dir(root + "/baseline")
+	write_file(root + "/screenshots/desktop.png", "stale screenshot")
+	write_file(root + "/baseline/desktop.png", "existing baseline")
+	viewports := array({ "name": "desktop", "screenshot": "" })
+	saved := save_baselines({ "update_baseline": true }, root, viewports, root + "/baseline")
+	check_eq(len(saved), 0, "visual baseline: failed capture cannot replace baseline with stale screenshot")
+	check_eq(read_file(root + "/baseline/desktop.png"), "existing baseline", "visual baseline: existing content retained")
+	compared := compare_baselines({}, root, viewports, root + "/baseline")
+	check_eq(compared[0]["status"], "error", "visual compare: stale screenshot cannot produce a verdict")
+	check_eq(compared[0]["diff_path"], "", "visual compare: failed comparison has no diff artifact")
+	check_eq(baseline_matches_url(root + "/baseline", "http://localhost/a/b"), true, "visual baseline: legacy metadata-less baselines remain supported")
+	write_file(root + "/baseline/baseline-metadata.json", "{\"url\":\"http://localhost/a/b\"}")
+	check_eq(baseline_matches_url(root + "/baseline", "http://localhost/a/b"), true, "visual baseline: existing URL identity matches")
+	check_eq(baseline_matches_url(root + "/baseline", "http://localhost/a_b"), false, "visual baseline: equal sanitized paths cannot share a baseline")
+	delete_file(root + "/baseline/baseline-metadata.json")
+	delete_file(root + "/baseline/desktop.png")
+	delete_file(root + "/screenshots/desktop.png")
+	os_rmdir(root + "/baseline")
+	os_rmdir(root + "/screenshots")
+	os_rmdir(root + "/diffs")
+	os_rmdir(root)
+}
+
 func test_visual_baseline_paths_redact_secrets() {
 	check_path := baseline_dir_for_check({
 		"baseline_dir": "/tmp/lens-baselines",
@@ -1777,6 +1813,7 @@ test_provider_failed_empty_viewports()
 test_parse_provider_output_rejects_malformed_json()
 test_parse_provider_output_rejects_non_object()
 test_parse_provider_output_accepts_object()
+test_parse_browser_result_rejects_truncation()
 test_validate_auth_storage_state()
 test_validate_write_paths()
 test_check_page_load_partial_error()
@@ -1786,6 +1823,7 @@ test_check_capture_limits()
 test_a11y_engine_unavailable_is_skipped()
 test_a11y_real_violation_fails()
 test_copy_file_binary()
+test_visual_ignores_screenshot_from_previous_run()
 test_visual_baseline_paths_redact_secrets()
 
 # Run all tests.
