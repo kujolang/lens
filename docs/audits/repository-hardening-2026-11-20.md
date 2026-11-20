@@ -31,7 +31,7 @@ available in this directory.
 | H11-06 | P1 | Watch and agent output | A 30-second subprocess ceiling shortened long watch waits. Watch now uses native sleep, with periodic supervisor checks during long waits. Verbose check diagnostics use stderr and successful JSON watch reports omit banners. The suite parses verbose check stdout and consecutive watch receipts. | Fixed |
 | H11-07 | P1 | Destination integrity | `src/validate.kujo` checked trimmed path strings even though writers received the original paths. Direct output aliases and absolute working-directory aliases now share a consistent POSIX path check. Tests verify aliased destinations produce an input error. | Fixed |
 | H11-08 | P1 | Proxy lifecycle | `bridge/network-policy.js` piped interrupted HTTP response bodies without propagating failure downstream. The proxy now closes interrupted responses so clients can report them promptly. A fixture tests disconnect after headers and partial body. | Fixed |
-| H11-09 | P2 | Flow artifact inventory | Walkthroughs were added to the inventory after the reports were serialized. The flow now uses the same condition for creating and listing walkthroughs. E2E checks the recorded flow metadata. | Fixed |
+| H11-09 | P2 | Flow artifact inventory | Walkthroughs were added to the inventory after the reports were serialized. The flow now uses the same condition for creating and listing walkthroughs. E2E checks the recorded flow report. | Fixed |
 
 ## Review coverage
 

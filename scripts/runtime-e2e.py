@@ -137,7 +137,7 @@ def main():
             diff.write_bytes(b'old diff')
             run('check',url+'/trivial?token=PRIVATE_SECRET_123','--compare-baseline','--baseline-dir',str(work/'baselines'),'--out',str(work/'compare'))
             assert all(item['diff_path'] == '' for item in json.loads((work/'compare/visual-diffs.json').read_text()))
-            assert 'diffs/desktop.diff.png' not in (work/'compare/metadata.json').read_text()
+            assert not any(str(item).endswith('diffs/desktop.diff.png') for item in json.loads((work/'compare/lens-report.json').read_text())['artifacts'])
             passed+=1
             run('check',url+'/many-links','--quick','--crawl','--max-pages','10','--out',str(work/'crawl'))
             crawl=json.loads((work/'crawl/crawl.json').read_text())
@@ -198,7 +198,7 @@ def main():
             if shutil.which('ffmpeg'):
                 assert (work/'flow/video/walkthrough.mp4').stat().st_size>0
             assert (work/'flow/walkthrough.html').stat().st_size>0
-            assert 'walkthrough.html' in json.loads((work/'flow/metadata.json').read_text())['artifacts']
+            assert 'walkthrough.html' in json.loads((work/'flow/lens-report.json').read_text())['artifacts']
             assert not (work/'flow/flow-program.json').exists()
             passed+=1
             overflow_flow = work/'overflow-flow.json'
