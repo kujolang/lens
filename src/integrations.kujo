@@ -5,7 +5,7 @@
 # These never include unredacted data — they consume already-redacted summary
 # values (status, counts, redacted URL).
 
-from src.common import is_trueish, is_falseish, str_ends_with
+from src.common import is_trueish, is_falseish, str_ends_with, str_trim
 
 # Append a RunLedger-compatible record (Phase 3.3).
 #
@@ -63,9 +63,23 @@ export func write_howl_summary(path, tool_version, redacted_url, status, exit_co
 		"findings": counts,
 		"report": report_path
 	}
+	return write_direct_artifact(path, to_json(summary))
+}
+
+# Use a short staging name for caller-selected filenames. Kujo's atomic writer
+# incorporates the target basename into its temporary name, which can exceed
+# the filesystem's limit even when the requested basename is valid.
+export func write_direct_artifact(path, contents) {
+	mut parent := dirname(path)
+	if parent == "" { parent = "." }
+	temp := spawn_process(array("mktemp", parent + "/.lens-artifact.XXXXXXXX"))
+	if is_falseish(temp.success) { return false }
+	staged := str_trim(to_string(temp.stdout))
 	try {
-		return write_file_atomic(path, to_json(summary), true)
+		write_file_atomic(staged, contents, true)
+		return rename_file(staged, path)
 	} except e {
+		delete_file(staged)
 		return false
 	}
 }

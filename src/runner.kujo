@@ -18,7 +18,7 @@ from src.visual import save_baselines, compare_baselines, visual_results_to_find
 from src.accessibility import check_accessibility, is_a11y_enabled
 from src.crawl import run_crawl
 from src.report_html import generate_html_report, generate_walkthrough_html
-from src.integrations import write_ledger_record, write_howl_summary
+from src.integrations import write_ledger_record, write_howl_summary, write_direct_artifact
 from src.flow_exec import build_program_step, run_flow_bridge
 
 LENS_VERSION := lens_version()
@@ -654,7 +654,10 @@ export func run(argv) {
 	if eval_out_path != "" {
 		# Spec results are already included in check_results.
 		eval_json := generate_eval_output(config, meta, check_results, array())
-		if is_falseish(write_artifact(eval_out_path, eval_json)) { return EXIT_ARTIFACT_FAIL }
+		if is_falseish(write_direct_artifact(eval_out_path, eval_json)) {
+			print_lens_error("failed to write Eval output to " + eval_out_path)
+			return EXIT_ARTIFACT_FAIL
+		}
 	}
 
 	# ── Phase 3.3 / 3.4: ecosystem integrations (opt-in) ───────────
@@ -1084,7 +1087,10 @@ func finalize_flow_run(config, flow, step_results_in, provider_ok, provider_view
 			},
 			"results": step_results
 		})
-		if is_falseish(write_artifact(eval_out_path, eval_json)) { return EXIT_ARTIFACT_FAIL }
+		if is_falseish(write_direct_artifact(eval_out_path, eval_json)) {
+			print_lens_error("failed to write Eval output to " + eval_out_path)
+			return EXIT_ARTIFACT_FAIL
+		}
 	}
 	
 	# Terminal output

@@ -108,6 +108,11 @@ def main():
             assert json.loads(large.stdout)['status'] == 'PASS'
             assert 'Running browser bridge' in large.stderr
             passed+=1
+            long_howl = work / ('h' * 230 + '.json')
+            long_eval = work / ('e' * 230 + '.json')
+            run('check',url+'/trivial','--quick','--howl',str(long_howl),'--eval-out',str(long_eval),'--out',str(work/'long-artifacts'))
+            assert json.loads(long_howl.read_text())['status'] == 'PASS'
+            assert json.loads(long_eval.read_text())['status'] == 'PASS'
             failed_artifact = work/'failed-artifact'
             (failed_artifact/'metrics.json').mkdir(parents=True)
             result = run('check',url+'/trivial','--quick','--perf','--out',str(failed_artifact),allowed=(4,))
