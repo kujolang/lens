@@ -17,7 +17,7 @@
  */
 
 const { Timings, launchBrowser, closeContext, withDeadline } = require('./runtime');
-const { pushBounded, evaluateBounded, finishEvidence, stringifyResult } = require('./evidence');
+const { pushBounded, evaluateBounded, finishEvidence, serializeResult } = require('./evidence');
 const { createContext } = require('./network-policy');
 const { observeReadiness } = require('./readiness');
 const fs = require('fs');
@@ -293,7 +293,9 @@ async function main() {
   const opts = parseArgs();
   if (!opts.program) throw new Error("Program is required");
   const program = JSON.parse(fs.readFileSync(opts.program === "-" ? 0 : opts.program, "utf8"));
-  process.stdout.write(stringifyResult(await runFlow(program, opts)));
+  const { json, exceeded } = serializeResult(await runFlow(program, opts));
+  process.stdout.write(json);
+  if (exceeded) process.exitCode = 1;
 }
 
 if (require.main === module) {

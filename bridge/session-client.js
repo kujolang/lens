@@ -1,5 +1,6 @@
 'use strict';
 const net = require('node:net');
+const { RESULT_BYTES } = require('./evidence');
 
 // A private, session-owned Unix socket; no auth state or job bodies on disk.
 function captureInSession(opts) {
@@ -11,10 +12,11 @@ function captureInSession(opts) {
     const fail = () => { socket.destroy(); reject(new Error('Browser session unavailable')); };
     socket.setTimeout(180000, fail);
     socket.on('error', fail);
+    socket.on('close', () => reject(new Error('Browser session unavailable')));
     socket.on('connect', () => socket.write(JSON.stringify(opts) + '\n'));
     socket.on('data', chunk => {
       bytes += Buffer.byteLength(chunk);
-      if (bytes > 64 * 1024 * 1024) return fail();
+      if (bytes > RESULT_BYTES) return fail();
       data += chunk;
     });
     socket.on('end', () => {

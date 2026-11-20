@@ -102,3 +102,9 @@ export func format_timestamp_dir(ts_secs) {
 	}
 	return result
 }
+
+# Match the browser bridge's bounded JSON result size. Kujo's generic child
+# process default is smaller than valid multi-viewport and flow evidence.
+export func browser_result_max_bytes() {
+	return 16 * 1024 * 1024
+}

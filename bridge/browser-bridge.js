@@ -20,7 +20,7 @@
  */
 
 const { Timings, launchBrowser, closeContext, withDeadline } = require('./runtime');
-const { pushBounded, evaluateBounded, finishEvidence, stringifyResult } = require('./evidence');
+const { pushBounded, evaluateBounded, finishEvidence, serializeResult } = require('./evidence');
 const { createContext } = require('./network-policy');
 const { observeReadiness } = require('./readiness');
 const path = require('path');
@@ -709,9 +709,10 @@ async function main() {
       metadata: { failure_kind: 'browser-session' },
     }))
     : await capture(opts);
-  process.stdout.write(stringifyResult(result));
+  const { json, exceeded } = serializeResult(result);
+  process.stdout.write(json);
   const usable = result.viewports.some(v => v && (v.dom_summary || v.screenshot || !v.navigation_error));
-  process.exitCode = usable ? 0 : 1;
+  process.exitCode = usable && !exceeded ? 0 : 1;
 }
 
 // Only drive a browser when invoked directly as a CLI. When required as a

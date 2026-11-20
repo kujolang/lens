@@ -6,7 +6,7 @@ const net = require('node:net');
 const { createHash } = require('node:crypto');
 const { destination, createNetworkPolicy, createContext } = require('../network-policy');
 const { launchBrowser } = require('../runtime');
-const { boundEvidence, pushBounded, collectionStats, stringifyResult, OMITTED, COLLECTION_BYTES } = require('../evidence');
+const { boundEvidence, pushBounded, collectionStats, serializeResult, OMITTED, COLLECTION_BYTES } = require('../evidence');
 
 async function listen(server, host = '127.0.0.1') {
   await new Promise(resolve => server.listen(0, host, resolve));
@@ -31,6 +31,34 @@ test('proxy rejects an external CONNECT before any socket and cleans up idle con
     assert.match(data, /403/); assert.equal(policy.stats.blocked_requests, 1);
   } finally { socket.destroy(); await policy.close(); }
 });
+test('proxy closes the downstream response when an upstream body is interrupted', { timeout: 5000 }, async () => {
+  let upstreamResponse;
+  const source = http.createServer((_, res) => {
+    upstreamResponse = res;
+    res.writeHead(200, { 'Content-Length': 10 });
+    res.write('partial');
+  });
+  const targetPort = await listen(source);
+  const policy = await createNetworkPolicy();
+  try {
+    const proxy = new URL(policy.proxy.server);
+    await new Promise((resolve, reject) => {
+      const request = http.get({ host: proxy.hostname, port: proxy.port, path: `http://127.0.0.1:${targetPort}/` }, response => {
+        response.once('data', () => upstreamResponse.destroy());
+        response.once('error', error => {
+          if (error.code === 'ECONNRESET') resolve(); else reject(error);
+        });
+        response.once('end', () => reject(new Error('Truncated upstream body was treated as complete')));
+      });
+      request.once('error', reject);
+      request.setTimeout(3000, () => request.destroy(new Error('Proxy did not close the interrupted response')));
+    });
+  } finally {
+    await policy.close();
+    await new Promise(resolve => source.close(resolve));
+  }
+});
+
 test('evidence bounds omit whole Unicode credentials, reject oversized links, and cap collection bytes', () => {
   const secret = '🔑'.repeat(5000);
   const bound = boundEvidence({ value: secret, normal: 'hello', links: [{href:secret,text:'x'}] });
@@ -39,7 +67,12 @@ test('evidence bounds omit whole Unicode credentials, reject oversized links, an
   for(let i=0;i<1000;i++) pushBounded(items,{text:'x'.repeat(15000)},1000);
   assert.ok(Buffer.byteLength(JSON.stringify(items)) <= COLLECTION_BYTES);
   assert.ok(collectionStats(items).omitted_items > 0);
-  assert.throws(()=>stringifyResult({text:'x'.repeat(17*1024*1024)}), /16 MiB/);
+  const oversized = serializeResult({ text: 'x'.repeat(17 * 1024 * 1024) });
+  assert.equal(oversized.exceeded, true);
+  const failure = JSON.parse(oversized.json);
+  assert.match(failure.message, /16 MiB/);
+  assert.deepEqual(failure.provider_errors, [failure.message]);
+  assert.deepEqual(failure.viewports, []);
 });
 
 // The trailing-dot localhost spelling is deliberately outside Lens's

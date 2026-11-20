@@ -13,7 +13,7 @@
  */
 
 const { Timings, launchBrowser, withDeadline, closeContext } = require('./runtime');
-const { evaluateBounded, finishEvidence, stringifyResult } = require('./evidence');
+const { evaluateBounded, finishEvidence, serializeResult } = require('./evidence');
 const { createContext } = require('./network-policy');
 const { observeReadiness } = require('./readiness');
 
@@ -133,8 +133,9 @@ async function main() {
   if (context?.networkPolicy?.blocked_requests) result.error = 'Browser destination policy blocked a request.';
   result.timings = timings.finish();
   result.finished_at = nowISO();
-  process.stdout.write(stringifyResult(finishEvidence(result, page)));
-  process.exitCode = result.elements.length > 0 || !result.error ? 0 : 1;
+  const { json, exceeded } = serializeResult(finishEvidence(result, page));
+  process.stdout.write(json);
+  process.exitCode = !exceeded && (result.elements.length > 0 || !result.error) ? 0 : 1;
 }
 
 if (require.main === module) {

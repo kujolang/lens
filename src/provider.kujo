@@ -14,7 +14,7 @@
 #   provider_errors (array of error strings),
 #   metadata (bridge info)
 
-from src.common import is_trueish, is_falseish, str_trim, str_starts_with
+from src.common import is_trueish, is_falseish, str_trim, str_starts_with, browser_result_max_bytes
 from src.redact import redact_text, redact_url
 
 # Maximum number of times to invoke the bridge when it produces no output
@@ -117,7 +117,10 @@ export func run_provider(url, config, out_dir) {
 	while attempt <= PROVIDER_MAX_ATTEMPTS {
 		# Raise spawn_process's default 30s kill ceiling: a multi-viewport capture
 		# of a heavy real site can exceed it. Per-page timeouts still apply.
-		result := spawn_process(bridge_args, { "timeout_ms": 180000 })
+		result := spawn_process(bridge_args, { "timeout_ms": 180000, "max_output_bytes": browser_result_max_bytes() })
+		if is_trueish(result.stdout_truncated) {
+			return parse_browser_result("", result.stdout_truncated)
+		}
 		bridge_output = str_trim(to_string(result.stdout))
 		if bridge_output != "" {
 			attempt = PROVIDER_MAX_ATTEMPTS + 1
@@ -151,6 +154,19 @@ export func run_provider(url, config, out_dir) {
 # process output must become the documented browser-provider failure (exit 3),
 # not an uncaught VM parse error. Raw output is intentionally not echoed because
 # it can contain page-controlled data.
+export func parse_browser_result(output, truncated) {
+	if is_trueish(truncated) {
+		return {
+			"error": true,
+			"exit_code": 3,
+			"message": "Browser bridge output exceeded the 16 MiB evidence limit.",
+			"provider_errors": array("Browser bridge output exceeded the 16 MiB evidence limit."),
+			"viewports": array()
+		}
+	}
+	return parse_provider_output(str_trim(to_string(output)))
+}
+
 export func parse_provider_output(bridge_output) {
 	mut parsed := {}
 	try {
@@ -229,7 +245,7 @@ export func redacted_bridge_command_for_display(args) {
 
 # Print a verbose Lens status line.
 func print_lens_info(message) {
-	print("[lens] " + to_string(message))
+	eprint("[lens] " + to_string(message))
 }
 
 # Build a comma-separated viewports string from config array.

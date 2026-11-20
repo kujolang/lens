@@ -53,12 +53,16 @@ function pushBounded(items, value, limit) {
   state.bytes += size; items.push(bounded.value); return true;
 }
 function collectionStats(items) { return collections.get(items) || { omitted_strings: 0, omitted_items: 0 }; }
-function stringifyResult(result) {
+function serializeResult(result) {
   const json = JSON.stringify(result);
-  if (Buffer.byteLength(json) > RESULT_BYTES) throw new Error('Lens result exceeds the 16 MiB evidence limit; reduce the capture scope.');
-  return json;
+  if (Buffer.byteLength(json) <= RESULT_BYTES) return { json, exceeded: false };
+  const message = 'Lens result exceeds the 16 MiB evidence limit; reduce the capture scope.';
+  return {
+    json: JSON.stringify({ error: message, message, viewports: [], provider_errors: [message] }),
+    exceeded: true,
+  };
 }
-module.exports = { STRING_BYTES, COLLECTION_BYTES, RESULT_BYTES, OMITTED, boundEvidence, pushBounded, collectionStats, stringifyResult };
+module.exports = { STRING_BYTES, COLLECTION_BYTES, RESULT_BYTES, OMITTED, boundEvidence, pushBounded, collectionStats, serializeResult };
 
 async function evaluateBounded(page, collector, argument) {
   // Only repository-owned function source is compiled; page data is passed as

@@ -51,10 +51,15 @@ async function createNetworkPolicy() {
     delete headers['proxy-authorization']; delete headers['proxy-connection'];
     const upstream = http.request({ ...connectionOptions(target), path: target.path, method: req.method, headers, agent: false }, response => {
       res.writeHead(response.statusCode, response.statusMessage, response.headers);
+      response.once('error', () => res.destroy());
       response.pipe(res);
     });
     upstream.on('socket', track);
-    upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
+    upstream.on('error', () => {
+      if (res.headersSent) return res.destroy();
+      res.writeHead(502);
+      res.end();
+    });
     req.on('aborted', () => upstream.destroy());
     res.on('close', () => upstream.destroy());
     req.pipe(upstream);

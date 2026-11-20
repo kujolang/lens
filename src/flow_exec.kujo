@@ -8,7 +8,8 @@
 # This module never decides safety — it only executes what it is given. The
 # caller (runner.run_flow) is responsible for safety gating.
 
-from src.common import is_trueish, is_falseish
+from src.common import is_trueish, is_falseish, browser_result_max_bytes
+from src.provider import parse_browser_result
 from src.flow import get_step_type, get_step_value, get_step_dict
 
 # Build a program step dict for the bridge from a flow step, or null if the
@@ -102,7 +103,7 @@ export func run_flow_bridge(program, out_dir) {
 	# ceiling. Per-step Playwright timeouts still bound individual actions.
 	mut res := {}
 	try {
-		res = spawn_process(args, { "timeout_ms": 300000, "stdin": to_json(program) })
+		res = spawn_process(args, { "timeout_ms": 300000, "max_output_bytes": browser_result_max_bytes(), "stdin": to_json(program) })
 	} except e {
 		return { "error": true, "message": "Flow bridge could not start using private input (Kujo >=1.2.3 required)." }
 	}
@@ -114,16 +115,7 @@ export func run_flow_bridge(program, out_dir) {
 	if is_trueish(str_blank(out)) {
 		return { "error": true, "message": "Flow bridge produced no structured output." }
 	}
-	mut parsed := {}
-	try {
-		parsed = parse_json(out)
-	} except e {
-		return { "error": true, "message": "Flow bridge returned malformed JSON." }
-	}
-	if is_falseish(is_dict(parsed)) {
-		return { "error": true, "message": "Flow bridge returned an invalid result shape." }
-	}
-	return parsed
+	return parse_browser_result(out, res.stdout_truncated)
 }
 
 func str_blank(s) {
