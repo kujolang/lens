@@ -3,15 +3,16 @@
 Lens runs deterministic browser QA, flows, and visual comparisons for humans and
 agents. The review covered `kujolang/lens` on `main` from
 `91049646d70c11bf0c6071f39cf7dfac6b1ba70b` through code commit
-`87696f675558fd928588db8f4bbf724b4f511980`. The main boundaries are the
+`ed4070c32bf1d19524bcdc7f0d630e238f980e81`. The main boundaries are the
 Kujo CLI, Node and Playwright browser bridges, Python image comparison, and
 local filesystem artifacts. Integration consumers include Spec, Eval,
 RunLedger, Howl, and the GitHub composite action.
 
 ## Baseline and scope
 
-The starting tree contained an untracked investor-deck QA output directory,
-which was excluded from the review. The starting code passed 534 Kujo
+The starting tree contained an untracked investor-deck QA output directory. Its
+files were preserved in place and the generated directory was locally ignored
+through Git’s repository-only exclude file. The starting code passed 534 Kujo
 assertions, 58 Node tests with real Chromium, 18 real CLI E2E groups, two visual
 comparison tests, and four benchmark-harness checks. The npm audit returned
 zero known production advisories. The baseline benchmark ran from a Git
@@ -29,7 +30,7 @@ available in this directory.
 | H11-04 | P0 | Visual integrity | `src/visual.kujo` looked up screenshots by existence and supplied a diff path even when Python produced no current diff. Failed captures can no longer consume old PNGs. Only current diff paths reach the artifact inventory. Baseline replacements stage the new PNG before renaming, and identifiable baselines cannot be reused for a different redacted URL. Tests cover stale evidence, historical metadata compatibility, and identity collisions. | Fixed |
 | H11-05 | P1 | RunLedger | `src/integrations.kujo` rewrote the entire ledger for every record, and the runner logged success even when the size guard rejected the write. Native append preserves existing bytes and retains legacy newline repair and the 8 MiB budget. The caller now returns exit 4 on failure. | Fixed |
 | H11-06 | P1 | Watch and agent output | A 30-second subprocess ceiling shortened long watch waits. Watch now uses native sleep, with periodic supervisor checks during long waits. Verbose check diagnostics use stderr and successful JSON watch reports omit banners. The suite parses verbose check stdout and consecutive watch receipts. | Fixed |
-| H11-07 | P1 | Destination integrity | `src/validate.kujo` checked trimmed path strings even though writers received the original paths. Direct output aliases and absolute working-directory aliases now share a consistent POSIX path check. Tests verify aliased destinations produce an input error. | Fixed |
+| H11-07 | P1 | Destination integrity | `src/validate.kujo` checked trimmed path strings even though writers received the original paths. Direct output aliases and absolute working-directory aliases now share a consistent POSIX path check. Integration destinations cannot replace reserved run artifacts. Tests cover aliases, a protected report path, and a separate integration file under the run root. | Fixed |
 | H11-08 | P1 | Proxy lifecycle | `bridge/network-policy.js` piped interrupted HTTP response bodies without propagating failure downstream. The proxy now closes interrupted responses so clients can report them promptly. A fixture tests disconnect after headers and partial body. | Fixed |
 | H11-09 | P2 | Flow artifact inventory | Walkthroughs were added to the inventory after the reports were serialized. The flow now uses the same condition for creating and listing walkthroughs. E2E checks the recorded flow report. | Fixed |
 
@@ -77,14 +78,16 @@ comparison dependencies still apply.
 
 | Command | Result |
 |---|---|
-| `kujo run tests/lens_tests.kujo` and `../kujo/target/release/kujo run tests/lens_tests.kujo` | 546 passed on each runtime, Kujo 1.5.0 and 1.9.0 |
+| `kujo run tests/lens_tests.kujo` and `../kujo/target/release/kujo run tests/lens_tests.kujo` | 549 passed on each runtime, Kujo 1.5.0 and 1.9.0 |
 | `npm test --prefix bridge` | 59 passed on Node 26.12.1 with real Chromium |
+| Node 22.23.4 `node --test bridge/test/*.test.js` | 59 passed with real Chromium |
 | `LENS_SKIP_BROWSER_TESTS=1 node --test bridge/test/*.test.js` | 35 passed and 8 browser groups skipped on each of Node 22.23.4 and 24.22.1 |
 | `KUJO_BIN="$(command -v kujo)" python3 scripts/runtime-e2e.py` | 21 passed with real Chromium |
 | `python3 scripts/test-visual-diff.py` and `python3 scripts/test-benchmark-harness.py` | Two and four passed |
 | `kujo check lens.kujo`, `kujo check` on each `src/*.kujo` and `tests/lens_tests.kujo`, and `kujo lint lens.kujo` | Passed |
 | `node --check` on bridge sources/tests, `bash -n` on the wrapper/bench/artifact guard, and `python3 -m py_compile scripts/*.py bridge/visual-diff.py` | Passed |
 | `npm audit --prefix bridge --omit=dev --json` | Zero known advisories |
+| `./lens check http://localhost:9 --out <run> --eval-out <run>/lens-report.json` | Exit 2 before capture |
 | `git diff --check` and repository artifact guard on the audit commit range | Passed |
 
 ## Performance and efficiency
@@ -94,27 +97,26 @@ on macOS x86_64. Baseline and candidate medians are in seconds.
 
 | Workload | Before | After |
 |---|---:|---:|
-| bridge trivial | 2.360 | 1.954 |
-| bridge realistic | 2.664 | 2.189 |
-| cli trivial | 4.047 | 3.109 |
-| cli realistic | 3.591 | 3.389 |
-| quick trivial | 2.619 | 2.536 |
-| quick realistic | 3.257 | 2.788 |
-| quick spa | 2.454 | 2.540 |
-| quick image heavy | 2.706 | 2.775 |
-| quick late network | 2.983 | 3.141 |
-| quick many links | 3.153 | 2.648 |
+| bridge trivial | 2.360 | 1.899 |
+| bridge realistic | 2.664 | 2.149 |
+| cli trivial | 4.047 | 2.958 |
+| cli realistic | 3.591 | 3.232 |
+| quick trivial | 2.619 | 2.407 |
+| quick realistic | 3.257 | 2.703 |
+| quick spa | 2.454 | 2.422 |
+| quick image heavy | 2.706 | 2.620 |
+| quick late network | 2.983 | 3.035 |
+| quick many links | 3.153 | 2.515 |
 
 The same 20% threshold used by the performance workflow passed. The largest
-increase was 5.3% on quick late-network. The two separate runs capture host
-variation as well as any code effect, so these medians do not establish a
-speedup. Direct artifact name staging landed after the measured code
-snapshot, and none of these command profiles writes direct integrations.
+increase was 1.7% on quick late-network. These separate runs include host
+variation, which prevents attributing the lower medians to the code changes.
 
-Baseline command: `LENS_BENCH_TARGET_ROOT=<baseline-checkout> scripts/bench.sh 3 <before.json>`.
-Candidate command: `scripts/bench.sh 3 <after.json>`.
-Both used `KUJO_BIN` set to Kujo 1.5.0 and `LENS_BENCH_PORT=19283`.
-Comparison: `python3 scripts/compare-benchmarks.py <before.json> <after.json> --threshold-percent 20`.
+The baseline ran `LENS_BENCH_TARGET_ROOT=<baseline-checkout> scripts/bench.sh 3 <before.json>`.
+The candidate ran `scripts/bench.sh 3 <after.json>`. Both set `KUJO_BIN` to
+Kujo 1.5.0 and `LENS_BENCH_PORT=19283`.
+The comparison used
+`python3 scripts/compare-benchmarks.py <before.json> <after.json> --threshold-percent 20`.
 
 The ledger write now scales with the new record, while newline repair still
 reads existing history within the size cap. The browser transport test
