@@ -84,7 +84,7 @@ cd /path/to/lens
 ./lens check http://localhost:3000
 ```
 
-> **Prerequisites:** the [Kujo](https://github.com/kujolang/kujo) runtime ≥1.2.3, Node.js ≥18, and bash.
+> **Prerequisites:** Kujo 1.4.0 or later, a supported [Node.js release](bridge/package.json), and bash.
 >
 > New to Lens? The [**Getting Started guide**](docs/getting-started.md) walks you
 > from a clean machine to your first report and the test suite, step by step.

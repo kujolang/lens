@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Require Kujo 1.4.0 for isolated imports. Resolve browser and visual helpers
+  from the installation while retaining the calling project's paths.
+- Bound authentication and flow inputs, nested browser evidence, and private
+  browser-session connections. Apply context deadlines to external opt-in runs.
 - Preserve bounded browser evidence across the Kujo subprocess boundary and
   report over-limit results without repeating the capture.
 - Publish run artifacts atomically and return exit 4 when structured artifacts, baselines,

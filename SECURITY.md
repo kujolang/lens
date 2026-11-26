@@ -27,14 +27,18 @@ surface. Key guarantees:
 - **Never stored at all:** request/response bodies, cookies, and auth headers.
   The network capture is a strict whitelist.
 - **Typed-input safety.** Values typed in a flow (e.g. credentials) are redacted
-  to `[REDACTED]` in `flow.json`; the internal program is supplied through private, unlinked stdin storage. Lens reads `--auth-file` only to
-  validate the Playwright storage-state envelope, then passes the path to the
-  browser; contents and parse details are never logged or written by Lens.
+  to `[REDACTED]` in `flow.json`. The internal program arrives through private,
+  unlinked stdin storage. The bridge reads authentication state once from a
+  bounded regular file and passes the validated object to Playwright. Lens
+  keeps the file contents and parse details out of diagnostics and artifacts.
 - **Verbose logs are sanitized.** `--verbose` keeps diagnostic bridge-command
   output useful while redacting secret-bearing URLs and masking `--auth-file`
   paths.
 - **CI inputs are data, not shell code.** The composite Action passes inputs via
   environment variables and tokenizes extra arguments without shell evaluation.
+- **Installed code resolution.** The launcher isolates Kujo module resolution
+  and starts browser and visual helpers from its installation. Relative project
+  configuration and output still use the caller's working directory.
 - **Write destinations are validated.** Lens refuses root/current-directory
   artifact targets, final-target symlinks, file/directory type mismatches,
   missing parents for direct files, and duplicate Eval/RunLedger/Howl paths.
@@ -62,9 +66,9 @@ restricted runs, or explicitly enable external access for trusted WebKit runs.
 This is an HTTP(S)/WebSocket policy, **not an OS sandbox**: it does not isolate
 hostile browser code, WebRTC/UDP, local processes or browser vulnerabilities.
 
-Evidence strings above 16 KiB are omitted whole, not cut into potentially
-identifiable credential prefixes. Captured arrays are bounded to 1 MiB and
-bridge results above 16 MiB fail explicitly. Omissions set `byte_limit_reached`
+Evidence strings above 16 KiB are omitted whole. Captured dictionaries and
+arrays share a byte budget, and bridge results above 16 MiB fail explicitly.
+Omissions set `byte_limit_reached`
 and produce a warning (inspect exits 1). These limits bound retained and
 projected evidence, not the page's own heap or browser-protocol event buffers.
 
@@ -92,7 +96,8 @@ executing unintended actions are in scope and very welcome.
 
 Unconfigured single checks use one-shot browsers. Crawl/watch and configuration-driven
 checks use a session with a user-only Unix socket directory (0700; socket 0600)
-and at most one browser process. The socket accepts observation jobs only; Kujo
+and at most one browser process. The socket accepts up to 32 connections and
+1 MiB per observation request. Kujo
 continues to gate URLs and redact evidence. Contexts, cookies and storage are
 never reused across captures. Requests and responses are bounded in memory,
 not logged or persisted. Browser crashes are not replayed; later jobs may start

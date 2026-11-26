@@ -72,8 +72,7 @@ Lens integrates with the ecosystem through:
 
 ### Prerequisites
 
-- **Kujo** runtime — built from `/2026/kujo` (`cargo build` produces
-  `kujo`)
+- **Kujo** runtime 1.4.0 or later for isolated imports and private flow input
 - **Node.js** 22.23.4+, 24.22.1+, or 26.12.1+ — required for the Playwright browser bridge
 - **bash** — for the `lens` shell wrapper
 
@@ -335,7 +334,7 @@ Action inputs are passed through environment variables rather than interpolated
 into the shell program. The free-form `args` input is tokenized without shell
 evaluation, so quoted values remain usable and command substitutions are inert.
 
-CI also runs the bridge on Linux and macOS with Node 18/20/22, verifies each
+CI also runs the bridge on Linux and macOS with the pinned Node target, verifies each
 Playwright engine and its missing-engine exit-3 behavior, and exercises the full
 fixture-backed artifact surface. The separate performance workflow runs only
 manually or for pull requests labeled `performance`.
@@ -1360,10 +1359,16 @@ secret redaction across artifacts, reports, and verbose bridge logs.
 
 ## Browser runtime readiness and lifecycle
 
-Lens 1.1.0 requires Kujo >=1.2.3 for private process stdin. The pinned browser
-runtime is Playwright Core 1.61.1 with Node >=18. The default browser
+The launcher requires Kujo 1.4.0 or later for isolated imports and private
+process input. The pinned Playwright Core is 1.61.1 and the supported Node
+releases are recorded in `bridge/package.json`. The default browser
 installation is `playwright-core install chromium --only-shell`. Firefox and
 WebKit remain separate installations; throttling remains Chromium-only.
+
+Use the launcher for projects outside the Lens checkout. From a trusted Lens
+checkout, the direct command is `kujo run lens.kujo --isolated-imports -- ...`.
+Lens reads authentication state and flow programs from bounded inputs of up to
+8 MiB, and opens only regular files for file inputs.
 
 After the navigation `load` milestone, Lens observes DOM mutations and network
 requests. Readiness requires a 250ms quiet window with no pending requests and

@@ -14,7 +14,7 @@ You need three things before installing Lens:
 
 | Tool | Why | Check |
 |------|-----|-------|
-| [Kujo](https://github.com/kujolang/kujo) runtime | Lens requires Kujo >=1.2.3 (private process stdin) | `kujo --version` |
+| [Kujo](https://github.com/kujolang/kujo) runtime | Lens requires Kujo 1.4.0 or later for isolated imports and private process input | `kujo --version` |
 | Node.js 22.23.4+, 24.22.1+, or 26.12.1+ | Drives the headless browser | `node --version` |
 | bash | The `lens` launcher is a bash script | `bash --version` |
 
@@ -232,8 +232,10 @@ npx playwright-core install firefox
 npx playwright-core install webkit
 ```
 
-Kujo >=1.2.3 is required for private flow-program stdin. Node 18 remains supported; `.nvmrc` continues to select Node 20. Do not substitute
-a system Chrome executable for the browser revision installed by Playwright.
+The `.nvmrc` file selects Node 24.22.1. Use the browser revision installed by
+Playwright for reproducible evidence. The `lens` launcher resolves its bridge
+from the installation and keeps relative configuration and output paths in the
+calling project.
 
 Unconfigured single checks stay one-shot. Crawl/watch and configuration-driven
 checks automatically use an owned browser host through `lens`; each capture gets a fresh
