@@ -292,6 +292,27 @@ test('disconnected client retires its active browser job', browserTests, async (
   } finally {socket.destroy();await service.close();fs.rmSync(dir,{recursive:true,force:true});}
 });
 
+test('private session caps idle connections and rejects over-limit requests', { skip: process.platform === 'win32', timeout: 5000 }, async t => {
+  const {serve} = require('../session');
+  const { once } = require('node:events');
+  const net = require('node:net');
+  const dir = fs.mkdtempSync('/tmp/lens-ipc-limits-');
+  const address = path.join(dir, 'runtime.sock');
+  const service = await serve(address);
+  t.after(async () => { await service.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const clients = Array.from({ length: 32 }, () => net.createConnection(address));
+  t.after(() => clients.forEach(client => client.destroy()));
+  await Promise.all(clients.map(client => once(client, 'connect')));
+  const excess = net.createConnection(address);
+  await once(excess, 'close');
+  assert.ok(clients.every(client => !client.destroyed));
+  const closed = once(clients[0], 'close');
+  clients[0].write(Buffer.alloc(1024 * 1024 + 1, 0x20), () => {});
+  clients[0].on('error', () => {});
+  await closed.catch(error => { if (error.code !== 'EPIPE' && error.code !== 'ECONNRESET') throw error; });
+  assert.equal(service.host.launches, 0);
+});
+
 
 test('closing a host during launch closes the late browser', async () => {
   const {BrowserHost} = require('../runtime');
