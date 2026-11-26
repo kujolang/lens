@@ -108,3 +108,15 @@ export func format_timestamp_dir(ts_secs) {
 export func browser_result_max_bytes() {
 	return 16 * 1024 * 1024
 }
+
+# The launcher supplies the actual installation directory while preserving the
+# caller's cwd. Kennel supplies the package's sole module root for its shim.
+export func bridge_asset(name) {
+	root := env("LENS_INSTALL_ROOT")
+	if type(root) == "string" && root != "" { return root + "/bridge/" + name }
+	managed_root := env("KUJO_MODULE_PATH")
+	if type(managed_root) == "string" && managed_root != "" && is_falseish(str_contains(managed_root, ":")) && is_trueish(str_starts_with(managed_root, "/")) {
+		return managed_root + "/bridge/" + name
+	}
+	return "bridge/" + name
+}

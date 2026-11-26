@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 # Lens runs on the Kujo runtime, which lives in a sibling repo (kujolang/kujo).
 # CI checks it out next to this repo, builds the `kujo` binary, and points the
 # test suite at it via KUJO_BIN. If your fork keeps Kujo elsewhere, adjust the
@@ -21,6 +24,8 @@ jobs:
     steps:
       - name: Checkout Lens
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -56,18 +61,20 @@ jobs:
         include:
           - runtime: pinned
             ref: cf785c0a7953717af16b657cda05b85d628144c5
-          - runtime: minimum-1.2.3
-            ref: 39653dc6dd1078dbb5f86545364a4f20ad7da554
+          - runtime: minimum-1.4.0
+            ref: 266a8902068a14c3d17f803bef467dc28f1fe162
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Lens
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          persist-credentials: false
           path: lens
 
       - name: Checkout Kujo runtime
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          persist-credentials: false
           repository: kujolang/kujo
           ref: ${{ matrix.ref }}
           path: kujo
@@ -121,11 +128,13 @@ jobs:
       - name: Checkout Lens
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          persist-credentials: false
           path: lens
 
       - name: Checkout Kujo runtime
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          persist-credentials: false
           repository: kujolang/kujo
           ref: cf785c0a7953717af16b657cda05b85d628144c5
           path: kujo
@@ -258,11 +267,13 @@ jobs:
       - name: Checkout Lens
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          persist-credentials: false
           path: lens
 
       - name: Checkout Kujo runtime
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          persist-credentials: false
           repository: kujolang/kujo
           ref: cf785c0a7953717af16b657cda05b85d628144c5
           path: kujo

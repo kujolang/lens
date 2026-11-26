@@ -71,11 +71,23 @@ def main():
     try:
         with tempfile.TemporaryDirectory(prefix='lens-cli-e2e-') as tmp:
             work=Path(tmp)
-            def run(*args,allowed=(0,)):
-                p=subprocess.run([str(ROOT/'lens'),*args],cwd=ROOT,capture_output=True,text=True,timeout=120)
+            def run(*args,allowed=(0,),cwd=ROOT):
+                p=subprocess.run([str(ROOT/'lens'),*args],cwd=cwd,capture_output=True,text=True,timeout=120)
                 assert p.returncode in allowed, (args[0],p.returncode,p.stdout,p.stderr)
                 assert 'PRIVATE_SECRET_123' not in p.stdout+p.stderr
                 return p
+            project=work/'caller-project'
+            (project/'bridge').mkdir(parents=True)
+            (project/'bridge/browser-bridge.js').write_text('fixture placeholder for a different project')
+            run('check', url+'/trivial', '--quick', '--out', 'reports/out', cwd=project)
+            assert (project/'reports/out/screenshots/desktop.png').is_file()
+            old_runtime=work/'old-runtime'
+            old_runtime.write_text('#!/bin/sh\n[ "$1" = --version ] || exit 77\nprintf "kujo 1.2.3\\n"\n')
+            old_runtime.chmod(0o700)
+            denied=subprocess.run([str(ROOT/'lens'), '--version'], cwd=project,
+                env={**os.environ, 'KUJO_BIN':str(old_runtime)}, capture_output=True, text=True, timeout=10)
+            assert denied.returncode == 2 and 'Kujo 1.4.0 or later' in denied.stderr
+            passed+=1
             for command in ['check', 'inspect']:
                 run(command, url+'/policy-redirect', '--out', str(work/('policy-'+command)), allowed=(1,3))
                 assert Handler.policy_hits == 0

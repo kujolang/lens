@@ -949,8 +949,8 @@ func test_lens_version_consistent() {
 func test_minimum_runtime_consistent() {
 	project_manifest := parse_toml(read_file("kujo.toml"))
 	package_manifest := parse_toml(read_file("kennel.toml"))
-	check_eq(project_manifest["kujo"]["minimum_version"], "1.2.3", "project manifest requires the supported Kujo minimum")
-	check_eq(package_manifest["kujo"]["minimum_version"], "1.2.3", "package manifest requires the supported Kujo minimum")
+	check_eq(project_manifest["kujo"]["minimum_version"], "1.4.0", "project manifest requires Kujo import isolation")
+	check_eq(package_manifest["kujo"]["minimum_version"], "1.4.0", "package manifest requires Kujo import isolation")
 }
 
 func test_flow_step_cap() {

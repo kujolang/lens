@@ -11,7 +11,7 @@
 #   lens check http://localhost:3000
 #
 # Or directly via kujo:
-#   kujo run lens.kujo -- check http://localhost:3000
+#   kujo run lens.kujo --isolated-imports -- check http://localhost:3000
 
 from src.runner import run
 

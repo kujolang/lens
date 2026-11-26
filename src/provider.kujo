@@ -14,7 +14,7 @@
 #   provider_errors (array of error strings),
 #   metadata (bridge info)
 
-from src.common import is_trueish, is_falseish, str_trim, str_starts_with, browser_result_max_bytes
+from src.common import is_trueish, is_falseish, str_trim, str_starts_with, browser_result_max_bytes, bridge_asset
 from src.redact import redact_text, redact_url
 
 # Maximum number of times to invoke the bridge when it produces no output
@@ -26,7 +26,7 @@ PROVIDER_MAX_ATTEMPTS := 3
 # Returns a provider result dict, or an error dict on failure.
 export func run_provider(url, config, out_dir) {
 	# Build bridge command
-	bridge_script := "bridge/browser-bridge.js"
+	bridge_script := bridge_asset("browser-bridge.js")
 	timeout := to_string(config["timeout"])
 	viewports_str := build_viewports_arg(config["viewports"])
 	screenshots_dir := out_dir + "/screenshots"

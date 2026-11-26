@@ -3,7 +3,7 @@
 # Manages baseline storage, screenshot comparison via Python bridge,
 # and visual diff findings.
 
-from src.common import is_trueish, is_falseish, str_trim
+from src.common import is_trueish, is_falseish, str_trim, bridge_asset
 from src.redact import redact_url, redact_text
 
 # Default baseline directory.
@@ -194,7 +194,7 @@ export func compare_baselines(config, run_dir, viewports, baseline_dir) {
 		}
 		
 		# Run visual diff via Python bridge
-		diff_result := spawn_process(array("python3", "bridge/visual-diff.py", current_path, baseline_path, "--threshold", to_string(threshold), "--diff-output", diff_path, "--json"))
+		diff_result := spawn_process(array("python3", bridge_asset("visual-diff.py"), current_path, baseline_path, "--threshold", to_string(threshold), "--diff-output", diff_path, "--json"))
 		
 		if is_trueish(diff_result.success) {
 			raw := diff_result.stdout

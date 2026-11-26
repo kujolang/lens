@@ -22,7 +22,17 @@ else
   KUJO_BIN="${SCRIPT_DIR}/../kujo/target/debug/kujo"
 fi
 
+runtime_version="$("${KUJO_BIN}" --version)" || exit 3
+if [[ ! "$runtime_version" =~ ^kujo[[:space:]]+([0-9]{1,9})\.([0-9]{1,9})\.([0-9]{1,9})(\+[^[:space:]]+)?$ ]] ||
+   (( 10#${BASH_REMATCH[1]} < 1 || (10#${BASH_REMATCH[1]} == 1 && 10#${BASH_REMATCH[2]} < 4) )); then
+  printf '%s\n' 'Lens requires Kujo 1.4.0 or later for isolated imports.' >&2
+  exit 2
+fi
+
 export KUJO_BIN
+export KUJO_ISOLATED_IMPORTS=1
+export LENS_INSTALL_ROOT="$SCRIPT_DIR"
+unset KUJO_MODULE_PATH KUJO_SCRIPT_ARGS KUJO_SCRIPT_ARGS_JSON
 info_only=0
 session_needed=0
 for arg in "$@"; do
@@ -34,7 +44,7 @@ done
 # A configuration file may enable crawl; Kujo remains its only parser.
 if [[ -f .lens.toml ]]; then session_needed=1; fi
 if [[ "$session_needed" == "1" && "$info_only" == "0" && "${1:-}" == "check" && -z "${LENS_SESSION_SOCKET:-}" && "${LENS_ONESHOT:-0}" != "1" ]] && command -v node >/dev/null 2>&1; then
-  exec node "${SCRIPT_DIR}/bridge/session.js" "${KUJO_BIN}" run "${SCRIPT_DIR}/lens.kujo" -- "$@"
+  exec node "${SCRIPT_DIR}/bridge/session.js" "${KUJO_BIN}" run "${SCRIPT_DIR}/lens.kujo" --isolated-imports -- "$@"
 fi
 
-exec "${KUJO_BIN}" run "${SCRIPT_DIR}/lens.kujo" -- "$@"
+exec "${KUJO_BIN}" run "${SCRIPT_DIR}/lens.kujo" --isolated-imports -- "$@"

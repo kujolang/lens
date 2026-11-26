@@ -1,7 +1,7 @@
 # kujo.toml — Kujo project configuration for Lens
 
 [kujo]
-minimum_version = "1.2.3"
+minimum_version = "1.4.0"
 
 [project]
 name = "lens"

@@ -3,7 +3,7 @@
 # Ties together config, validation, checks, reports, and artifact
 # writing into a single run pipeline.
 
-from src.common import format_timestamp_dir, is_trueish, is_falseish, str_starts_with, str_join, print_lines, browser_result_max_bytes
+from src.common import format_timestamp_dir, is_trueish, is_falseish, str_starts_with, str_join, print_lines, browser_result_max_bytes, bridge_asset
 from src.config import severity_meets_threshold, build_config, print_help, print_version, merge_file_config, lens_version
 from src.config_file import resolve_config_path, load_config_file
 from src.validate import validate_url, validate_auth_storage_state, validate_config_write_paths, validate_artifact_tree, validate_run_output_roles
@@ -1386,7 +1386,7 @@ export func run_inspect(config) {
 	}
 
 	timeout := to_string(config["timeout"])
-	mut args := array("node", "bridge/inspect-bridge.js", "--url", url, "--timeout", timeout)
+	mut args := array("node", bridge_asset("inspect-bridge.js"), "--url", url, "--timeout", timeout)
 	if is_trueish(config["allow_external"]) { args = append(args, "--allow-external") }
 	res := spawn_process(args, { "timeout_ms": 120000, "max_output_bytes": browser_result_max_bytes() })
 	out := trim(to_string(res.stdout))
