@@ -71,9 +71,11 @@ func baseline_base_dir(config) {
 # When an identity is available, it must agree with the current redacted URL.
 export func baseline_matches_url(baseline_dir, url) {
 	path := baseline_dir + "/baseline-metadata.json"
-	if is_falseish(file_exists(path)) { return true }
+	if is_falseish(path_exists(path)) { return true }
+	if is_trueish(path_is_symlink(path)) || is_falseish(path_is_file(path)) || file_size(path) > 1024 * 1024 { return false }
 	try {
 		metadata := parse_json(read_file(path))
+		if type(metadata) != "dict" { return false }
 		if is_trueish(has_key(metadata, "url")) && to_string(metadata["url"]) != "" {
 			return to_string(metadata["url"]) == redact_url(url)
 		}
