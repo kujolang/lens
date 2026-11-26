@@ -75,6 +75,19 @@ test('evidence bounds omit whole Unicode credentials, reject oversized links, an
   assert.deepEqual(failure.viewports, []);
 });
 
+test('evidence counts escaped Unicode and bounds complete nested dictionary output', () => {
+  const sample = { ordinary: 'é😀\n\\"\x01\ud800', nested: [true, 12, { value: '\u0000' }] };
+  const measured = boundEvidence(sample);
+  assert.deepEqual(measured.value, sample);
+  assert.equal(measured.bytes, Buffer.byteLength(JSON.stringify(sample)));
+  const dictionary = Object.fromEntries(Array.from({ length: 30 }, (_, index) => [`item${index}`, '\x01é'.repeat(2500)]));
+  const projected = boundEvidence({ dictionary, stable: 'fixture' }, 50_000);
+  assert.ok(Buffer.byteLength(JSON.stringify(projected.value)) <= 50_000);
+  assert.ok(projected.omitted_items > 0);
+  assert.deepEqual(boundEvidence(JSON.parse('{"__proto__":{"name":"fixture"}}')).value,
+    Object.fromEntries([['__proto__', { name: 'fixture' }]]));
+});
+
 // The trailing-dot localhost spelling is deliberately outside Lens's
 // allowlist but resolves locally: a controlled sink with a positive control.
 for (const engine of (process.env.LENS_POLICY_ENGINES || 'chromium').split(',')) {

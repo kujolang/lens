@@ -117,31 +117,28 @@ async function createNetworkPolicy() {
 }
 
 async function createContext(browser, options = {}, allowExternal = false, timeoutMs = 30000) {
-  if (allowExternal === true) {
-    const context = await browser.newContext(options);
-    context.networkPolicy = { mode: 'external-opt-in', blocked_requests: 0 };
-    return context;
-  }
   // WebKit's native dedicated-worker WebSockets bypass its HTTP proxy on
   // macOS. Refuse restricted contexts before opening any page. Opt-in keeps
   // the engine available for trusted applications without a false boundary.
-  if (browser.browserType?.().name() === 'webkit') {
+  if (allowExternal !== true && browser.browserType?.().name() === 'webkit') {
     throw new Error('WebKit cannot enforce Lens loopback destinations. Use Chromium/Firefox, or explicitly allow external access for a trusted application.');
   }
-  const policy = await createNetworkPolicy();
+  const policy = allowExternal === true ? null : await createNetworkPolicy();
   let timer;
-  const proxy = policy.proxy;
-  const pending = Promise.resolve().then(() => browser.newContext({ ...options, proxy, serviceWorkers: 'block' }));
+  const pending = Promise.resolve().then(() => browser.newContext(policy ? {
+    ...options, proxy: policy.proxy, serviceWorkers: 'block',
+  } : options));
   try {
     const context = await Promise.race([pending, new Promise((_, reject) => {
       timer = setTimeout(() => reject(new Error('Browser context creation deadline reached')), timeoutMs);
     })]);
-    context.networkPolicy = policy.stats;
-    context.once('close', () => { void policy.close(); });
+    context.networkPolicy = policy?.stats || { mode: 'external-opt-in', blocked_requests: 0 };
+    if (policy) context.once('close', () => { void policy.close(); });
     return context;
   } catch (error) {
     void pending.then(context => context.close().catch(() => {}), () => {});
-    await policy.close(); throw error;
+    if (policy) await policy.close();
+    throw error;
   } finally { clearTimeout(timer); }
 }
 module.exports = { destination, createNetworkPolicy, createContext };

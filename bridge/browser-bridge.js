@@ -20,6 +20,7 @@
  */
 
 const { Timings, launchBrowser, closeContext, withDeadline } = require('./runtime');
+const { readAuthState } = require('./input');
 const { pushBounded, evaluateBounded, finishEvidence, serializeResult } = require('./evidence');
 const { createContext } = require('./network-policy');
 const { observeReadiness } = require('./readiness');
@@ -321,7 +322,7 @@ async function captureViewport(browser, url, viewportName, timeoutMs, screenshot
   // context. Opt-in only. The contents stay inside Playwright — never logged,
   // never written to any Lens artifact.
   if (opts && opts.authFile) {
-    contextOptions.storageState = opts.authFile;
+    contextOptions.storageState = opts.authState || readAuthState(opts.authFile);
   }
 
   const context = await timings.measure('context_create_ms', () => createContext(browser, contextOptions, opts?.allowExternal, timeoutMs), timeoutMs);
@@ -600,6 +601,18 @@ async function capture(opts, host = null) {
   };
 
   let browser = null;
+
+  if (opts.authFile) {
+    try { opts = { ...opts, authState: readAuthState(opts.authFile) }; }
+    catch (error) {
+      result.metadata.failure_kind = 'auth-state';
+      result.provider_errors.push(error.message);
+      result.finished_at = nowISO();
+      result.duration_ms = formatMs(Date.now() - startMs);
+      result.metadata.timings = timings.finish();
+      return result;
+    }
+  }
 
   try {
     await timings.measure('runtime_load_ms', async () => require('playwright-core'));

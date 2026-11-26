@@ -19,6 +19,7 @@
 const { Timings, launchBrowser, closeContext, withDeadline } = require('./runtime');
 const { pushBounded, evaluateBounded, finishEvidence, serializeResult } = require('./evidence');
 const { createContext } = require('./network-policy');
+const { readAuthState, readFlowProgram } = require('./input');
 const { observeReadiness } = require('./readiness');
 const fs = require('fs');
 const path = require('path');
@@ -182,12 +183,13 @@ async function runFlow(program, opts) {
     artifact_warnings: [],
   };
 
+  const authState = program.auth_file ? readAuthState(program.auth_file) : undefined;
   await timings.measure('runtime_load_ms', async () => require('playwright-core'));
   const browser = await timings.measure('browser_launch_ms', () => launchBrowser());
   let context, readiness, page;
   try {
     const contextOptions = { viewport: { width: size.width, height: size.height } };
-    if (program.auth_file) contextOptions.storageState = program.auth_file;
+    if (authState) contextOptions.storageState = authState;
     context = await timings.measure('context_create_ms', () => createContext(browser, contextOptions, program.allow_external, program.timeout || 30000), program.timeout || 30000);
     page = await timings.measure('page_create_ms', () => context.newPage(), program.timeout || 30000);
     readiness = await withDeadline(() => observeReadiness(page), program.timeout || 30000);
@@ -276,7 +278,18 @@ async function runFlow(program, opts) {
 }
 
 function redactTypedValues(result, program) {
-  const secrets = program.steps.filter(s => s.type === 'type' && s.secret && s.value != null && String(s.value)).flatMap(s => { const value = String(s.value); return [value, encodeURIComponent(value), JSON.stringify(value).slice(1, -1)]; }).sort((a,b) => b.length-a.length);
+  const variants = new Set();
+  for (const step of program.steps) {
+    if (step.type !== 'type' || !step.secret || step.value == null || String(step.value) === '') continue;
+    const value = String(step.value);
+    variants.add(value);
+    variants.add(JSON.stringify(value).slice(1, -1));
+    const valid = value.toWellFormed();
+    variants.add(valid);
+    variants.add(encodeURIComponent(valid));
+  }
+  if (!variants.size) return result;
+  const secrets = [...variants].sort((a, b) => b.length - a.length);
   function scrub(value) {
     if (typeof value === 'string') {
       for (const secret of secrets) value = value.split(secret).join('[REDACTED]');
@@ -292,7 +305,7 @@ function redactTypedValues(result, program) {
 async function main() {
   const opts = parseArgs();
   if (!opts.program) throw new Error("Program is required");
-  const program = JSON.parse(fs.readFileSync(opts.program === "-" ? 0 : opts.program, "utf8"));
+  const program = readFlowProgram(opts.program);
   const { json, exceeded } = serializeResult(await runFlow(program, opts));
   process.stdout.write(json);
   if (exceeded) process.exitCode = 1;

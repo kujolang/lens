@@ -318,6 +318,32 @@ test('context creation and close operations have deadlines', async () => {
   const {closeContext} = require('../runtime');
   assert.equal(await closeContext({close:()=>new Promise(()=>{})},30),false);
   await assert.rejects(captureViewport({newContext:()=>new Promise(()=>{})},'http://localhost/','desktop',30,'',{}),/deadline/);
+  const {createContext} = require('../network-policy');
+  let resolveContext;
+  let closed = false;
+  await assert.rejects(createContext({ newContext: () => new Promise(resolve => { resolveContext = resolve; }) }, {}, true, 30), /deadline/);
+  resolveContext({ close: async () => { closed = true; } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(closed, true);
+});
+
+test('flow programs and authentication state require bounded regular files', async t => {
+  const {readAuthState, readFlowProgram} = require('../input');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lens-private-input-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const input = path.join(dir, 'state.json');
+  fs.writeFileSync(input, '{"cookies":[],"origins":[]}');
+  assert.deepEqual(readAuthState(input), { cookies: [], origins: [] });
+  assert.deepEqual(readFlowProgram(input), readAuthState(input));
+  if (process.platform !== 'win32') {
+    const linked = path.join(dir, 'alias.json');
+    fs.symlinkSync(input, linked);
+    assert.throws(() => readAuthState(linked), /regular Playwright storage-state/);
+    assert.throws(() => readFlowProgram(linked));
+  }
+  fs.truncateSync(input, 8 * 1024 * 1024 + 1);
+  assert.throws(() => readAuthState(input), /at most 8 MiB/);
+  assert.throws(() => readFlowProgram(input), /byte limit/);
 });
 
 test('cleanup deadline preserves evidence and retires the browser', browserTests, async () => {

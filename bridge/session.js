@@ -9,6 +9,8 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { BrowserHost } = require('./runtime');
 const { serializeResult } = require('./evidence');
+const MAX_REQUEST_BYTES = 1024 * 1024;
+const MAX_CLIENTS = 32;
 
 async function serve(socketPath, { idleMs = 60000 } = {}) {
   const host = new BrowserHost();
@@ -21,7 +23,7 @@ async function serve(socketPath, { idleMs = 60000 } = {}) {
     timer.unref();
   }
   const server = net.createServer(socket => {
-    socket.setEncoding('utf8');
+    if (sockets.size >= MAX_CLIENTS) return socket.destroy();
     let ownsJob = false;
     sockets.add(socket);
     socket.on('close', () => {
@@ -31,20 +33,21 @@ async function serve(socketPath, { idleMs = 60000 } = {}) {
     });
     socket.on('error', () => {});
     socket.setTimeout(180000, () => socket.destroy());
-    let input = '', accepted = false;
+    let input = Buffer.allocUnsafe(MAX_REQUEST_BYTES), bytes = 0, accepted = false;
     socket.on('data', async chunk => {
       if (accepted) return socket.destroy();
-      input += chunk.toString();
-      if (Buffer.byteLength(input) > 1024 * 1024) return socket.destroy();
-      if (!input.includes('\n')) return;
+      if (bytes + chunk.length > MAX_REQUEST_BYTES) return socket.destroy();
+      chunk.copy(input, bytes);
+      bytes += chunk.length;
+      if (!chunk.includes(10)) return;
       accepted = true;
       if (busy) return socket.end(JSON.stringify({ viewports: [], provider_errors: ['Browser session busy'] }));
       busy = true;
       ownsJob = true;
       clearTimeout(timer);
       try {
-        const opts = JSON.parse(input);
-        input = '';
+        const opts = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(input.subarray(0, bytes)));
+        input = null;
         if (!opts || typeof opts.url !== 'string' || !Array.isArray(opts.viewports)) throw new Error('Invalid job');
         const result = await require('./browser-bridge').capture(opts, host);
         contexts += result.metadata.contexts_created || 0;

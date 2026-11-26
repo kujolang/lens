@@ -10,34 +10,82 @@ const OMITTED = '[Lens omitted oversized evidence]';
 function boundEvidence(value, maxBytes = 1024 * 1024) {
   const stats = { omitted_strings: 0, omitted_items: 0 };
   const marker = '[Lens omitted oversized evidence]';
-  function bytes(text) {
-    let n = 0;
-    for (const c of text) { const p = c.codePointAt(0); n += p < 128 ? 1 : p < 2048 ? 2 : p < 65536 ? 3 : 4; }
-    return n;
+  function measureString(text, rawLimit = Infinity) {
+    let raw = 0;
+    let quoted = 2;
+    for (let index = 0; index < text.length; index++) {
+      const code = text.charCodeAt(index);
+      if (code < 128) {
+        raw += 1;
+        if (code >= 32) quoted += code === 34 || code === 92 ? 2 : 1;
+        else quoted += code === 8 || code === 9 || code === 10 || code === 12 || code === 13 ? 2 : 6;
+      } else if (code < 2048) {
+        raw += 2; quoted += 2;
+      } else if (code >= 0xd800 && code <= 0xdfff) {
+        const next = text.charCodeAt(index + 1);
+        if (code <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+          raw += 4; quoted += 4; index += 1;
+        } else {
+          raw += 3; quoted += 6;
+        }
+      } else {
+        raw += 3; quoted += 3;
+      }
+      if (raw > rawLimit) break;
+    }
+    return { raw, quoted };
   }
-  function visit(item, depth = 0) {
+  function visit(item, depth, budget) {
     if (typeof item === 'string') {
-      if (item === marker || item.length > 16384 || bytes(item) > 16384) { stats.omitted_strings++; return marker; }
-      return item;
+      const size = item.length > 16384 ? null : measureString(item, 16384);
+      if (item === marker || !size || size.raw > 16384) {
+        stats.omitted_strings++;
+        return { value: marker, bytes: marker.length + 2 };
+      }
+      return { value: item, bytes: size.quoted };
     }
-    if (!item || typeof item !== 'object') return item;
-    if (depth > 32) { stats.omitted_items++; return Array.isArray(item) ? [] : {}; }
-    const output = Array.isArray(item) ? [] : {};
+    if (!item || typeof item !== 'object') return { value: item, bytes: (JSON.stringify(item) || 'null').length };
+    const array = Array.isArray(item);
+    const output = array ? [] : {};
+    if (depth > 32) {
+      stats.omitted_items++;
+      return { value: output, bytes: 2 };
+    }
     let used = 2;
+    let entries = 0;
+    let exhausted = false;
     const keys = Object.keys(item);
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i];
-      if (i >= 5000) { stats.omitted_items += keys.length - i; break; }
-      const result = visit(item[key], depth + 1);
-      if (Array.isArray(output) && result && typeof result === 'object' && (result.href === marker || result.selector === marker)) { stats.omitted_items++; continue; }
-      const size = bytes(JSON.stringify(result) || 'null') + bytes(key) + 4;
-      if (Array.isArray(output) && used + size > maxBytes) { stats.omitted_items += keys.length - i; break; }
-      used += size;
-      if (Array.isArray(output)) output.push(result); else output[key] = result;
+    for (let index = 0; index < keys.length; index++) {
+      if (index >= 5000) { stats.omitted_items += keys.length - index; break; }
+      const key = keys[index];
+      const keySize = array ? null : measureString(key, 16384);
+      if (keySize && keySize.raw > 16384) { stats.omitted_items++; continue; }
+      const overhead = (entries > 0 ? 1 : 0) + (keySize ? keySize.quoted + 1 : 0);
+      const available = budget - used - overhead;
+      if (available < 1) {
+        stats.omitted_items += keys.length - index;
+        return { value: output, bytes: used, exhausted: true };
+      }
+      const projected = visit(item[key], depth + 1, available);
+      const value = projected.value;
+      if (array && value && typeof value === 'object' && (value.href === marker || value.selector === marker)) {
+        stats.omitted_items++; continue;
+      }
+      if (projected.bytes > available || (array && projected.exhausted)) {
+        stats.omitted_items += keys.length - index;
+        return { value: output, bytes: used, exhausted: true };
+      }
+      if (array) output.push(value);
+      else if (key === '__proto__') Object.defineProperty(output, key, { value, enumerable: true, configurable: true, writable: true });
+      else output[key] = value;
+      used += overhead + projected.bytes;
+      entries += 1;
+      exhausted ||= !!projected.exhausted;
     }
-    return output;
+    return { value: output, bytes: used, exhausted };
   }
-  return { value: visit(value), ...stats };
+  const projected = visit(value, 0, maxBytes);
+  return { value: projected.value, bytes: projected.bytes, ...stats };
 }
 
 const collections = new WeakMap();
@@ -48,7 +96,7 @@ function pushBounded(items, value, limit) {
   const bounded = boundEvidence(value);
   state.omitted_strings += bounded.omitted_strings;
   state.omitted_items += bounded.omitted_items;
-  const size = Buffer.byteLength(JSON.stringify(bounded.value)) + 1;
+  const size = bounded.bytes + 1;
   if (state.bytes + size > COLLECTION_BYTES) { state.omitted_items++; return false; }
   state.bytes += size; items.push(bounded.value); return true;
 }
